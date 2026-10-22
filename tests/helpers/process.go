@@ -32,6 +32,15 @@ func RunProcess() bool {
 		}
 	}
 	switch os.Getenv("SSH_PROXY_TEST_PROCESS") {
+	case "desktop":
+		data, _ := json.Marshal(struct {
+			Args  []string
+			Proxy string
+		}{os.Args[1:], os.Getenv("HTTPS_PROXY")})
+		if err := os.WriteFile(os.Getenv("SSH_PROXY_TEST_RECORD"), data, 0600); err != nil {
+			os.Exit(2)
+		}
+		return true
 	case "trust":
 		os.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
 		if err := cli.Run(os.Args[1:]); err != nil {
@@ -40,6 +49,14 @@ func RunProcess() bool {
 		}
 		return true
 	case "ssh":
+		if slices.Contains(os.Args, "-V") {
+			version := os.Getenv("SSH_PROXY_TEST_VERSION")
+			if version == "" {
+				version = "OpenSSH_9.0p1"
+			}
+			fmt.Fprintln(os.Stderr, version)
+			return true
+		}
 		if slices.Contains(os.Args, "-G") {
 			fmt.Println("hostname fixture.invalid\nuser tester\nport 22")
 			return true

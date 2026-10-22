@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"syscall"
 	"unsafe"
@@ -21,6 +22,17 @@ func LockInstance(id string) (func(), error) {
 		return nil, fmt.Errorf("another instance holds this configuration lock: %w", err)
 	}
 	return func() { windows.CloseHandle(h) }, nil
+}
+
+// Windows already denies deletion while a Go log handle is open.
+func ProtectLog(string) (func(), error) { return func() {}, nil }
+
+func RemoveInactiveLog(path string) (bool, error) {
+	err := os.Remove(path)
+	if errors.Is(err, windows.ERROR_SHARING_VIOLATION) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func HideChild(cmd *exec.Cmd) {

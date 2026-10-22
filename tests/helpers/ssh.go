@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	sshserver "github.com/gliderlabs/ssh"
 	ssh "golang.org/x/crypto/ssh"
@@ -29,6 +30,7 @@ import (
 type SSHFixture struct {
 	Primary, Backup      *sshserver.Server
 	Blocked              atomic.Bool
+	SlowPort             atomic.Uint32
 	Origin               *httptest.Server
 	Config, Hosts, Trust string
 	Fingerprint          string
@@ -89,6 +91,9 @@ func LocalSSH(t *testing.T, dir string) *SSHFixture {
 			Handler:         func(session sshserver.Session) { session.Exit(0) },
 			ChannelHandlers: map[string]sshserver.ChannelHandler{"session": sshserver.DefaultSessionHandler, "direct-tcpip": sshserver.DirectTCPIPHandler},
 			LocalPortForwardingCallback: func(_ sshserver.Context, host string, port uint32) bool {
+				if port == f.SlowPort.Load() {
+					time.Sleep(2 * time.Second)
+				}
 				return host == "127.0.0.1" && (!primary || !f.Blocked.Load())
 			},
 		}

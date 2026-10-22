@@ -101,9 +101,9 @@ func FakeSOCKS(t *testing.T, origin string) (string, <-chan string) {
 				defer remote.Close()
 				client.Write([]byte{5, 0, 0, 1, 127, 0, 0, 1, 0, 0})
 				done := make(chan struct{})
-				go func() { io.Copy(remote, client); remote.Close(); close(done) }()
+				go func() { io.Copy(remote, client); remote.(*net.TCPConn).CloseWrite(); close(done) }()
 				io.Copy(client, remote)
-				client.Close()
+				client.(*net.TCPConn).CloseWrite()
 				<-done
 			}()
 		}

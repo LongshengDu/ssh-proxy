@@ -58,13 +58,18 @@ def launch(name, command, wait):
         return child(report)
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
     script = f"& {quote(sys.executable)} {quote(Path(__file__).resolve())} --child {quote(report)}"
-    subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-NoExit", "-Command", script],
-                     cwd=ROOT, creationflags=subprocess.CREATE_NEW_CONSOLE)
+    terminal = subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-NoExit", "-Command", script],
+                                cwd=ROOT, creationflags=subprocess.CREATE_NEW_CONSOLE)
     print(f"Started in a new window: {name}\nReport: {report}", flush=True)
     if not wait:
         return 0
     completion = report / "completion.json"
     while not completion.exists():
+        if terminal.poll() is not None and not completion.exists():
+            result = dict(name=name, result="cancelled", exit_code=130, finished=now(),
+                          error="Terminal closed before the command reported completion")
+            completion.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            break
         time.sleep(1)
     result = json.loads(completion.read_text(encoding="utf-8"))
     print(f"{name}: {result['result'].upper()} (exit {result['exit_code']})\nOutput: {report / 'output.txt'}")

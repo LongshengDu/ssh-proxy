@@ -28,19 +28,32 @@ type Bridge struct {
 
 // SOCKSDialer dials through the SOCKS5 listener with remote DNS and a per-dial timeout.
 func SOCKSDialer(address string, timeout time.Duration) (func(context.Context, string, string) (net.Conn, error), error) {
-	d, err := proxy.SOCKS5("tcp", address, nil, &net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second})
-	if err != nil {
-		return nil, err
-	}
-	cd, ok := d.(proxy.ContextDialer)
-	if !ok {
-		return nil, fmt.Errorf("SOCKS dialer does not support cancellation")
-	}
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		return cd.DialContext(ctx, network, addr)
+		transport := &transportDialer{Dialer: net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}}
+		d, err := proxy.SOCKS5("tcp", address, nil, transport)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := d.(proxy.ContextDialer).DialContext(ctx, network, addr); err != nil {
+			return nil, err
+		}
+		// x/net owns the SOCKS handshake. Return the TCP transport afterward so
+		// CONNECT retains CloseRead/CloseWrite, hidden by x/net's Conn wrapper.
+		return transport.conn, nil
 	}, nil
+}
+
+type transportDialer struct {
+	net.Dialer
+	conn net.Conn
+}
+
+func (d *transportDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	var err error
+	d.conn, err = d.Dialer.DialContext(ctx, network, address)
+	return d.conn, err
 }
 func NewBridge(address string, timeout time.Duration) (*Bridge, error) {
 	dial, err := SOCKSDialer(address, timeout)
@@ -49,9 +62,10 @@ func NewBridge(address string, timeout time.Duration) (*Bridge, error) {
 	}
 	b := &Bridge{dial: dial, connections: make(map[*trackedConn]struct{}), proxy: goproxy.NewProxyHttpServer()}
 	b.proxy.Logger = log.New(io.Discard, "", 0)
+	b.proxy.KeepAcceptEncoding = true
 	b.proxy.Tr = &http.Transport{Proxy: nil, DialContext: b.dialTracked,
 		TLSHandshakeTimeout: 15 * time.Second, IdleConnTimeout: 90 * time.Second,
-		MaxIdleConns: 100, MaxIdleConnsPerHost: 10}
+		MaxIdleConns: 100, MaxIdleConnsPerHost: 100, DisableCompression: true}
 	// Override the environment-derived CONNECT proxy dialer as well.
 	b.proxy.ConnectDial = nil
 	b.proxy.ConnectDialWithReq = func(r *http.Request, network, addr string) (net.Conn, error) {
@@ -186,12 +200,24 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.proxy.ServeHTTP(connectWriter{w, b}, r)
 		return
 	}
-	b.proxy.ServeHTTP(streamWriter{w}, r)
+	writer := &streamWriter{ResponseWriter: w, bridge: b}
+	defer func() {
+		// goproxy closes the upstream body when an upgrade relay returns, but
+		// net/http no longer owns the hijacked client connection.
+		if writer.hijacked != nil {
+			writer.hijacked.Close()
+		}
+	}()
+	b.proxy.ServeHTTP(writer, r)
 }
 
 // Flush writes without imposing a lifetime timeout on SSE or chunked streams.
 // net/http still owns framing and trailers; goproxy owns body forwarding.
-type streamWriter struct{ http.ResponseWriter }
+type streamWriter struct {
+	http.ResponseWriter
+	bridge   *Bridge
+	hijacked net.Conn
+}
 
 func (w streamWriter) Write(p []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(p)
@@ -201,8 +227,10 @@ func (w streamWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 func (w streamWriter) Flush() { _ = http.NewResponseController(w.ResponseWriter).Flush() }
-func (w streamWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return http.NewResponseController(w.ResponseWriter).Hijack()
+func (w *streamWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	c, rw, err := w.bridge.hijack(w.ResponseWriter, false)
+	w.hijacked = c
+	return c, rw, err
 }
 
 // goproxy's CONNECT handler ignores Hijack's buffered reader. Hand it a Conn
@@ -213,18 +241,25 @@ type connectWriter struct {
 }
 
 func (w connectWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	c, rw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	return w.bridge.hijack(w.ResponseWriter, true)
+}
+
+func (b *Bridge) hijack(w http.ResponseWriter, buffered bool) (net.Conn, *bufio.ReadWriter, error) {
+	c, rw, err := http.NewResponseController(w).Hijack()
 	if err != nil {
 		return nil, nil, err
 	}
-	w.bridge.mu.Lock()
-	defer w.bridge.mu.Unlock()
-	if !w.bridge.ready {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.ready {
 		c.Close()
 		return nil, nil, fmt.Errorf("SSH tunnel unavailable")
 	}
-	tracked := &trackedConn{Conn: c, bridge: w.bridge, reader: rw.Reader}
-	w.bridge.connections[tracked] = struct{}{}
+	tracked := &trackedConn{Conn: c, bridge: b}
+	if buffered {
+		tracked.reader = rw.Reader
+	}
+	b.connections[tracked] = struct{}{}
 	return tracked, rw, nil
 }
 

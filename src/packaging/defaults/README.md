@@ -6,7 +6,7 @@
 
 ### 使用前必读
 
-- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。移动前取消 **Launch App at Login**，并卸载已注册的系统服务；移动后按需重新启用或安装。
+- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。升级或移动前取消 **Launch App at Login**，并卸载已注册的系统服务；完成后按需重新启用或安装。
 - **完整解压到可写的固定目录：** 保留应用、CLI、配置和 `scripts/` 在一起；macOS 不要只移动 `.app`。Windows/macOS 从 `ssh_proxy_app` 打开托盘；Linux 使用 CLI。
 - **先准备 SSH：** 本机需要 OpenSSH，服务器需允许 TCP 转发。后台连接需要免交互的密钥认证；有口令的私钥先加载到 `ssh-agent`。首次连接需核对服务器指纹。详细步骤见 [ssh_config](ssh_config)。
 - **代理就绪后再使用：** 等菜单显示 `running`，再设置客户端代理。默认 HTTP/HTTPS 为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`；程序不会自动修改系统代理。用启动脚本打开 Codex/Claude 前，先完全退出已运行的桌面应用。
@@ -17,7 +17,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 和 SOCKS5 代
 
 ### 1. 解压并打开应用
 
-解压对应系统和架构的 `<os>-<arch>.zip` 到可写的固定目录即可使用，无需安装。`os` 为 `windows`、`darwin`（macOS）或 `linux`；`amd64` 对应 Intel/AMD 64 位，`arm64` 对应 Apple Silicon 等 ARM64 设备。macOS 菜单栏应用要求 macOS 12 或更新版本。
+解压对应系统和架构的 `<os>-<arch>.zip` 到可写的固定目录即可使用，无需安装。`os` 为 `windows`、`darwin`（macOS）或 `linux`；`amd64` 对应 Intel/AMD 64 位，`arm64` 对应 Apple Silicon 等 ARM64 设备。Windows 要求 Windows 10 或更新版本；macOS 应用和 CLI 要求 macOS 13 或更新版本。
 
 **Windows：** 双击解压目录中的 `ssh_proxy_app.exe`，在任务栏通知区域找到图标（可能在隐藏图标中）。
 
@@ -33,7 +33,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 和 SOCKS5 代
 | [ssh_config](ssh_config) | 你的 SSH 连接信息，含免密码登录说明 |
 | `scripts/`、`logs/` | 桌面启动示例、运行日志 |
 
-保留整个目录；macOS 不要只把 `.app` 移走。OpenSSH 未打包在内：先运行 `ssh -V`，如缺失，Windows 在“可选功能”安装 OpenSSH 客户端，macOS/Linux 使用系统 OpenSSH 客户端。发行包未签名或公证；macOS 若阻止首次打开，可对你信任的下载在“系统设置 → 隐私与安全性”允许打开。
+保留整个目录；macOS 不要只把 `.app` 移走。需要 **OpenSSH 8.7 或更新版本**，未打包在内：先运行 `ssh -V` 检查。Windows 10 和较早的 Windows 11 内置版本可能过旧；可安装新版 [Win32-OpenSSH](https://github.com/PowerShell/Win32-OpenSSH/releases)，在 `config.toml` 的 `ssh.executable` 填写新客户端完整路径。macOS/Linux 使用满足版本要求的系统客户端。发行包未签名或公证；macOS 若阻止首次打开，可对你信任的下载在“系统设置 → 隐私与安全性”允许打开。
 
 ### 2. 配置 SSH 并通过托盘连接
 
@@ -76,7 +76,7 @@ Host my-proxy
 
 #### Codex / Claude 桌面应用
 
-先安装相应桌面应用，**完全退出已运行的应用**。代理显示 `running` 后，在托盘菜单点击 **Run: Codex** 或 **Run: Claude**，即可通过默认 HTTP 代理启动。退出桌面应用不会停止代理。自定义安装位置或代理端口见后面的[启动脚本](#6-启动脚本与自定义)。
+先安装相应桌面应用，**完全退出已运行的应用**。代理显示 `running` 后，在托盘菜单点击 **Run: Codex** 或 **Run: Claude**，即可通过 HTTP 代理启动。退出桌面应用不会停止代理。更多用法见[启动脚本](#6-启动脚本与自定义)。
 
 #### 命令行客户端的代理环境变量
 
@@ -131,6 +131,7 @@ unset ALL_PROXY all_proxy
 | `start` / `stop` / `restart` | 后台启动、停止、重新读取配置并重启 |
 | `start --foreground` | 前台调试，Ctrl+C 停止 |
 | `status` / `check` | JSON 运行状态 / 配置检查 |
+| `status --proxy_http` / `status --proxy_socks` | 运行时仅输出 HTTP / SOCKS5 URL，否则输出为空；每次选择一种 |
 | `trust [ENDPOINT_NAME]` | 交互式 SSH 登录及主机信任设置 |
 | `trust --check [ENDPOINT_NAME]` | 只检查免交互登录；需要设置时失败退出，不显示提示或接受新主机密钥 |
 | `logs --follow` | 持续查看代理日志；`--lines N` 指定初始行数，默认 60 |
@@ -140,7 +141,7 @@ unset ALL_PROXY all_proxy
 
 `--help` 在各命令旁列出专用选项；服务命令单独分组，详情见 `ssh_proxy_cli service --help`。长选项使用两个连字符，如 `--foreground`；带值选项支持空格或 `=`，如 `--wait 30` 和 `--wait=30`。
 
-只有 `status`、`check` 输出 JSON，其余为文本，没有 `--json` 选项。`check` 报告 `valid: false` 时仍可返回退出码 0，自动化请读取 JSON。`-c, --config PATH` 选择配置，默认读取 CLI 旁的 `config.toml`，不依赖当前目录。`start/restart --wait SECONDS` 仅改变命令等待就绪的时间；`trust --log FILE` 用于托盘记录设置诊断，通常无需手动指定。
+普通 `status`、`check` 输出 JSON，没有 `--json` 选项。`status --proxy_http` 返回 `http://...`，`status --proxy_socks` 返回 `socks5h://...`；只有 `phase` 为 `running` 才输出 URL，否则无输出且退出码为 0。`check` 报告 `valid: false` 时仍可返回退出码 0，自动化请读取 JSON。`start/restart --wait SECONDS` 仅改变命令等待就绪的时间；`trust --log FILE` 用于托盘记录设置诊断，通常无需手动指定。
 
 ### 5. 高级配置与排错
 
@@ -158,6 +159,8 @@ unset ALL_PROXY all_proxy
 | `app.start_proxy_on_launch` | `false`；仅 Windows/macOS 托盘，托盘启动时自动启动代理，可在菜单切换 |
 
 每次托盘/代理运行各写一个连续日志，错误追加到同一文件；文件达到 `max_size_mb` 时删除较早的一半并在开头标注。启动时各自清理旧日志，包含当前文件默认最多保留 10 个托盘日志和 10 个代理日志，位于 CLI 旁的 `logs/`。
+
+仍被运行中进程使用的日志不会删除；数量可能暂时超过上限，后续启动时再清理。
 
 | 问题 | 处理方法 |
 | --- | --- |
@@ -188,21 +191,9 @@ bash ./scripts/Codex.sh
 bash ./scripts/Claude.sh
 ```
 
-脚本启动或复用旁边的 CLI 代理，检查状态，再带着代理参数和环境变量启动桌面应用，默认使用当前代理的 HTTP 地址（`status` 中的 `http`）。可关闭启动终端；退出桌面应用不会停止代理。代理运行时也可点击托盘中的 **Run: Codex** / **Run: Claude**。
+先启动代理，再运行脚本。每个脚本中的 `SSH_PROXY_URL` 默认为 `http://127.0.0.1:8181`；仅当 `status --proxy_http` 成功且返回非空 URL 时替换它，否则保留默认值。脚本只查询状态，然后带着代理参数和环境变量启动桌面应用。可关闭启动终端；退出桌面应用不会停止代理。代理运行时也可点击托盘中的 **Run: Codex** / **Run: Claude**。
 
-Windows 自动查找 Codex Store 包及 Claude 应用包或常见用户安装目录；macOS 在 `/Applications`、`~/Applications` 查找。可自定义路径和代理地址：
-
-```powershell
-.\scripts\Codex.ps1 -AppPath 'C:\Apps\Codex\ChatGPT.exe' -Proxy 'http://127.0.0.1:18181'
-.\scripts\Claude.ps1 -AppPath 'C:\Apps\Claude\Claude.exe' -Proxy 'http://127.0.0.1:18181'
-```
-
-```bash
-CODEX_APP='/Applications/Codex.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Codex.sh
-CLAUDE_APP='/Applications/Claude.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Claude.sh
-```
-
-路径指向桌面应用，不是 Code CLI。通常无需指定代理地址；覆盖值不会修改 TOML，仅用于其他监听地址。macOS 桌面输出保存在 `logs/codex_*.txt` / `logs/claude_*.txt`。脚本需留在原来的 `scripts/` 目录。
+脚本优先自动查找已安装的桌面应用：Windows 查找 Codex Store 包及 Claude 应用包或常见用户安装目录；macOS 在 `/Applications`、`~/Applications` 查找。找不到时使用脚本顶部的 `CODEX_APP` 或 `CLAUDE_APP`，默认为空字符串；可在脚本内填写备用可执行文件路径（macOS 也支持 `.app` 路径），无需设置环境变量。仍找不到时会报错。macOS 桌面输出保存在 `logs/codex_*.txt` / `logs/claude_*.txt`。脚本需留在原来的 `scripts/` 目录。
 
 ### 7. 可选系统服务
 
@@ -236,7 +227,7 @@ Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问�
 
 ### Read before use
 
-- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before moving, disable **Launch App at Login** and uninstall any registered OS service; re-enable or reinstall from the new location afterward.
+- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before upgrading or moving, disable **Launch App at Login** and uninstall any registered OS service; re-enable or reinstall afterward.
 - **Extract the whole ZIP into a writable, permanent folder:** Keep the app, CLI, configuration and `scripts/` together; do not move the macOS `.app` alone. Open `ssh_proxy_app` on Windows/macOS; use the CLI on Linux.
 - **Prepare SSH first:** Local OpenSSH and server-side TCP forwarding are required. Background connections need noninteractive key authentication; load passphrase-protected keys into `ssh-agent`. Verify the server fingerprint on first connection. See [ssh_config](ssh_config) for setup instructions.
 - **Wait for readiness:** Wait for `running` in the menu before configuring clients. Defaults are `http://127.0.0.1:8181` for HTTP/HTTPS and `socks5h://127.0.0.1:1081` for SOCKS5. System proxy settings are not changed automatically. Fully quit existing Codex/Claude desktop instances before using their launchers.
@@ -247,7 +238,7 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 
 ### 1. Extract and open the app
 
-Extract the matching `<os>-<arch>.zip` into a writable, permanent folder; no installation is required. OS names are `windows`, `darwin` (macOS) and `linux`; `amd64` means Intel/AMD 64-bit, and `arm64` includes Apple Silicon. The macOS menu-bar app requires macOS 12 or later.
+Extract the matching `<os>-<arch>.zip` into a writable, permanent folder; no installation is required. OS names are `windows`, `darwin` (macOS) and `linux`; `amd64` means Intel/AMD 64-bit, and `arm64` includes Apple Silicon. Windows requires Windows 10 or later; both the macOS app and CLI require macOS 13 or later.
 
 **Windows:** Double-click `ssh_proxy_app.exe` in the extracted folder. Find its icon in the taskbar notification area, possibly under hidden icons.
 
@@ -263,7 +254,7 @@ Extract the matching `<os>-<arch>.zip` into a writable, permanent folder; no ins
 | [ssh_config](ssh_config) | Your SSH connection details, with passwordless login instructions |
 | `scripts/`, `logs/` | Desktop launcher examples, run logs |
 
-Keep the folder together; do not move the macOS `.app` alone. OpenSSH is not bundled: run `ssh -V` first. If missing, install Windows OpenSSH Client through Optional Features, or your system's OpenSSH client on macOS/Linux. Packages are unsigned/not notarized; if macOS blocks a trusted download, allow it through System Settings → Privacy & Security.
+Keep the folder together; do not move the macOS `.app` alone. **OpenSSH 8.7 or newer is required** and is not bundled: check with `ssh -V`. Windows 10 and older Windows 11 installations may include an outdated client; install a newer [Win32-OpenSSH](https://github.com/PowerShell/Win32-OpenSSH/releases) and set `ssh.executable` in `config.toml` to its full path. On macOS/Linux use a system client meeting the version requirement. Packages are unsigned/not notarized; if macOS blocks a trusted download, allow it through System Settings → Privacy & Security.
 
 ### 2. Configure SSH and connect from the tray
 
@@ -306,7 +297,7 @@ Both proxies run locally and require different ports. HTTPS clients also use the
 
 #### Codex / Claude desktop apps
 
-Install the desktop app and **fully quit any running instance**. Once the proxy is `running`, choose **Run: Codex** or **Run: Claude** from the tray menu to launch it through the default HTTP proxy. Exiting the desktop app leaves the proxy running. For custom installation paths or ports, see [launcher scripts](#6-launcher-scripts-and-customization).
+Install the desktop app and **fully quit any running instance**. Once the proxy is `running`, choose **Run: Codex** or **Run: Claude** from the tray menu to launch it through the HTTP proxy. Exiting the desktop app leaves the proxy running. See [launcher scripts](#6-launcher-scripts-and-customization) for more usage details.
 
 #### Proxy environment variables for command-line clients
 
@@ -361,6 +352,7 @@ Prefix commands with `.\ssh_proxy_cli.exe` on Windows or `./ssh_proxy_cli` on ma
 | `start` / `stop` / `restart` | Start in background, stop, or restart with current configuration |
 | `start --foreground` | Debug in this terminal; Ctrl+C stops |
 | `status` / `check` | JSON runtime state / configuration validation |
+| `status --proxy_http` / `status --proxy_socks` | Print only the HTTP / SOCKS5 URL when running, otherwise nothing; choose one flag |
 | `trust [ENDPOINT_NAME]` | Interactive SSH login and host-key setup |
 | `trust --check [ENDPOINT_NAME]` | Check unattended login; fail if setup is needed, without prompts or accepting new host keys |
 | `logs --follow` | Follow proxy logs; `--lines N` selects initial lines, default 60 |
@@ -370,7 +362,7 @@ Prefix commands with `.\ssh_proxy_cli.exe` on Windows or `./ssh_proxy_cli` on ma
 
 `--help` lists each command's own flags and groups service commands separately; use `ssh_proxy_cli service --help` for service details. Long options use two dashes, such as `--foreground`. Options with values accept a space or `=`, such as `--wait 30` and `--wait=30`.
 
-Only `status` and `check` output JSON; other commands use text, with no `--json` switch. `check` can exit 0 with `valid: false`, so automation must read its JSON. `-c, --config PATH` selects a config; the default is `config.toml` beside the CLI, regardless of working directory. `start/restart --wait SECONDS` changes only the command's readiness wait. `trust --log FILE` records setup diagnostics for the tray and is normally unnecessary by hand.
+Plain `status` and `check` output JSON, with no `--json` switch. `status --proxy_http` returns `http://...`; `status --proxy_socks` returns `socks5h://...`. These print a URL only for `phase: running`, otherwise nothing with exit code 0. `check` can exit 0 with `valid: false`, so automation must read its JSON. `start/restart --wait SECONDS` changes only the command's readiness wait. `trust --log FILE` records setup diagnostics for the tray and is normally unnecessary by hand.
 
 ### 5. Advanced settings and troubleshooting
 
@@ -388,6 +380,8 @@ See [config.toml](config.toml) for all settings; run `restart` after saving chan
 | `app.start_proxy_on_launch` | `false`; Windows/macOS tray only: start the proxy when the tray starts; toggled from the menu |
 
 Each tray/proxy run writes one continuous log; errors append to it. When a file reaches `max_size_mb`, its older half is removed and the cut is marked at the top. At startup each cleans up its oldest files, keeping at most 10 tray logs and 10 proxy logs by default, including current files, in `logs/` beside the CLI.
+
+Logs still used by running processes are protected; retention may temporarily exceed the limit until a later startup can remove them.
 
 | Problem | Action |
 | --- | --- |
@@ -418,21 +412,9 @@ bash ./scripts/Codex.sh
 bash ./scripts/Claude.sh
 ```
 
-Scripts start or reuse the adjacent CLI proxy, check its state, then launch the desktop app with proxy arguments and environment variables, using the running proxy's HTTP address (`http` in `status`) by default. You may close the launch terminal; exiting the desktop app leaves the proxy running. The tray's **Run: Codex** / **Run: Claude** entries are also available while the proxy is running.
+Start the proxy before launching an app. Each script defaults `SSH_PROXY_URL` to `http://127.0.0.1:8181` and replaces it only when `status --proxy_http` succeeds with a nonempty URL; otherwise it keeps the default. Scripts only query status, then launch the desktop app with proxy arguments and environment variables. You may close the launch terminal; exiting the desktop app leaves the proxy running. The tray's **Run: Codex** / **Run: Claude** entries are also available while the proxy is running.
 
-Windows discovers the Codex Store package and the Claude app package or common per-user installations; macOS searches `/Applications` and `~/Applications`. Override paths or proxy addresses when needed:
-
-```powershell
-.\scripts\Codex.ps1 -AppPath 'C:\Apps\Codex\ChatGPT.exe' -Proxy 'http://127.0.0.1:18181'
-.\scripts\Claude.ps1 -AppPath 'C:\Apps\Claude\Claude.exe' -Proxy 'http://127.0.0.1:18181'
-```
-
-```bash
-CODEX_APP='/Applications/Codex.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Codex.sh
-CLAUDE_APP='/Applications/Claude.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Claude.sh
-```
-
-Paths select desktop apps, not Code CLIs. A proxy override is normally unnecessary; it does not edit TOML and is only for a different listener. macOS desktop output goes to `logs/codex_*.txt` / `logs/claude_*.txt`. Keep launchers in their original `scripts/` folder.
+Scripts first find the installed desktop app automatically: Windows searches the Codex Store package and the Claude app package or common per-user installations; macOS searches `/Applications` and `~/Applications`. If none is found, they use `CODEX_APP` or `CLAUDE_APP` at the top of the script, which defaults to an empty string. Edit it inside the script to supply a fallback executable path (or macOS `.app` path); no environment setup is needed. If no app is available, the script reports an error. macOS desktop output goes to `logs/codex_*.txt` / `logs/claude_*.txt`. Keep launchers in their original `scripts/` folder.
 
 ### 7. Optional OS service
 

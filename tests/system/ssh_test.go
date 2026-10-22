@@ -32,8 +32,15 @@ func TestCLIHTTPSStreamingAndWebSocket(t *testing.T) {
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
 	testutil.MustCLI(t, dir, "start", "--wait", "15")
 	st := testutil.StatusCLI(t, dir)
+	for _, tc := range []struct{ flag, url string }{{"--proxy_http", "http://" + st.HTTP}, {"--proxy_socks", "socks5h://" + st.SOCKS}} {
+		if out, err := testutil.CallCLI(dir, "status", tc.flag); err != nil || string(out) != tc.url+"\n" {
+			t.Fatalf("status %s: %v %q; want %s", tc.flag, err, out, tc.url)
+		}
+	}
 	secure := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "TLS via SSH") }))
 	defer secure.Close()
+	// Health probes have a 1s budget; user connection setup must survive a 2s delay.
+	f.SlowPort.Store(uint32(secure.Listener.Addr().(*net.TCPAddr).Port))
 	proxyURL, _ := url.Parse("http://" + st.HTTP)
 	dial, err := socks.SOCKS5("tcp", st.SOCKS, nil, socks.Direct)
 	if err != nil {

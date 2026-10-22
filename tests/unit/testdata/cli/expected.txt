@@ -13,8 +13,8 @@ Commands:
       Restart with the current configuration
   stop
       Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
+  status [--proxy_http] [--proxy_socks]
+      Show status as JSON or print a proxy URL
   trust [ENDPOINT] [--check] [--log=FILE]
       Set up SSH login and host-key trust
   logs [--follow] [--lines=N]
@@ -39,202 +39,8 @@ Service commands (current user):
       Disable automatic startup
 
 Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli -h
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli --help
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli -c other.toml --help
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli --help --config other.toml
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
+  -h, --help      help for ssh_proxy_cli
+  -v, --version   version for ssh_proxy_cli
 
 Use "ssh_proxy_cli [command] --help" for command details.
 --- stderr
@@ -255,10 +61,6 @@ Flags:
   -h, --help           help for start
       --wait SECONDS   Wait up to SECONDS (1..3600) for background
                        readiness (default 20)
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli restart -h
 exit 0
@@ -277,10 +79,6 @@ Flags:
   -h, --help           help for restart
       --wait SECONDS   Wait up to SECONDS (1..3600) for background
                        readiness (default 20)
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli stop --help
 exit 0
@@ -292,25 +90,20 @@ Usage:
 
 Flags:
   -h, --help   help for stop
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli status --help
 exit 0
 --- stdout
-Show endpoint and health as JSON
+Show endpoint and health as JSON. URL flags print only the selected proxy URL
+when running, otherwise nothing. An empty result exits successfully.
 
 Usage:
   ssh_proxy_cli status [flags]
 
 Flags:
-  -h, --help   help for status
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
+  -h, --help          help for status
+      --proxy_http    Print only the running HTTP proxy URL (http://)
+      --proxy_socks   Print only the running SOCKS5 proxy URL (socks5h://)
 --- stderr
 === ssh_proxy_cli trust --help
 exit 0
@@ -327,10 +120,6 @@ Flags:
                    keys; the tray runs it before each start
   -h, --help       help for trust
       --log FILE   Append SSH diagnostics to FILE (used by the tray)
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli logs --help
 exit 0
@@ -344,10 +133,6 @@ Flags:
   -f, --follow    Follow new log lines
   -h, --help      help for logs
       --lines N   Show the last N (1..10000) lines (default 60)
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli test --help
 exit 0
@@ -361,10 +146,6 @@ Flags:
   -h, --help      help for test
       --url URL   Fetch URL through both proxies (default
                   "https://example.com/")
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli check --help
 exit 0
@@ -376,32 +157,6 @@ Usage:
 
 Flags:
   -h, --help   help for check
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
---- stderr
-=== ssh_proxy_cli start --wait 0 --help
-exit 0
---- stdout
-Start the proxy in the background
-
-Background mode requires SSH keys or ssh-agent; run trust for setup. After
---wait expires, the proxy may keep retrying; check status for readiness. --wait
-has no effect with --foreground.
-
-Usage:
-  ssh_proxy_cli start [flags]
-
-Flags:
-      --foreground     Run in this terminal; Ctrl+C stops the proxy
-  -h, --help           help for start
-      --wait SECONDS   Wait up to SECONDS (1..3600) for background
-                       readiness (default 20)
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli start --wait invalid --help
 exit 1
@@ -427,43 +182,6 @@ Error: unknown command "bogus" for "ssh_proxy_cli"
 Did you mean this?
 	logs
 
-=== ssh_proxy_cli service bogus --help
-exit 0
---- stdout
-Manage the proxy service for the current user. Registration uses the current
-user on every OS. Install enables automatic startup without starting the proxy;
-run trust and confirm unattended login works, then stop the proxy before
-installing. Enable/disable change automatic startup; use start, stop or restart
-to run it. On macOS, re-enable a disabled service before starting it manually.
-On Windows, install, uninstall, enable and disable need an elevated terminal,
-and install prompts for your Windows password; on macOS and Linux run as the
-current user, without sudo.
-
-Usage:
-  ssh_proxy_cli service [flags]
-  ssh_proxy_cli service [command]
-
-Available Commands:
-  install
-      Register and enable automatic startup
-  uninstall
-      Stop and remove the service
-  status
-      Show service state and automatic startup
-  enable
-      Enable automatic startup
-  disable
-      Disable automatic startup
-
-Flags:
-  -h, --help   help for service
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-
-Use "ssh_proxy_cli service [command] --help" for command details.
---- stderr
 === ssh_proxy_cli _run --help
 exit 0
 --- stdout
@@ -472,25 +190,6 @@ Usage:
 
 Flags:
   -h, --help   help for _run
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
---- stderr
-=== ssh_proxy_cli stop extra --help
-exit 0
---- stdout
-Stop the proxy and its SSH tunnel
-
-Usage:
-  ssh_proxy_cli stop [flags]
-
-Flags:
-  -h, --help   help for stop
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli service
 exit 0
@@ -523,84 +222,6 @@ Available Commands:
 Flags:
   -h, --help   help for service
 
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-
-Use "ssh_proxy_cli service [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli service -h
-exit 0
---- stdout
-Manage the proxy service for the current user. Registration uses the current
-user on every OS. Install enables automatic startup without starting the proxy;
-run trust and confirm unattended login works, then stop the proxy before
-installing. Enable/disable change automatic startup; use start, stop or restart
-to run it. On macOS, re-enable a disabled service before starting it manually.
-On Windows, install, uninstall, enable and disable need an elevated terminal,
-and install prompts for your Windows password; on macOS and Linux run as the
-current user, without sudo.
-
-Usage:
-  ssh_proxy_cli service [flags]
-  ssh_proxy_cli service [command]
-
-Available Commands:
-  install
-      Register and enable automatic startup
-  uninstall
-      Stop and remove the service
-  status
-      Show service state and automatic startup
-  enable
-      Enable automatic startup
-  disable
-      Disable automatic startup
-
-Flags:
-  -h, --help   help for service
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-
-Use "ssh_proxy_cli service [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli service --help
-exit 0
---- stdout
-Manage the proxy service for the current user. Registration uses the current
-user on every OS. Install enables automatic startup without starting the proxy;
-run trust and confirm unattended login works, then stop the proxy before
-installing. Enable/disable change automatic startup; use start, stop or restart
-to run it. On macOS, re-enable a disabled service before starting it manually.
-On Windows, install, uninstall, enable and disable need an elevated terminal,
-and install prompts for your Windows password; on macOS and Linux run as the
-current user, without sudo.
-
-Usage:
-  ssh_proxy_cli service [flags]
-  ssh_proxy_cli service [command]
-
-Available Commands:
-  install
-      Register and enable automatic startup
-  uninstall
-      Stop and remove the service
-  status
-      Show service state and automatic startup
-  enable
-      Enable automatic startup
-  disable
-      Disable automatic startup
-
-Flags:
-  -h, --help   help for service
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-
 Use "ssh_proxy_cli service [command] --help" for command details.
 --- stderr
 === ssh_proxy_cli service install --help
@@ -618,10 +239,6 @@ Usage:
 
 Flags:
   -h, --help   help for install
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli service uninstall --help
 exit 0
@@ -633,10 +250,6 @@ Usage:
 
 Flags:
   -h, --help   help for uninstall
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli service status --help
 exit 0
@@ -648,10 +261,6 @@ Usage:
 
 Flags:
   -h, --help   help for status
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli service enable --help
 exit 0
@@ -663,10 +272,6 @@ Usage:
 
 Flags:
   -h, --help   help for enable
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli service disable -h
 exit 0
@@ -678,17 +283,8 @@ Usage:
 
 Flags:
   -h, --help   help for disable
-
-Global Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
 --- stderr
 === ssh_proxy_cli -v
-exit 0
---- stdout
-ssh_proxy_cli dev
---- stderr
-=== ssh_proxy_cli --version
 exit 0
 --- stdout
 ssh_proxy_cli dev
@@ -726,128 +322,12 @@ Error: unknown command "extra" for "ssh_proxy_cli"
 exit 1
 --- stdout
 --- stderr
-Error: flag needs an argument: --config
-=== ssh_proxy_cli --config=
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli -c=
-exit 0
---- stdout
-SSH SOCKS5 and HTTP proxy.
-
-Usage:
-  ssh_proxy_cli [command]
-
-Commands:
-  start [--foreground] [--wait=SECONDS]
-      Start the proxy in the background
-  restart [--foreground] [--wait=SECONDS]
-      Restart with the current configuration
-  stop
-      Stop the proxy and its SSH tunnel
-  status
-      Show endpoint and health as JSON
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
-  logs [--follow] [--lines=N]
-      Show or follow proxy logs
-  test [--url=URL]
-      Test HTTP and SOCKS5 forwarding
-  check
-      Validate configuration as JSON
-
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
-
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
-
-Flags:
-  -c, --config PATH   Read configuration from PATH (default: config.toml
-                      beside the CLI)
-  -h, --help          help for ssh_proxy_cli
-  -v, --version       version for ssh_proxy_cli
-
-Use "ssh_proxy_cli [command] --help" for command details.
---- stderr
-=== ssh_proxy_cli check --config
+Error: unknown flag: --config
+=== ssh_proxy_cli check -c other.toml
 exit 1
 --- stdout
 --- stderr
-Error: flag needs an argument: --config
-=== ssh_proxy_cli --config= check
-exit 1
---- stdout
---- stderr
-Error: flag needs an argument: --config
-=== ssh_proxy_cli -c= check
-exit 1
---- stdout
---- stderr
-Error: flag needs an argument: --config
-=== ssh_proxy_cli check -c 
-exit 1
---- stdout
---- stderr
-Error: flag needs an argument: --config
-=== ssh_proxy_cli service status --config=
-exit 1
---- stdout
---- stderr
-Error: flag needs an argument: --config
+Error: unknown shorthand flag: 'c' in -c
 === ssh_proxy_cli start --wait 0
 exit 1
 --- stdout
@@ -893,6 +373,11 @@ exit 1
 --- stdout
 --- stderr
 Error: unknown command "extra" for "ssh_proxy_cli check"
+=== ssh_proxy_cli status --proxy_http --proxy_socks
+exit 1
+--- stdout
+--- stderr
+Error: if any flags in the group [proxy_http proxy_socks] are set none of the others can be; [proxy_http proxy_socks] were all set
 === ssh_proxy_cli logs --lines 0
 exit 1
 --- stdout

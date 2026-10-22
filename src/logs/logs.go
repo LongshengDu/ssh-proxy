@@ -19,6 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"ssh_proxy/src/config"
+	"ssh_proxy/src/platform"
 )
 
 // The byte number is cumulative across cuts, excluding marker lines. Followers
@@ -39,9 +40,10 @@ var runLogName = regexp.MustCompile(`^(logs|tray)_[0-9a-f]{16}(?:_[0-9]{8}_[0-9]
 // during a cut, so the owner holds truncation off while they run.
 type RunLog struct {
 	*os.File
-	mu    sync.Mutex
-	limit int64 // 0: never truncate, for appending to a log another process owns.
-	holds int
+	mu      sync.Mutex
+	limit   int64 // 0: never truncate, for appending to a log another process owns.
+	holds   int
+	release func()
 }
 
 // NewLog appends for the lifetime of one process, using the default size limit.
@@ -53,12 +55,23 @@ func NewLog(path string, foreground bool) (*log.Logger, *RunLog, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	writer := &RunLog{File: file, limit: config.DefaultMaxLogMB << 20}
+	release, err := platform.ProtectLog(path)
+	if err != nil {
+		file.Close()
+		return nil, nil, err
+	}
+	writer := &RunLog{File: file, limit: config.DefaultMaxLogMB << 20, release: release}
 	var output io.Writer = writer
 	if foreground {
 		output = io.MultiWriter(writer, os.Stderr)
 	}
 	return log.New(output, "", log.Ldate|log.Ltime|log.Lmicroseconds), writer, nil
+}
+
+func (l *RunLog) Close() error {
+	err := l.File.Close()
+	l.release()
+	return err
 }
 
 // SetLimit applies logging.max_size_mb once the configuration is known. Zero
@@ -188,9 +201,17 @@ func pruneRunLogs(directory, kind, current string, limit int) error {
 		return old[i].ModTime().Before(old[j].ModTime())
 	})
 	// Reserve one slot for this run; the two kinds have independent limits.
-	for i := 0; i < len(old)-limit+1; i++ {
-		if err := os.Remove(filepath.Join(directory, old[i].Name())); err != nil && !os.IsNotExist(err) {
+	remaining := len(old) + 1
+	for _, info := range old {
+		if remaining <= limit {
+			break
+		}
+		removed, err := platform.RemoveInactiveLog(filepath.Join(directory, info.Name()))
+		if err != nil && !os.IsNotExist(err) {
 			return err
+		}
+		if removed || os.IsNotExist(err) {
+			remaining--
 		}
 	}
 	return nil

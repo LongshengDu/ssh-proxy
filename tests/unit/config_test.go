@@ -264,7 +264,7 @@ func TestExistingDynamicForwardAndInvalidSSHConfig(t *testing.T) {
 	}
 }
 
-func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
+func TestDefaultPathsAndMissingConfig(t *testing.T) {
 	path, sshPath := testutil.Config(t, "Host *\n User tester\n")
 	if err := os.Remove(sshPath); err != nil {
 		t.Fatal(err)
@@ -272,7 +272,7 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if _, err := config.LoadConfig(path); err == nil {
 		t.Fatal("missing SSH config accepted")
 	}
-	defaults, err := config.PathsFor("")
+	defaults, err := config.PathsFor()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,19 +283,19 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if defaults.Config != filepath.Join(filepath.Dir(exe), "config.toml") || defaults.Log != filepath.Join(filepath.Dir(exe), "logs", "logs_"+defaults.ID+".txt") {
 		t.Fatal(defaults)
 	}
-	alternate, err := config.PathsFor(path)
+	otherExe := filepath.Join(filepath.Dir(path), "ssh_proxy_cli")
+	alternate, err := config.PathsForExecutable(otherExe)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if alternate.Logs != defaults.Logs || alternate.Log == defaults.Log ||
-		filepath.Dir(alternate.Log) != defaults.Logs || alternate.Runtime == defaults.Runtime {
-		t.Fatal("alternate configs must share logs directory but have distinct logs and control state")
+	if alternate.Config != path || alternate.Logs != filepath.Join(filepath.Dir(path), "logs") || alternate.Runtime == defaults.Runtime {
+		t.Fatal("separate installations must have their own config, logs and control state")
 	}
 	// Control/log paths remain discoverable without either configuration file.
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	absent, err := config.PathsFor(path)
+	absent, err := config.PathsForExecutable(otherExe)
 	if err != nil || absent != alternate {
 		t.Fatal(absent, err)
 	}

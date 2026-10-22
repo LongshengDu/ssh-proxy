@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -78,6 +77,38 @@ func TestRunLogRetention(t *testing.T) {
 				t.Fatal("unrelated file changed", err)
 			}
 		})
+	}
+}
+
+func TestRetentionKeepsActiveLogs(t *testing.T) {
+	dir := t.TempDir()
+	p := config.Paths{Config: filepath.Join(dir, "config.toml"), Logs: dir, ID: "abcdef0123456789"}
+	if err := os.WriteFile(p.Config, []byte("[logging]\nmax_log_files = 1\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"logs", "tray"} {
+		logger, active, err := logs.NewRunLog(p, kind, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer active.Close()
+		_, other, err := logs.NewRunLog(p, kind, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		other.Close()
+		logger.Print("still visible")
+		if got, err := os.ReadFile(active.Name()); err != nil || !strings.Contains(string(got), "still visible") {
+			t.Fatal("active log was unlinked", err)
+		}
+		_, newest, err := logs.NewRunLog(p, kind, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newest.Close()
+		if _, err := os.Stat(other.Name()); !os.IsNotExist(err) {
+			t.Fatal("closed log was not pruned", err)
+		}
 	}
 }
 
@@ -243,15 +274,13 @@ func TestRunLogSizeLimit(t *testing.T) {
 	}
 }
 
-// Older configurations stay valid: health.target is added to health.targets and
-// logging.backups is accepted but ignored.
-func TestLogSizeAndLegacyConfig(t *testing.T) {
+func TestLogSizeAndRemovedSettings(t *testing.T) {
 	for _, tc := range []struct{ name, from, to, want string }{
 		{"size-zero", "max_size_mb = 10", "max_size_mb = 0", "logging.max_size_mb"},
 		{"size-too-large", "max_size_mb = 10", "max_size_mb = 1025", "logging.max_size_mb"},
 		{"size-valid", "max_size_mb = 10", "max_size_mb = 5", ""},
-		{"legacy-backups", "max_size_mb = 10", "max_size_mb = 5\nbackups = 3", ""},
-		{"legacy-health-target", "max_size_mb = 10", "max_size_mb = 5", ""},
+		{"removed-backups", "max_size_mb = 10", "max_size_mb = 5\nbackups = 3", "unknown config setting(s): [logging.backups]"},
+		{"removed-health-target", "[health]", "[health]\ntarget = \"legacy.example:443\"", "unknown config setting(s): [health.target]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
@@ -260,9 +289,6 @@ func TestLogSizeAndLegacyConfig(t *testing.T) {
 				t.Fatal("default config changed:", tc.from)
 			}
 			text := strings.Replace(template, tc.from, tc.to, 1)
-			if tc.name == "legacy-health-target" {
-				text = strings.Replace(text, "failures_before_failover = 3", "failures_before_failover = 3\ntarget = \"legacy.example:443\"", 1)
-			}
 			if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -270,9 +296,6 @@ func TestLogSizeAndLegacyConfig(t *testing.T) {
 			if tc.want == "" {
 				if err != nil || cfg.Logging.MaxSizeMB != 5 {
 					t.Fatal("size limit not loaded", err)
-				}
-				if tc.name == "legacy-health-target" && !slices.Contains(cfg.Health.Targets, "legacy.example:443") {
-					t.Fatal("legacy health.target not added to health.targets", cfg.Health.Targets)
 				}
 			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want error %q, got %v", tc.want, err)

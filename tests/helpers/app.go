@@ -17,9 +17,9 @@ type NativeItem struct {
 	Disabled, Checked, Separator bool
 }
 
-func StartApp(t *testing.T, dir, config, backend string) *exec.Cmd {
+func StartApp(t *testing.T, dir string, args ...string) *exec.Cmd {
 	t.Helper()
-	cmd := exec.Command(AppPath(dir), "--config", config, "--backend", backend)
+	cmd := exec.Command(AppPath(dir), args...)
 	platform.HideChild(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

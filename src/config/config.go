@@ -51,7 +51,6 @@ type Config struct {
 		RetryDelay          int    `toml:"retry_delay_seconds"`
 	} `toml:"ssh"`
 	Health struct {
-		Target                 string   `toml:"target"` // Legacy single target; appended to Targets.
 		Targets                []string `toml:"targets"`
 		FailoverOnProbeFailure bool     `toml:"failover_on_probe_failure"`
 		Interval               int      `toml:"interval_seconds"`
@@ -61,7 +60,6 @@ type Config struct {
 	Logging struct {
 		MaxLogFiles int `toml:"max_log_files"`
 		MaxSizeMB   int `toml:"max_size_mb"`
-		Backups     int `toml:"backups"` // Legacy setting; ignored.
 	} `toml:"logging"`
 	App struct {
 		StartProxyOnLaunch bool `toml:"start_proxy_on_launch"` // Read by the Windows/macOS tray only.
@@ -110,20 +108,17 @@ func CheckConfig(path string) ConfigCheck {
 }
 
 // PathsFor finds the default beside the executable, independent of working directory.
-func PathsFor(configPath string) (Paths, error) {
+func PathsFor() (Paths, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return Paths{}, err
 	}
-	return PathsForExecutable(configPath, exe)
+	return PathsForExecutable(exe)
 }
 
 // PathsForExecutable lets the separate tray find the backend's portable data.
-func PathsForExecutable(configPath, exe string) (Paths, error) {
-	if configPath == "" {
-		configPath = filepath.Join(filepath.Dir(exe), "config.toml")
-	}
-	abs, err := filepath.Abs(configPath)
+func PathsForExecutable(exe string) (Paths, error) {
+	abs, err := filepath.Abs(filepath.Join(filepath.Dir(exe), "config.toml"))
 	if err != nil {
 		return Paths{}, err
 	}
@@ -238,9 +233,6 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 			return nil, fmt.Errorf("%s must be in 1..3600", name)
 		}
 	}
-	if c.Health.Target != "" {
-		c.Health.Targets = append(c.Health.Targets, c.Health.Target)
-	}
 	if len(c.Health.Targets) == 0 {
 		return nil, fmt.Errorf("health.targets needs at least one host:port")
 	}
@@ -262,9 +254,13 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 	resolved, err := exec.LookPath(c.SSH.Executable)
 	if err != nil {
 		editFile = "" // Missing software is not an invalid SSH host configuration.
-		return nil, fmt.Errorf("OpenSSH client not found: %w", err)
+		return nil, fmt.Errorf("OpenSSH client not found: install OpenSSH 8.7 or newer and set ssh.executable in config.toml: %w", err)
 	}
 	c.SSH.Executable = resolved
+	if err := CheckOpenSSH(resolved); err != nil {
+		editFile = ""
+		return nil, err
+	}
 	editFile = c.SSH.ConfigFile
 	if info, err := os.Stat(c.SSH.ConfigFile); err != nil || info.IsDir() {
 		return nil, fmt.Errorf("SSH config file not found: %s", c.SSH.ConfigFile)
@@ -284,6 +280,30 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 }
 
 var validAlias = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
+var sshVersion = regexp.MustCompile(`OpenSSH_(?:for_Windows_)?(\d+)\.(\d+)(p\d+)?`)
+
+// CheckOpenSSH verifies the native client before passing options that require 8.7.
+func CheckOpenSSH(executable string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, executable, "-V")
+	platform.HideChild(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("OpenSSH 8.7 or newer is required; cannot run %s -V: %w: %s", executable, err, strings.TrimSpace(string(out)))
+	}
+	match := sshVersion.FindStringSubmatch(string(out))
+	if match == nil {
+		return fmt.Errorf("OpenSSH 8.7 or newer is required; unrecognized version from %s: %s", executable, strings.TrimSpace(string(out)))
+	}
+	major, _ := strconv.Atoi(match[1])
+	minor, _ := strconv.Atoi(match[2])
+	if major < 8 || major == 8 && minor < 7 {
+		return fmt.Errorf("OpenSSH 8.7 or newer is required; found %s.%s%s (%s). Install a newer client and set ssh.executable in config.toml", match[1], match[2], match[3], executable)
+	}
+	return nil
+}
 
 // SSHAliases only enumerates explicit Host declarations in the selected file.
 // Includes/Match still supply settings through native ssh -G/-F; wildcard and

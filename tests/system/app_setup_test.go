@@ -27,12 +27,12 @@ func TestTrayLoginLaunch(t *testing.T) {
 	testutil.WriteFile(t, configPath, testutil.ReadFile(configPath)+"\n[logging]\nmax_log_files = 1\n")
 	testutil.SeedRunLogs(t, filepath.Join(dir, "logs"), "tray", 3)
 	proxyLogs := testutil.SeedRunLogs(t, filepath.Join(dir, "logs"), "logs", 3)
-	p, err := config.PathsForExecutable(configPath, testutil.CLIPath(dir))
+	p, err := config.PathsForExecutable(testutil.CLIPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { ui.SetStartup(p.ID, "", "", false) })
-	app := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+	t.Cleanup(func() { ui.SetStartup(p.ID, "", false) })
+	app := testutil.StartApp(t, dir)
 	testutil.WaitFor(t, func() bool {
 		return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 	})
@@ -43,7 +43,7 @@ func TestTrayLoginLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldLog := testutil.TrayLog(dir)
-	testutil.NativeLoginLaunch(t, p.ID, testutil.AppPath(dir), configPath)
+	testutil.NativeLoginLaunch(t, p.ID, testutil.AppPath(dir))
 	testutil.WaitFor(t, func() bool {
 		return testutil.TrayLog(dir) != oldLog && strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 	})
@@ -97,7 +97,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 			if err := os.WriteFile(backend, data, 0755); err != nil {
 				t.Fatal(err)
 			}
-			configPath, record, gate := filepath.Join(dir, "literal ' config.txt"), filepath.Join(dir, "commands.jsonl"), filepath.Join(dir, "release-trust")
+			record, gate := filepath.Join(dir, "commands.jsonl"), filepath.Join(dir, "release-trust")
 			settings := map[string]string{"SSH_PROXY_TEST_PROCESS": "cli", "SSH_PROXY_TEST_RECORD": record, "SSH_PROXY_TEST_GATE": gate,
 				"SSH_PROXY_TEST_TRUST_EXIT": tc.trustExit, "SSH_PROXY_TEST_CHECK": tc.check}
 			data, _ = json.Marshal(settings)
@@ -129,7 +129,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				return
 			}
 			before := testutil.NativeTerminals(t)
-			app := testutil.StartApp(t, dir, configPath, backend)
+			app := testutil.StartApp(t, dir)
 			pid := app.Process.Pid
 			testutil.WaitFor(t, func() bool {
 				return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
@@ -144,7 +144,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 			} else {
 				var entry *command
 				testutil.WaitFor(t, func() bool { _, entry, _ = commands(); return entry != nil })
-				if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 5 || entry.Args[0] != "trust" || entry.Args[4] != configPath {
+				if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 3 || entry.Args[0] != "trust" || entry.Args[1] != "--log" || entry.Args[2] != testutil.TrayLog(dir) {
 					t.Fatalf("trust lost terminal handles or literal paths: %+v", entry)
 				}
 				if !platform.ProcessAlive(entry.PID) {
@@ -167,6 +167,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 						t.Fatal("failed setup started the proxy")
 					}
 					testutil.NativeDismiss(t, pid)
+					testutil.NativeOpened(t, testutil.TrayLog(dir))
 				}
 				testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
 				testutil.NativeTerminalsClosed(t, before)
@@ -181,14 +182,15 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 
 func TestTrayRecoveryErrors(t *testing.T) {
 	testutil.NativeDesktop(t)
-	for _, scenario := range []string{"bad config", "missing CLI", "empty SSH", "missing SSH"} {
+	for _, scenario := range []string{"bad config", "missing CLI", "empty SSH", "missing SSH", "--backend", "--smoke-test"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir := testutil.IsolatedBuild(t)
 			suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
-			configPath, servers := filepath.Join(dir, "settings-"+suffix+".txt"), filepath.Join(dir, "servers-"+suffix+".txt")
+			configPath, servers := filepath.Join(dir, "config.toml"), filepath.Join(dir, "servers-"+suffix+".txt")
 			text := strings.ReplaceAll(string(testutil.ConfigTemplate(t)), `config_file = "ssh_config"`, `config_file = "`+filepath.Base(servers)+`"`)
 			testutil.WriteFile(t, configPath, text)
 			reason := "SSH config file not found"
+			var args []string
 			switch scenario {
 			case "bad config":
 				testutil.WriteFile(t, configPath, "proxy = [")
@@ -201,8 +203,11 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			case "empty SSH":
 				testutil.WriteFile(t, servers, "# hosts\n")
 				reason = "add your hosts"
+			case "--backend", "--smoke-test":
+				args = []string{scenario}
+				reason = "takes no command-line arguments"
 			}
-			app := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+			app := testutil.StartApp(t, dir, args...)
 			pid := app.Process.Pid
 			message := testutil.ExpectDialog(t, pid, reason)
 			log := testutil.TrayLog(dir)
@@ -214,13 +219,14 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			}
 			testutil.NativeDismiss(t, pid)
 			testutil.NativeOpened(t, log)
-			if scenario != "missing CLI" {
+			startupFailure := scenario == "missing CLI" || len(args) != 0
+			if !startupFailure {
 				if scenario == "bad config" {
-					p, err := config.PathsForExecutable(configPath, testutil.CLIPath(dir))
+					p, err := config.PathsForExecutable(testutil.CLIPath(dir))
 					if err != nil {
 						t.Fatal(err)
 					}
-					t.Cleanup(func() { ui.SetStartup(p.ID, "", "", false) })
+					t.Cleanup(func() { ui.SetStartup(p.ID, "", false) })
 					for _, enabled := range []bool{true, false} {
 						testutil.NativeClick(t, pid, "Launch App at Login")
 						testutil.WaitFor(t, func() bool { got, err := ui.StartupEnabled(p.ID); return err == nil && got == enabled })
@@ -230,7 +236,7 @@ func TestTrayRecoveryErrors(t *testing.T) {
 				testutil.NativeClick(t, pid, "Exit app")
 			}
 			err := app.Wait()
-			if (err != nil) != (scenario == "missing CLI") {
+			if (err != nil) != startupFailure {
 				t.Fatal("wrong exit result", err)
 			}
 			files, _ := filepath.Glob(filepath.Join(dir, "logs", "tray_*.txt"))
@@ -246,11 +252,13 @@ func TestTraySingleInstance(t *testing.T) {
 	dir := testutil.IsolatedBuild(t)
 	testutil.LocalSSH(t, dir)
 	configPath := filepath.Join(dir, "config.toml")
-	first := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+	testutil.WriteFile(t, configPath, testutil.ReadFile(configPath)+"\n[logging]\nmax_log_files = 1\n")
+	first := testutil.StartApp(t, dir)
 	testutil.WaitFor(t, func() bool {
 		return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 	})
-	second := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+	activeLog := testutil.TrayLog(dir)
+	second := testutil.StartApp(t, dir)
 	testutil.ExpectDialog(t, second.Process.Pid, "another instance")
 	testutil.NativeDismiss(t, second.Process.Pid)
 	if err := second.Wait(); err == nil {
@@ -258,6 +266,9 @@ func TestTraySingleInstance(t *testing.T) {
 	}
 	if !platform.ProcessAlive(first.Process.Pid) {
 		t.Fatal("duplicate instance stopped the existing app")
+	}
+	if testutil.TrayLog(dir) != activeLog || !strings.Contains(testutil.ReadFile(activeLog), "Proxy status: stopped") {
+		t.Fatal("duplicate instance replaced or deleted the active log")
 	}
 	testutil.NativeClick(t, first.Process.Pid, "Exit app")
 	if err := first.Wait(); err != nil {
@@ -274,7 +285,7 @@ func TestTrayFirstHostKeySetup(t *testing.T) {
 	testutil.WriteFile(t, f.Trust, "") // Only the ephemeral test server is initially untrusted.
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
 	before := testutil.NativeTerminals(t)
-	app := testutil.StartApp(t, dir, filepath.Join(dir, "config.toml"), testutil.CLIPath(dir))
+	app := testutil.StartApp(t, dir)
 	testutil.WaitFor(t, func() bool {
 		return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 	})

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,8 +27,6 @@ func TestLiveEndpoints(t *testing.T) {
 	if configPath == "" {
 		t.Skip("optional external endpoint check; pass --live-config")
 	}
-	output := testutil.SystemBuild(t)
-	exe := testutil.CLIPath(output)
 	template, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +37,8 @@ func TestLiveEndpoints(t *testing.T) {
 	}
 	for index, alias := range base.Endpoints {
 		t.Run(alias, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testutil.IsolatedBuild(t)
+			exe := testutil.CLIPath(dir)
 			liveConfig := filepath.Join(dir, "config.toml")
 			text := string(template)
 			socks, httpPort := strconv.Itoa(testutil.FreePort(t)), strconv.Itoa(testutil.FreePort(t))
@@ -61,7 +59,7 @@ func TestLiveEndpoints(t *testing.T) {
 			call := func(args ...string) ([]byte, error) {
 				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, exe, append(args, "--config", liveConfig)...)
+				cmd := exec.CommandContext(ctx, exe, args...)
 				platform.HideChild(cmd)
 				return cmd.CombinedOutput()
 			}
@@ -105,22 +103,6 @@ func TestLiveEndpoints(t *testing.T) {
 			if err != nil || !strings.Contains(string(log), "Endpoint unavailable-test failed") {
 				t.Fatalf("ordered failover missing: %v", err)
 			}
-			tray := filepath.Join(output, "ssh_proxy_app.exe")
-			if runtime.GOOS == "darwin" {
-				tray = filepath.Join(output, "ssh_proxy_app.app", "Contents", "MacOS", "ssh_proxy_app")
-			}
-			if _, err = os.Stat(tray); runtime.GOOS != "linux" && err == nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				cmd := exec.CommandContext(ctx, tray, "--config", liveConfig, "--backend", exe, "--smoke-test")
-				platform.HideChild(cmd)
-				if out, err := cmd.CombinedOutput(); err != nil {
-					t.Fatalf("tray: %v: %s", err, out)
-				}
-				if status().PID != before.PID {
-					t.Fatal("tray exit interrupted forwarding")
-				}
-			}
 			must("restart", "--wait", "55")
 			must("test")
 			must("stop")
@@ -130,9 +112,9 @@ func TestLiveEndpoints(t *testing.T) {
 			if index == 0 {
 				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()
-				foreground := exec.CommandContext(ctx, exe, "start", "--foreground", "--config", liveConfig)
+				foreground := exec.CommandContext(ctx, exe, "start", "--foreground")
 				platform.HideChild(foreground)
-				logfile, err := os.Create(filepath.Join(output, "logs", "live-foreground.log"))
+				logfile, err := os.Create(filepath.Join(dir, "logs", "live-foreground.log"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -154,7 +136,10 @@ func TestLiveEndpoints(t *testing.T) {
 					t.Fatalf("foreground shutdown: %v", err)
 				}
 			}
-			missing := exec.Command(exe, "--config", filepath.Join(dir, "absent.toml"), "start")
+			if err := os.Remove(liveConfig); err != nil {
+				t.Fatal(err)
+			}
+			missing := exec.Command(exe, "start")
 			platform.HideChild(missing)
 			if err = missing.Run(); err == nil {
 				t.Fatal("missing configuration accepted")

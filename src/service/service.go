@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	kardianos "github.com/kardianos/service"
@@ -18,6 +19,18 @@ import (
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/supervisor"
 )
+
+// LaunchdAutoStart reads launchctl print-disabled output (both boolean and word forms).
+func LaunchdAutoStart(output, name string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		key, value, found := strings.Cut(line, "=>")
+		if found && strings.TrimSpace(key) == `"`+name+`"` {
+			value = strings.TrimSpace(value)
+			return value != "true" && value != "disabled"
+		}
+	}
+	return true
+}
 
 func serviceReport(name string, installed bool, state string, startup bool) error {
 	if !installed {
@@ -75,7 +88,7 @@ func serviceFor(p config.Paths) (kardianos.Service, *kardianos.Config, error) {
 	}
 	cfg := &kardianos.Config{Name: serviceName(p.ID), DisplayName: "SSH Proxy (" + p.ID + ")",
 		Description: "Native OpenSSH SOCKS5 tunnel and HTTP proxy", Executable: exe,
-		Arguments: []string{"_service", "--config", p.Config}, WorkingDirectory: filepath.Dir(p.Config),
+		Arguments: []string{"_service"}, WorkingDirectory: filepath.Dir(p.Config),
 		EnvVars: map[string]string{"SSH_PROXY_RUNTIME": p.Runtime},
 		Option: kardianos.KeyValue{"UserService": runtime.GOOS == "darwin", "RunAtLoad": true,
 			"KeepAlive": true, "LogOutput": false,

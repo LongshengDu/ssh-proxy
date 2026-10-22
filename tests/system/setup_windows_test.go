@@ -22,6 +22,14 @@ import (
 // handles while native -E appends diagnostics to the same run log.
 func TestTrustLoggingPreservesConsole(t *testing.T) {
 	config, _ := testutil.Config(t, "Host first target\n HostName fixture.invalid\n User tester\n")
+	data, err := os.ReadFile(testutil.CLIPath(testutil.SystemBuild(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := testutil.CLIPath(filepath.Dir(config))
+	if err := os.WriteFile(cli, data, 0755); err != nil {
+		t.Fatal(err)
+	}
 	helper, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +42,7 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "target")
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", record)
-	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{testutil.CLIPath(testutil.SystemBuild(t)), "trust", "--log", log, "--config", config}))
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{cli, "trust", "--log", log}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +63,7 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	if err := windows.GetExitCodeProcess(process.Process, &code); err != nil || code != 0 {
 		t.Fatalf("trust failed: %d: %v", code, err)
 	}
-	data, err := os.ReadFile(record)
+	data, err = os.ReadFile(record)
 	var terminal []bool
 	if err != nil || json.Unmarshal(data, &terminal) != nil || len(terminal) != 3 || !terminal[0] || !terminal[1] || !terminal[2] {
 		t.Fatalf("SSH must receive console stdin/stdout/stderr with --log: %s (%v)", data, err)

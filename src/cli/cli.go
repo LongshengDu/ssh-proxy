@@ -98,11 +98,9 @@ func Run(args []string) error {
 	if len(args) > 0 && args[0] == "_ssh" {
 		return platform.RunGuardian(args[1:]) // Native ssh arguments, passed through unparsed.
 	}
-	var configPath string
 	run := func(do func(config.Paths) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, _ []string) error {
-			// pflag accepts "--config=", reads "-c=" as the path "=", and takes the next
-			// argument as a value even when it is an option, as in "trust --log --help".
+			// pflag takes the next option as a string value, as in "trust --log --help".
 			var err error
 			cmd.Flags().Visit(func(f *pflag.Flag) {
 				if v := f.Value.String(); err == nil && f.Value.Type() == "string" && (v == "" || v == "=" || strings.HasPrefix(v, "-")) {
@@ -112,7 +110,7 @@ func Run(args []string) error {
 			if err != nil {
 				return err
 			}
-			p, err := config.PathsFor(configPath)
+			p, err := config.PathsFor()
 			if err != nil {
 				return err
 			}
@@ -126,11 +124,9 @@ func Run(args []string) error {
 	cobra.MousetrapHelpText = ""                                           // Keep normal help when launched from Windows Explorer.
 	root.SetHelpCommand(&cobra.Command{Hidden: true, GroupID: "commands"}) // No "help" command; use -h/--help.
 	root.SetVersionTemplate("ssh_proxy_cli {{.Version}}\n")
-	// Define -h and -v before cobra finds the command; otherwise it reads "--help --config PATH"
-	// as --help taking the value --config, and "-v extra" as -v taking the value extra.
+	// Define boolean flags before Cobra finds the command (for example "-v extra").
 	root.InitDefaultHelpFlag()
 	root.InitDefaultVersionFlag()
-	root.PersistentFlags().StringVarP(&configPath, "config", "c", "", "Read configuration from `PATH` (default: config.toml beside the CLI)")
 	root.AddGroup(&cobra.Group{ID: "commands", Title: "Commands:"}, &cobra.Group{ID: "service", Title: serviceTitle})
 	// List each command with its own flags, such as "start [--foreground] [--wait=SECONDS]",
 	// and the root help lists each service command, such as "service install".
@@ -174,6 +170,29 @@ has no effect with --foreground.`}
 		})
 		return cmd
 	}
+	statusCmd := &cobra.Command{Use: "status", Short: "Show status as JSON or print a proxy URL", GroupID: "commands", Args: cobra.NoArgs,
+		Long: "Show endpoint and health as JSON. URL flags print only the selected proxy URL\nwhen running, otherwise nothing. An empty result exits successfully."}
+	proxyHTTP := statusCmd.Flags().Bool("proxy_http", false, "Print only the running HTTP proxy URL (http://)")
+	proxySOCKS := statusCmd.Flags().Bool("proxy_socks", false, "Print only the running SOCKS5 proxy URL (socks5h://)")
+	statusCmd.MarkFlagsMutuallyExclusive("proxy_http", "proxy_socks")
+	statusCmd.RunE = run(func(p config.Paths) error {
+		st := control.QueryStatus(p)
+		if !*proxyHTTP && !*proxySOCKS {
+			return printJSON(st)
+		}
+		if st.Phase != control.PhaseRunning {
+			return nil
+		}
+		address, scheme := st.HTTP, "http"
+		if *proxySOCKS {
+			address, scheme = st.SOCKS, "socks5h"
+		}
+		if address == "" {
+			return nil
+		}
+		_, err := fmt.Println(scheme + "://" + address)
+		return err
+	})
 	logsCmd := &cobra.Command{Use: "logs", Short: "Show or follow proxy logs", GroupID: "commands", Args: cobra.NoArgs}
 	follow := logsCmd.Flags().BoolP("follow", "f", false, "Follow new log lines")
 	lines := logsCmd.Flags().Int("lines", 60, "Show the last `N` (1..10000) lines")
@@ -231,9 +250,7 @@ See "ssh_proxy_cli service --help" for details.`
 	root.AddCommand(startCommand("start", "Start the proxy in the background", false),
 		startCommand("restart", "Restart with the current configuration", true),
 		&cobra.Command{Use: "stop", Short: "Stop the proxy and its SSH tunnel", GroupID: "commands", Args: cobra.NoArgs, RunE: run(stop)},
-		&cobra.Command{Use: "status", Short: "Show endpoint and health as JSON", GroupID: "commands", Args: cobra.NoArgs,
-			RunE: run(func(p config.Paths) error { return printJSON(control.QueryStatus(p)) })},
-		trustCmd, logsCmd, testCmd,
+		statusCmd, trustCmd, logsCmd, testCmd,
 		&cobra.Command{Use: "check", Short: "Validate configuration as JSON", GroupID: "commands", Args: cobra.NoArgs,
 			Long: "Validate configuration as JSON. Inspect the valid field to determine validity.",
 			RunE: run(func(p config.Paths) error { return printJSON(config.CheckConfig(p.Config)) })},

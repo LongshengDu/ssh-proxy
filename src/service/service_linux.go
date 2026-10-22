@@ -47,6 +47,16 @@ func configureService(cfg *kardianos.Config) error {
 		return fmt.Errorf("user systemd is unavailable: %w: %s; use start --foreground or start without an installed service", err, out)
 	}
 	cfg.Option["UserService"] = true
+	unit, err := SystemdScript(cfg)
+	if err != nil {
+		return err
+	}
+	cfg.Option["SystemdScript"] = unit
+	return nil
+}
+
+// SystemdScript builds the per-user unit passed to kardianos/service.
+func SystemdScript(cfg *kardianos.Config) (string, error) {
 	// The library's default unit targets a system target and does not escape
 	// environment values. Supply a user unit; reuse its install/control lifecycle.
 	quote := func(value string) string { return strconv.Quote(strings.ReplaceAll(value, "%", "%%")) }
@@ -55,13 +65,13 @@ func configureService(cfg *kardianos.Config) error {
 	for i, arg := range args {
 		args[i] = quote(strings.ReplaceAll(arg, "$", "$$"))
 	}
-	unit := fmt.Sprintf(linuxUnit, strings.Join(args, " "), quote(cfg.WorkingDirectory), quote("SSH_PROXY_RUNTIME="+cfg.EnvVars["SSH_PROXY_RUNTIME"]))
+	// All application/SSH paths are resolved explicitly; no WorkingDirectory is needed.
+	unit := fmt.Sprintf(linuxUnit, strings.Join(args, " "), quote("SSH_PROXY_RUNTIME="+cfg.EnvVars["SSH_PROXY_RUNTIME"]))
 	// The service library processes its own template syntax after this step.
 	if strings.Contains(unit, "{{") {
-		return fmt.Errorf("service paths cannot contain '{{'; choose another installation/config path")
+		return "", fmt.Errorf("service paths cannot contain '{{'; choose another installation/config path")
 	}
-	cfg.Option["SystemdScript"] = unit
-	return nil
+	return unit, nil
 }
 
 func grantServiceControl(string) error { return nil }
@@ -87,7 +97,6 @@ Description=SSH Proxy
 
 [Service]
 ExecStart=%s
-WorkingDirectory=%s
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=25

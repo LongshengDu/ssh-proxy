@@ -31,14 +31,9 @@ var icon []byte
 
 // run delegates the icon, native menu and event loop entirely to
 // gogpu/systray. One worker goroutine owns the Controller and serializes actions.
-func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer *logs.RunLog) error {
+func run(p config.Paths, backend string, logger *log.Logger, writer *logs.RunLog) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	unlock, err := platform.LockInstance(p.ID + "-tray")
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	scripts, err := DiscoverScripts(filepath.Join(filepath.Dir(backend), "scripts"), runtime.GOOS)
 	if err != nil {
 		return err
@@ -83,7 +78,7 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	desktop := &desktopOS{id: p.ID, config: p.Config, log: writer}
+	desktop := &desktopOS{id: p.ID, log: writer}
 	controller := NewController(cliBackend{paths: p, exe: backend, log: writer}, desktop, view, logger, p, filepath.Dir(backend), scripts)
 	var worker sync.WaitGroup
 	worker.Add(1)
@@ -91,12 +86,6 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 		defer worker.Done()
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-		var smokeTimer <-chan time.Time
-		if smoke {
-			timer := time.NewTimer(1500 * time.Millisecond)
-			defer timer.Stop()
-			smokeTimer = timer.C
-		}
 		type result struct {
 			id  int
 			err error
@@ -115,9 +104,6 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 		for {
 			select {
 			case <-ctx.Done():
-				return
-			case <-smokeTimer:
-				tray.Remove()
 				return
 			case <-ticker.C:
 			case r := <-completed:
@@ -178,7 +164,7 @@ func (v *menuView) Render(items []Item, tooltip string) {
 
 // desktopOS is the tray's file, login, script and dialog integration.
 type desktopOS struct {
-	id, config   string
+	id           string
 	log          *logs.RunLog
 	showingError atomic.Bool
 }
@@ -189,7 +175,7 @@ func (d *desktopOS) SetStartup(enabled bool) error {
 	if err != nil {
 		return err
 	}
-	return SetStartup(d.id, exe, d.config, enabled)
+	return SetStartup(d.id, exe, enabled)
 }
 func (d *desktopOS) Open(path string) error         { return openPath(path) }
 func (d *desktopOS) OpenEditable(path string) error { return openEditable(path) }
@@ -219,14 +205,14 @@ type cliBackend struct {
 func (b cliBackend) Status() control.Status { return control.QueryStatus(b.paths) }
 func (b cliBackend) Check(ctx context.Context) (config.ConfigCheck, error) {
 	var result config.ConfigCheck
-	out, err := commandBackend(ctx, b.paths, b.exe, "check")
+	out, err := commandBackend(ctx, b.exe, "check")
 	if err == nil {
 		err = json.Unmarshal(out, &result)
 	}
 	return result, err
 }
 func (b cliBackend) CheckLogin(ctx context.Context) error {
-	_, err := commandBackend(ctx, b.paths, b.exe, "trust", "--check")
+	_, err := commandBackend(ctx, b.exe, "trust", "--check")
 	return err
 }
 func (b cliBackend) Trust(ctx context.Context) error {
@@ -234,7 +220,7 @@ func (b cliBackend) Trust(ctx context.Context) error {
 	// during their writes would lose them.
 	release := b.log.Hold()
 	defer release()
-	err := RunTrustTerminal(ctx, b.exe, b.paths.Config, b.paths.Log)
+	err := RunTrustTerminal(ctx, b.exe, b.paths.Log)
 	if ctx.Err() != nil {
 		// Closing the app leaves the user's setup terminal alive. Its log writes
 		// can outlive this call, so do not resume cuts during app shutdown.
@@ -243,11 +229,11 @@ func (b cliBackend) Trust(ctx context.Context) error {
 	return err
 }
 func (b cliBackend) Start(ctx context.Context) error {
-	_, err := commandBackend(ctx, b.paths, b.exe, "start", "--wait", "1")
+	_, err := commandBackend(ctx, b.exe, "start")
 	return err
 }
 func (b cliBackend) Stop(ctx context.Context) error {
-	_, err := commandBackend(ctx, b.paths, b.exe, "stop")
+	_, err := commandBackend(ctx, b.exe, "stop")
 	return err
 }
 
@@ -256,10 +242,10 @@ func (b cliBackend) SetAutoStart(enabled bool) error {
 	return config.SetStartProxyOnLaunch(b.paths.Config, enabled)
 }
 
-func commandBackend(parent context.Context, p config.Paths, backend string, args ...string) ([]byte, error) {
+func commandBackend(parent context.Context, backend string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, backend, append(args, "--config", p.Config)...)
+	cmd := exec.CommandContext(ctx, backend, args...)
 	platform.HideChild(cmd)
 	out, err := cmd.CombinedOutput()
 	slog.Info("CLI command", "args", args, "output", strings.TrimSpace(string(out)))

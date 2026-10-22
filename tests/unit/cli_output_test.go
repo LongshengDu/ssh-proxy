@@ -14,25 +14,25 @@ import (
 // invalid invocations, recorded byte for byte. Set SSH_PROXY_UPDATE_EXPECTED=1
 // to rewrite testdata/cli/expected.txt after an intended change.
 var cliOutputCases = [][]string{
-	// Help, with -c before or after and with options that would otherwise fail.
-	{}, {"-h"}, {"--help"}, {"-c", "other.toml", "--help"}, {"--help", "--config", "other.toml"},
+	// Record each distinct help output once; equivalent invocations are checked below.
+	{},
 	{"start", "--help"}, {"restart", "-h"}, {"stop", "--help"}, {"status", "--help"},
 	{"trust", "--help"}, {"logs", "--help"}, {"test", "--help"}, {"check", "--help"},
-	{"start", "--wait", "0", "--help"},
 	// Record help combined with invalid options/arguments, using Cobra's parsing rules.
 	{"start", "--wait", "invalid", "--help"}, {"trust", "--log", "--help"}, {"logs", "--bogus", "-h"},
-	{"bogus", "--help"}, {"service", "bogus", "--help"}, {"_run", "--help"}, {"stop", "extra", "--help"},
-	{"service"}, {"service", "-h"}, {"service", "--help"},
+	{"bogus", "--help"}, {"_run", "--help"},
+	{"service"},
 	{"service", "install", "--help"}, {"service", "uninstall", "--help"}, {"service", "status", "--help"},
 	{"service", "enable", "--help"}, {"service", "disable", "-h"},
-	{"-v"}, {"--version"},
+	{"-v"},
 	// Invalid invocations rejected before any configuration, service or process access.
 	{"bogus"}, {"help"}, {"version"}, {"help", "start"},
-	{"-v", "extra"}, {"--config"}, {"--config="}, {"-c="},
-	{"check", "--config"}, {"--config=", "check"}, {"-c=", "check"}, {"check", "-c", ""}, {"service", "status", "--config="},
+	{"-v", "extra"}, {"--config"},
+	{"check", "-c", "other.toml"},
 	{"start", "--wait", "0"}, {"start", "--wait", "3601"}, {"restart", "--wait", "x"},
 	{"start", "extra"}, {"start", "--bogus"}, {"--foreground", "--wait", "0"},
 	{"stop", "extra"}, {"status", "--json"}, {"check", "extra"},
+	{"status", "--proxy_http", "--proxy_socks"},
 	{"logs", "--lines", "0"}, {"logs", "--lines", "10001"}, {"logs", "extra"},
 	{"test", "extra"}, {"test", "--url"},
 	{"trust", "first", "second"}, {"trust", "--log"},
@@ -43,6 +43,27 @@ var cliOutputCases = [][]string{
 	// Long options take two dashes, with a space or = before the value; one dash is rejected.
 	{"logs", "-lines", "0"}, {"start", "-foreground", "-wait", "0"}, {"start", "--wait=0"}, {"logs", "-f", "--lines=0"},
 	{"-config", "other.toml", "status"},
+}
+
+func TestCLIEquivalentOutput(t *testing.T) {
+	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
+	for _, group := range [][][]string{
+		{{}, {"-h"}, {"--help"}},
+		{{"service"}, {"service", "-h"}, {"service", "--help"}, {"service", "bogus", "--help"}},
+		{{"start", "--help"}, {"start", "--wait", "0", "--help"}},
+		{{"stop", "--help"}, {"stop", "extra", "--help"}},
+		{{"-v"}, {"--version"}},
+	} {
+		out, errText, code := runCLI(t, group[0])
+		for _, args := range group[1:] {
+			t.Run(strings.Join(args, " "), func(t *testing.T) {
+				gotOut, gotErr, gotCode := runCLI(t, args)
+				if gotOut != out || gotErr != errText || gotCode != code {
+					t.Fatalf("output differs from %v: exit=%d stdout=%q stderr=%q", group[0], gotCode, gotOut, gotErr)
+				}
+			})
+		}
+	}
 }
 
 // runCLI mirrors src/cmd/ssh_proxy_cli/main.go with captured standard streams.

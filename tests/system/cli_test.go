@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -28,12 +29,16 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if out := string(testutil.MustCLI(t, dir, "logs")); !strings.HasPrefix(out, "No log file yet:") {
 		t.Fatal("missing-log notice must be text", out)
 	}
+	configPath := filepath.Join(dir, "config.toml")
+	template := testutil.ReadFile(configPath)
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
 	runHelp := func(args ...string) string {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		// Help must exit successfully on stdout without loading config or doing work.
-		args = append(args, "--config", filepath.Join(dir, "missing.toml"))
 		cmd := exec.CommandContext(ctx, testutil.CLIPath(dir), args...)
 		platform.HideChild(cmd)
 		var stderr bytes.Buffer
@@ -56,13 +61,13 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if out, err := testutil.CallCLI(dir); err != nil || string(out) != help {
 		t.Fatalf("no arguments must print the overview: %v %s", err, out)
 	}
-	for _, option := range []string{"-c, --config PATH", "-h, --help", "-v, --version", "Commands:", "Flags:", "Service commands (current user):", `Use "ssh_proxy_cli service --help" for service details.`} {
+	for _, option := range []string{"-h, --help", "-v, --version", "Commands:", "Flags:", "Service commands (current user):", `Use "ssh_proxy_cli service --help" for service details.`} {
 		if !strings.Contains(help, option) {
 			t.Fatal("help missing", option)
 		}
 	}
-	if strings.Contains(help, "--user") || strings.Contains(help, "_run") || strings.Contains(help, "_service") {
-		t.Fatal("help must not advertise account selection or internal commands")
+	if strings.Contains(help, "--config") || strings.Contains(help, "--user") || strings.Contains(help, "_run") || strings.Contains(help, "_service") {
+		t.Fatal("help advertises a removed option or internal command")
 	}
 	position := -1
 	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check", "service install", "service uninstall", "service status", "service enable", "service disable"} {
@@ -74,6 +79,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	}
 	for _, usage := range []string{
 		"start [--foreground] [--wait=SECONDS]", "restart [--foreground] [--wait=SECONDS]",
+		"status [--proxy_http] [--proxy_socks]",
 		"trust [ENDPOINT] [--check] [--log=FILE]", "logs [--follow] [--lines=N]", "test [--url=URL]",
 	} {
 		if !strings.Contains(help, "\n  "+usage+"\n      ") {
@@ -107,29 +113,27 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{{"start"}, {"trust"}, {"test"}} {
+		testutil.WriteFile(t, configPath, template)
 		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "add your hosts") {
 			t.Fatalf("%v: %v %s", args, err, out)
 		}
 	}
 	var check config.ConfigCheck
-	custom := filepath.Join(dir, "alternate config.toml")
-	testutil.WriteFile(t, custom, testutil.ReadFile(filepath.Join(dir, "config.toml")))
-	for _, args := range [][]string{{"-c", custom, "check"}, {"check", "-c", custom}, {"--config=" + custom, "check"}, {"-c=" + custom, "check"}} {
-		out, err := testutil.CallCLI(dir, args...)
-		if err != nil || json.Unmarshal(out, &check) != nil || check.Config != custom {
-			t.Fatalf("short config alias: %v: %v %s", args, err, out)
+	for _, args := range [][]string{{"-c", "other.toml", "check"}, {"check", "--config", "other.toml"}} {
+		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "unknown") {
+			t.Fatalf("removed config option accepted: %v: %v %s", args, err, out)
 		}
 	}
-	for _, args := range [][]string{{"--config=", "check"}, {"-c=", "check"}, {"check", "-c", ""}} {
-		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "flag needs an argument: --config") {
-			t.Fatalf("empty config path must be rejected: %v: %v %s", args, err, out)
-		}
-	}
-	if err := json.Unmarshal(testutil.MustCLI(t, dir, "check"), &check); err != nil || check.Valid || check.EditFile != filepath.Join(dir, "ssh_config") {
+	if err := json.Unmarshal(testutil.MustCLI(t, dir, "check"), &check); err != nil || check.Valid || check.Config != configPath || check.EditFile != filepath.Join(dir, "ssh_config") {
 		t.Fatal(check, err)
 	}
 	if testutil.StatusCLI(t, dir).Phase != "stopped" {
 		t.Fatal("fresh proxy active")
+	}
+	for _, flag := range []string{"--proxy_http", "--proxy_socks"} {
+		if out, err := testutil.CallCLI(dir, "status", flag); err != nil || len(out) != 0 {
+			t.Fatalf("stopped status %s: %v %q", flag, err, out)
+		}
 	}
 	testutil.MustCLI(t, dir, "stop")
 	testutil.MustCLI(t, dir, "stop")
@@ -150,7 +154,10 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	// Status and stop work even while settings are broken.
 	testutil.MustCLI(t, dir, "status")
 	testutil.MustCLI(t, dir, "stop")
-	if out, err := testutil.CallCLI(dir, "start", "--config", filepath.Join(dir, "missing.toml")); err == nil {
+	if err := os.Remove(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := testutil.CallCLI(dir, "start"); err == nil {
 		t.Fatal("missing config accepted", string(out))
 	}
 }

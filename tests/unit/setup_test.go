@@ -1,14 +1,16 @@
 package tests
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/cli"
 	"ssh_proxy/src/config"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -16,7 +18,41 @@ func TestMain(m *testing.M) {
 	if testutil.RunProcess() {
 		return
 	}
+	if err := config.CheckOpenSSH("ssh"); err != nil {
+		println(err.Error())
+		os.Exit(1)
+	}
 	os.Exit(m.Run())
+}
+
+func TestOpenSSHVersionRequirement(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
+	for _, tc := range []struct {
+		version string
+		valid   bool
+	}{
+		{"OpenSSH_8.7p1, LibreSSL 3.3.6", true},
+		{"OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2", true},
+		{"OpenSSH_10.0p1", true},
+		{"OpenSSH_for_Windows_8.6p1", false},
+		{"OpenSSH_8.1p1", false},
+		{"not an OpenSSH client", false},
+	} {
+		t.Run(tc.version, func(t *testing.T) {
+			t.Setenv("SSH_PROXY_TEST_VERSION", tc.version)
+			err := config.CheckOpenSSH(exe)
+			if (err == nil) != tc.valid {
+				t.Fatalf("version check: %v", err)
+			}
+			if err != nil && (!strings.Contains(err.Error(), "OpenSSH 8.7 or newer is required") || !strings.Contains(err.Error(), exe)) {
+				t.Fatal("missing actionable requirement/path", err)
+			}
+		})
+	}
 }
 
 func TestConfigCheckIdentifiesEditableFile(t *testing.T) {
@@ -59,28 +95,45 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte(text), 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
+	data, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cli := filepath.Join(filepath.Dir(configPath), filepath.Base(helper))
+	if err := os.WriteFile(cli, data, 0755); err != nil {
+		t.Fatal(err)
+	}
+	call := func(args ...string) error {
+		cmd := exec.Command(cli, args...)
+		platform.HideChild(cmd)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, out)
+		}
+		return nil
+	}
+	t.Setenv("SSH_PROXY_TEST_PROCESS", "trust")
 	t.Setenv("SSH_PROXY_TEST_DIAGNOSTIC", "fixture SSH refused login")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "second")
 	// The tray's silent check uses the same ordered endpoints without prompting.
-	if err := cli.Run([]string{"trust", "--check", "--config", configPath}); err != nil {
+	if err := call("trust", "--check"); err != nil {
 		t.Fatal("silent check must succeed through the second endpoint", err)
 	}
-	if err := cli.Run([]string{"trust", "--check", "first", "--config", configPath}); err == nil {
+	if err := call("trust", "--check", "first"); err == nil {
 		t.Fatal("failed silent check returned success")
 	}
 	log := filepath.Join(t.TempDir(), "trust.txt")
-	if err := cli.Run([]string{"trust", "--log", log, "--config", configPath}); err != nil {
+	if err := call("trust", "--log", log); err != nil {
 		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(log)
+	data, _ = os.ReadFile(log)
 	if !strings.Contains(string(data), "SSH login for first") || !strings.Contains(string(data), "SSH login for second") {
 		t.Fatalf("ordered fallback not logged: %s", data)
 	}
-	if err := cli.Run([]string{"trust", "second", "--config", configPath}); err != nil {
+	if err := call("trust", "second"); err != nil {
 		t.Fatal("trusted host did not exit successfully", err)
 	}
-	if err := cli.Run([]string{"trust", "first", "--config", configPath}); err == nil {
+	if err := call("trust", "first"); err == nil {
 		t.Fatal("failed SSH login returned success")
 	}
 	// SSH runs in the SSH config directory; a caller-relative log path must
@@ -88,7 +141,7 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 	caller := t.TempDir()
 	t.Chdir(caller)
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", filepath.Join(caller, "handles.json"))
-	if err := cli.Run([]string{"trust", "--log", "setup/session.txt", "second", "--config", configPath}); err != nil {
+	if err := call("trust", "--log", "setup/session.txt", "second"); err != nil {
 		t.Fatal(err)
 	}
 	data, err = os.ReadFile(filepath.Join(caller, "setup/session.txt"))

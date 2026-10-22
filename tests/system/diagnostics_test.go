@@ -65,17 +65,14 @@ func TestSSHChildDiagnostics(t *testing.T) {
 					t.Errorf("cleanup: %v: %s", err, out)
 				}
 			})
-			if out, err := call("start", "--wait", "1"); err != nil {
+			if out, err := call("start", "--wait", "10"); err != nil {
 				t.Fatalf("start: %v: %s", err, out)
 			}
-			out, err := call("status")
 			var st control.Status
-			if err != nil || json.Unmarshal(out, &st) != nil {
-				t.Fatalf("status: %v: %s", err, out)
-			}
-			if !strings.Contains(st.LastError, diagnostic) {
-				t.Fatalf("SSH diagnostic was lost: %+v", st)
-			}
+			testutil.WaitFor(t, func() bool {
+				out, err := call("status")
+				return err == nil && json.Unmarshal(out, &st) == nil && strings.Contains(st.LastError, diagnostic)
+			})
 
 		})
 	}

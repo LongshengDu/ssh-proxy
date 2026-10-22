@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 )
 
 func grantServiceControl(string) error { return nil }
@@ -19,10 +18,5 @@ func ServiceAutoStart(name, action string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("launchctl: %w: %s", err, out)
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, `"`+name+`"`) && strings.Contains(line, "=> true") {
-			return false, nil
-		}
-	}
-	return true, nil
+	return LaunchdAutoStart(string(out), name), nil
 }

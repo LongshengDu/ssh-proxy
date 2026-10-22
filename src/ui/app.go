@@ -3,15 +3,13 @@
 package ui
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/logs"
+	"ssh_proxy/src/platform"
 )
 
 // Run creates the app's one continuous log before checking its configuration
@@ -23,29 +21,20 @@ func Run(args []string) (runErr error) {
 			showError(runErr, logPath)
 		}
 	}()
-	f := flag.NewFlagSet("ssh_proxy_app", flag.ContinueOnError)
-	configPath := f.String("config", "", "Path to config.toml")
-	backend := f.String("backend", "", "Path to ssh_proxy_cli executable")
-	smoke := f.Bool("smoke-test", false, "Create the tray icon and menu, then exit")
-	parseErr := f.Parse(args)
-	if errors.Is(parseErr, flag.ErrHelp) {
-		return nil
-	}
-	if *backend == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		*backend = defaultBackend(exe)
-	}
-	abs, err := filepath.Abs(*backend)
+	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	p, err := config.PathsForExecutable(*configPath, abs)
+	backend := defaultBackend(exe)
+	p, err := config.PathsForExecutable(backend)
 	if err != nil {
 		return err
 	}
+	unlock, err := platform.LockInstance(p.ID + "-tray")
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	logger, writer, err := logs.NewRunLog(p, "tray", false)
 	if err != nil {
 		return err
@@ -59,12 +48,12 @@ func Run(args []string) (runErr error) {
 		logger.Print("Tray exited; app shutdown complete")
 	}()
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, nil)))
-	logger.Printf("Tray started; pid=%d; backend=%s; config=%s", os.Getpid(), abs, p.Config)
-	if parseErr != nil {
-		return parseErr
+	logger.Printf("Tray started; pid=%d; backend=%s; config=%s", os.Getpid(), backend, p.Config)
+	if len(args) != 0 {
+		return fmt.Errorf("ssh_proxy_app takes no command-line arguments; use ssh_proxy_cli for terminal commands")
 	}
-	if _, err := os.Stat(abs); err != nil {
+	if _, err := os.Stat(backend); err != nil {
 		return fmt.Errorf("backend missing: %w", err)
 	}
-	return run(p, abs, *smoke, logger, writer)
+	return run(p, backend, logger, writer)
 }

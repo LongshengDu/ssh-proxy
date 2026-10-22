@@ -35,7 +35,7 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 	launch := func() (*exec.Cmd, string) {
 		t.Helper()
 		previous := testutil.TrayLog(dir)
-		app := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+		app := testutil.StartApp(t, dir)
 		testutil.WaitFor(t, func() bool { return testutil.TrayLog(dir) != previous })
 		return app, testutil.TrayLog(dir)
 	}

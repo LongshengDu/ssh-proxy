@@ -18,6 +18,10 @@
 # 多个别名可写在同一 Host 行，按从左到右排序；重复别名只尝试一次。
 # Host *、通配符及 ! 排除规则不作为连接目标。Match 不新增目标。
 # 将代理目标的明确 Host 别名写在本文件；Include 可用于原生 SSH 设置。
+# Multiple aliases on one Host line run left to right; duplicate aliases are tried once.
+# Host *, wildcards, exclusions (!) and Match do not add connection targets.
+# Declare explicit target aliases in this file; Include can supply native SSH settings.
+# 共用超时和保活设置在 config.toml 管理；主机信任使用 OpenSSH 默认文件。
 # Shared timeouts/keepalives are managed in config.toml. Host trust uses OpenSSH defaults.
 #
 # ===== 中文：如何配置免密码登录 =====

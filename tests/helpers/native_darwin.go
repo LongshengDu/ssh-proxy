@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func NativeLoginLaunch(t *testing.T, id, executable, config string) {
+func NativeLoginLaunch(t *testing.T, id, executable string) {
 	t.Helper()
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -22,11 +22,16 @@ func NativeLoginLaunch(t *testing.T, id, executable, config string) {
 	}
 	label := "com.sshproxy.login." + id
 	path := filepath.Join(home, "Library/LaunchAgents", label+".plist")
-	for field, want := range map[string]string{"Label": label, "ProgramArguments.0": executable, "ProgramArguments.1": "--config", "ProgramArguments.2": config, "RunAtLoad": "true"} {
+	for field, want := range map[string]string{"Label": label, "ProgramArguments.0": executable, "RunAtLoad": "true"} {
 		out, err := exec.Command("/usr/bin/plutil", "-extract", field, "raw", "-o", "-", path).CombinedOutput()
 		if err != nil || strings.TrimSpace(string(out)) != want {
 			t.Fatalf("LaunchAgent %s: %v %s", field, err, out)
 		}
+	}
+	// launchd does not inherit this test process's environment.
+	if out, err := exec.Command("/usr/bin/plutil", "-insert", "EnvironmentVariables", "-json",
+		`{"SSH_PROXY_RUNTIME":`+strconv.Quote(os.Getenv("SSH_PROXY_RUNTIME"))+`}`, path).CombinedOutput(); err != nil {
+		t.Fatalf("isolate login app runtime: %v %s", err, out)
 	}
 	domain := "gui/" + strconv.Itoa(os.Getuid())
 	t.Cleanup(func() { exec.Command("/bin/launchctl", "bootout", domain+"/"+label).Run() })
@@ -45,11 +50,15 @@ func apple(t *testing.T, script string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+var desktopProcesses string
+
 func NativeDesktop(t *testing.T) {
 	t.Helper()
 	if apple(t, `tell application "System Events" to get UI elements enabled`) != "true" {
 		t.Fatal("macOS Accessibility permission is required for native system tests; enable it for the launching terminal and rerun")
 	}
+	desktopProcesses = apple(t, `tell application "System Events" to get unix id of every application process`)
 }
 
 func NativeAcceptHost(t *testing.T, _ int, before map[string]bool, fingerprint string) {
@@ -164,17 +173,23 @@ func NativeOpened(t *testing.T, path string) {
 	name := filepath.Base(path)
 	WaitFor(t, func() bool {
 		out := apple(t, `tell application "System Events"
-set resultText to ""
+set targetName to `+strconv.Quote(name)+`
+set existingProcesses to {`+desktopProcesses+`}
 repeat with p in application processes
     try
         repeat with w in windows of p
-            set resultText to resultText & (name of w as text) & linefeed
+            if (name of w as text) contains targetName then
+                  if (unix id of p) is not in existingProcesses then
+                      click (first button of w whose subrole is "AXCloseButton")
+                  end if
+                  return "opened"
+            end if
         end repeat
     end try
 end repeat
-return resultText
+return ""
 end tell`)
-		return strings.Contains(out, name)
+		return out == "opened"
 	})
 }
 func NativeTerminals(t *testing.T) map[string]bool {

@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -26,8 +25,29 @@ import (
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/logs"
 	"ssh_proxy/src/platform"
+	"ssh_proxy/src/supervisor"
 	"ssh_proxy/tests/helpers"
 )
+
+func TestStaleStateDoesNotAuthorizeKillingLiveProcess(t *testing.T) {
+	dir := t.TempDir()
+	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json"), Logs: dir}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not a proxy", http.StatusUnauthorized) }))
+	defer server.Close()
+	state, err := control.NewState(p, strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := control.WriteState(p, state); err != nil {
+		t.Fatal(err)
+	}
+	if st := control.QueryStatus(p); st.Phase != control.PhaseUnresponsive || st.PID != os.Getpid() {
+		t.Fatalf("wrong stale status: %+v", st)
+	}
+	if err := supervisor.StopBackground(p); err == nil || !strings.Contains(err.Error(), "no process was killed") {
+		t.Fatal("stale PID accepted", err)
+	}
+}
 
 func TestHTTPForwardingBodyHeadersAndRemoteDNS(t *testing.T) {
 	body := strings.Repeat("request-body-", 5000)
@@ -258,7 +278,7 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 	}
 	unlock()
 	dir := filepath.Join(t.TempDir(), "portable [logs]")
-	p, err := config.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
+	p, err := config.PathsForExecutable(filepath.Join(dir, "ssh_proxy_cli"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +313,7 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	next.Close()
-	found, err := config.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
+	found, err := config.PathsForExecutable(filepath.Join(dir, "ssh_proxy_cli"))
 	if err != nil || found.Log != next.Name() || found.Log == path {
 		t.Fatal("new process run needs a new discoverable file", found, err)
 	}
@@ -329,23 +349,15 @@ func TestSSHJobCleanup(t *testing.T) {
 	}
 }
 
-func TestConfigFlagParsing(t *testing.T) {
+func TestConfigFlagsRejected(t *testing.T) {
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "space path", "config.toml")
 	for _, args := range [][]string{
 		{"check", "-c", path}, {"-c", path, "check"}, {"check", "--config", path}, {"--config=" + path, "check"},
 		{"-c=" + path, "check"}, {"check", "-c=" + path},
 	} {
-		stdout, stderr, code := runCLI(t, args)
-		var result config.ConfigCheck
-		if code != 0 || json.Unmarshal([]byte(stdout), &result) != nil || result.Config != path {
-			t.Fatalf("%v: config not selected: %d %s %s", args, code, stdout, stderr)
-		}
-	}
-	// A missing or explicitly empty path is an error, never the default configuration.
-	for _, args := range [][]string{{"check", "--config"}, {"check", "--config="}, {"-c=", "check"}, {"check", "-c", ""}} {
-		if _, stderr, code := runCLI(t, args); code == 0 || !strings.Contains(stderr, "--config") {
-			t.Fatalf("%v: missing config path accepted: %s", args, stderr)
+		if _, stderr, code := runCLI(t, args); code == 0 || !strings.Contains(stderr, "unknown") {
+			t.Fatalf("removed config flag accepted: %v: %s", args, stderr)
 		}
 	}
 }

@@ -227,9 +227,13 @@ func Run(p config.Paths, foreground bool) error {
 
 // RunContext also serves OS services, which mark their status as service-owned.
 func RunContext(parent context.Context, p config.Paths, foreground, service bool) (runErr error) {
+	unlock, err := platform.LockInstance(p.ID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	var logger *log.Logger
 	var writer *logs.RunLog
-	var err error
 	if inherited := os.Getenv("SSH_PROXY_RUN_LOG"); inherited != "" {
 		logger, writer, err = logs.NewLog(inherited, foreground)
 	} else {
@@ -251,11 +255,6 @@ func RunContext(parent context.Context, p config.Paths, foreground, service bool
 		return err
 	}
 	writer.SetLimit(c.Logging.MaxSizeMB)
-	unlock, err := platform.LockInstance(p.ID)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	if err = os.MkdirAll(p.Runtime, 0700); err != nil {
 		return err
 	}
@@ -275,7 +274,8 @@ func RunContext(parent context.Context, p config.Paths, foreground, service bool
 		return err
 	}
 	defer controlListener.Close()
-	httpBridge, err := bridge.NewBridge(c.SocksAddr(), time.Duration(c.Health.Timeout)*time.Second)
+	// Connection setup has its own budget; probes supply their shorter context deadline.
+	httpBridge, err := bridge.NewBridge(c.SocksAddr(), 30*time.Second)
 	if err != nil {
 		return err
 	}
@@ -335,7 +335,7 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 		return err
 	}
 	cmd, err := platform.StartDetached(func() *exec.Cmd {
-		cmd := exec.Command(exe, "_run", "--config", p.Config)
+		cmd := exec.Command(exe, "_run")
 		cmd.Env = append(os.Environ(), "SSH_PROXY_RUN_LOG="+p.Log)
 		// Bootstrap output goes straight to the run log's file; the supervisor outlives this command.
 		cmd.Stdout, cmd.Stderr = file.File, file.File

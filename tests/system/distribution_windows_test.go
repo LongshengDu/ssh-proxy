@@ -47,7 +47,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 	}
 	exe := filepath.Join(dir, "ssh_proxy_cli.exe")
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	p, err := config.PathsForExecutable(filepath.Join(dir, "config.toml"), exe)
+	p, err := config.PathsForExecutable(exe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,6 @@ func TestTrayWindowsMenu(t *testing.T) {
 	// Read the actual native menu (not just the application model).
 	menuState := func(wantStartup, running bool) {
 		t.Helper()
-		items := testutil.NativeMenu(t, tray.Process.Pid)
 		phase, toggle, ssh, socks, http := "○ Stopped", "Start proxy", "SSH: —", "SOCKS5: —", "HTTP: —"
 		if running {
 			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
@@ -105,6 +104,10 @@ func TestTrayWindowsMenu(t *testing.T) {
 			exit = "Keep proxy running and exit"
 		}
 		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Stop proxy and exit", exit}
+		testutil.ExpectMenu(t, tray.Process.Pid, toggle, false, false)
+		testutil.ExpectMenu(t, tray.Process.Pid, "Launch App at Login", false, wantStartup)
+		testutil.ExpectMenu(t, tray.Process.Pid, http, true, false)
+		items := testutil.NativeMenu(t, tray.Process.Pid)
 		if len(items) != len(want) {
 			t.Fatalf("menu has %d items: %+v", len(items), items)
 		}
@@ -141,7 +144,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 	}
 	menuState(false, false)
 	t.Cleanup(func() {
-		if err := ui.SetStartup(p.ID, "", "", false); err != nil {
+		if err := ui.SetStartup(p.ID, "", false); err != nil {
 			t.Errorf("startup cleanup: %v", err)
 		}
 	})
@@ -166,11 +169,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 	if want := windows.ComposeCommandLine([]string{filepath.Join(dir, "ssh_proxy_app.exe")}); err != nil || command != want {
 		t.Fatalf("invalid tray login command: %v: %s; want %s", err, command, want)
 	}
-	time.Sleep(2300 * time.Millisecond)
 	menuState(true, false)
 	testutil.NativeClick(t, tray.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && !enabled })
-	time.Sleep(2300 * time.Millisecond)
 	menuState(false, false)
 	// Publish an authenticated backend status fixture. The real CLI reads it,
 	// and the real app must reflect it without owning a separate proxy state.
@@ -183,12 +184,10 @@ func TestTrayWindowsMenu(t *testing.T) {
 	if err := os.WriteFile(p.State, state, 0600); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2300 * time.Millisecond)
 	menuState(false, true)
 	if err := os.Remove(p.State); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(2300 * time.Millisecond)
 	menuState(false, false) // No stale PID, destination or addresses after stop.
 	win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
 	// Native-library shutdown must release the application process.

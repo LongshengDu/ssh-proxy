@@ -187,7 +187,7 @@ def app_plist(path, name, executable, identifier):
     with path.open("wb") as stream:
         plistlib.dump(dict(CFBundleName=name, CFBundleDisplayName=name, CFBundleExecutable=executable,
                           CFBundleIdentifier=identifier, CFBundleIconFile="icon.icns", CFBundlePackageType="APPL", CFBundleVersion=APP_VERSION,
-                          CFBundleShortVersionString=APP_VERSION, LSUIElement=True, LSMinimumSystemVersion="12.0"), stream)
+                          CFBundleShortVersionString=APP_VERSION, LSUIElement=True, LSMinimumSystemVersion="13.0"), stream)
 
 
 def compile_apps(go, env, target, output):
@@ -242,7 +242,7 @@ def notices(go, env, modules):
 def package(target, staging, target_dir):
     """ZIP only the public payload, with one os-arch directory at its root."""
     for name in PUBLIC:
-        if (staging / name).read_bytes() != (DEFAULTS / name).read_bytes():
+        if (staging / name).read_bytes() != (DEFAULTS / name).read_bytes().replace(b"\r\n", b"\n"):
             raise RuntimeError(f"Refusing to package non-default {name}")
     archive = target_dir / f"{target}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
@@ -272,15 +272,17 @@ def build_target(go, env, target, target_dir, release=False):
             source = output / name if existing else DEFAULTS / name
             (staging / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, staging / name)
+            if not existing:
+                (staging / name).write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
             if name.endswith(".sh") and not existing:
                 (staging / name).chmod(0o755)
         (staging / "logs").mkdir()
-        (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8")
+        (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8", newline="\n")
         build_info = {path: run([go, "version", "-m", path], env, capture=True) for path in binaries}
-        (staging / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8")
+        (staging / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8", newline="\n")
         metadata = "\n".join(text.replace(str(path), path.name) for path, text in build_info.items())
-        (staging / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8")
-        (staging / "SHA256SUMS").write_text("".join(f"{digest(staging / name)}  {name}\n" for name in payload_names(target)), encoding="utf-8")
+        (staging / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8", newline="\n")
+        (staging / "SHA256SUMS").write_text("".join(f"{digest(staging / name)}  {name}\n" for name in payload_names(target)), encoding="utf-8", newline="\n")
         # Defaults are installed only when absent; binaries/metadata always refresh.
         # Releases replace all packaged files. Unrelated files/logs never enter the ZIP.
         for name in (*payload_names(target), "SHA256SUMS"):

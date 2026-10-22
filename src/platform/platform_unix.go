@@ -34,6 +34,27 @@ func LockInstance(id string) (func(), error) {
 }
 func HideChild(cmd *exec.Cmd) {}
 
+// ProtectLog uses an advisory shared lock; logging and ssh -E can still append.
+func ProtectLog(path string) (func(), error) {
+	lock := flock.New(path, flock.SetFlag(os.O_RDONLY))
+	if err := lock.RLock(); err != nil {
+		lock.Close()
+		return nil, err
+	}
+	return func() { lock.Close() }, nil
+}
+
+// RemoveInactiveLog leaves files held by any running log writer alone.
+func RemoveInactiveLog(path string) (bool, error) {
+	lock := flock.New(path, flock.SetFlag(os.O_RDONLY))
+	defer lock.Close()
+	ok, err := lock.TryLock()
+	if err != nil || !ok {
+		return false, err
+	}
+	return true, os.Remove(path)
+}
+
 // StartDetached starts a background process in its own session.
 func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
 	cmd := newCmd()

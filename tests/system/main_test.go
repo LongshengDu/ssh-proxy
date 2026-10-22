@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"ssh_proxy/src/config"
 	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
@@ -14,6 +15,10 @@ import (
 func TestMain(m *testing.M) {
 	if testutil.RunProcess() {
 		return
+	}
+	if err := config.CheckOpenSSH("ssh"); err != nil {
+		println(err.Error())
+		os.Exit(1)
 	}
 	if os.Getenv("SSH_PROXY_SYS_DIR") == "" {
 		println("Run python scripts/run_sys_tests.py against a native development build.")

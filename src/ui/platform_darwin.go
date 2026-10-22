@@ -15,7 +15,7 @@ func defaultBackend(exe string) string {
 }
 func openPath(path string) error { return exec.Command("/usr/bin/open", path).Run() }
 
-func RunTrustTerminal(ctx context.Context, backend, config, logPath string) error {
+func RunTrustTerminal(ctx context.Context, backend, logPath string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func RunTrustTerminal(ctx context.Context, backend, config, logPath string) erro
 	}
 	defer os.RemoveAll(dir)
 	result := filepath.Join(dir, "exit-code")
-	command := quote(backend) + " trust --log " + quote(logPath) + " --config " + quote(config)
+	command := quote(backend) + " trust --log " + quote(logPath)
 	// Explicit sh also works when the user's Terminal profile uses another shell.
 	command = "exec /bin/sh -c " + quote(command+"; code=$?; printf '%s' \"$code\" > "+quote(result)+"; exit \"$code\"")
 	out, err := exec.CommandContext(ctx, "/usr/bin/osascript", "-e", `on run argv

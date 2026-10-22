@@ -3,10 +3,31 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	kardianos "github.com/kardianos/service"
 	"ssh_proxy/src/service"
 )
+
+func TestLinuxServiceUnit(t *testing.T) {
+	unit, err := service.SystemdScript(&kardianos.Config{
+		Executable: "/home/test/100% $proxy/ssh_proxy_cli", Arguments: []string{"_service"},
+		WorkingDirectory: "/home/test/proxy folder", EnvVars: map[string]string{"SSH_PROXY_RUNTIME": "/home/test/runtime folder"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`ExecStart="/home/test/100%% $$proxy/ssh_proxy_cli" "_service"`,
+		`Environment="SSH_PROXY_RUNTIME=/home/test/runtime folder"`, "WantedBy=default.target"} {
+		if !strings.Contains(unit, want) {
+			t.Fatalf("missing %s:\n%s", want, unit)
+		}
+	}
+	if strings.Contains(unit, "WorkingDirectory=") {
+		t.Fatal("unit must use resolved paths without a quoted WorkingDirectory")
+	}
+}
 
 func TestLinuxStartupReportsUserSystemdState(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

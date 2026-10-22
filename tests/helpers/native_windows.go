@@ -19,14 +19,14 @@ import (
 	"ssh_proxy/src/platform"
 )
 
-func NativeLoginLaunch(t *testing.T, id, executable, config string) {
+func NativeLoginLaunch(t *testing.T, id, executable string) {
 	t.Helper()
 	settings, err := registry.OpenKey(registry.CURRENT_USER, `Software\SSHProxy\`+id, registry.QUERY_VALUE)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer settings.Close()
-	for name, want := range map[string]string{"Executable": executable, "Config": config} {
+	for name, want := range map[string]string{"Executable": executable} {
 		got, _, err := settings.GetStringValue(name)
 		if err != nil || got != want {
 			t.Fatal("login setting", name, got, err)
@@ -60,7 +60,12 @@ func NativeLoginLaunch(t *testing.T, id, executable, config string) {
 	t.Cleanup(func() { release(); cmd.Process.Kill(); cmd.Wait() })
 }
 
-func NativeDesktop(t *testing.T) { t.Helper() }
+var desktopWindows map[win.HWND]string
+
+func NativeDesktop(t *testing.T) {
+	t.Helper()
+	desktopWindows = windowTitles()
+}
 
 // Inspect only console children of this test app, then write console key events
 // only after verifying our loopback server's fingerprint. No global keystrokes.
@@ -223,14 +228,22 @@ func NativeOpened(t *testing.T, path string) {
 	name := filepath.Base(path)
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		for _, title := range windowTitles() {
+		for hwnd, title := range windowTitles() {
 			if strings.Contains(title, name) {
+				// Default editors can reuse the user's workspace. Never close it.
+				if _, existed := desktopWindows[hwnd]; existed {
+					return
+				}
+				// This document belongs to the test. Close it so a later Open
+				// assertion cannot pass just because this window was left behind.
+				win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
+				WaitFor(t, func() bool { return !strings.Contains(windowTitles()[hwnd], name) })
 				return
 			}
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("default opener did not display %s; associate .txt files with a desktop editor exposing document names in its window title. Visible windows: %v", path, windowTitles())
+	t.Fatalf("default opener did not display %s; associate %s files with a desktop editor exposing document names in its window title. Visible windows: %v", path, filepath.Ext(path), windowTitles())
 }
 func NativeTerminals(t *testing.T) map[string]bool {
 	result := map[string]bool{}
