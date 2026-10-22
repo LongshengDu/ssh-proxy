@@ -1,4 +1,5 @@
-package proxy
+// Package supervisor owns the native SSH child, readiness, health checks, failover and the background run.
+package supervisor
 
 import (
 	"bufio"
@@ -12,12 +13,15 @@ import (
 	"os/exec"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
-	"syscall"
+	"ssh_proxy/src/bridge"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/logs"
+	"ssh_proxy/src/platform"
 )
-
-type serviceModeKey struct{}
 
 type sshChild struct {
 	cmd  *exec.Cmd
@@ -26,12 +30,12 @@ type sshChild struct {
 	err  error
 }
 
-func startSSH(c *Config, alias string, logger *log.Logger) (*sshChild, error) {
-	cmd, parentPipe, err := managedSSHCommand(c, alias)
+func startSSH(c *config.Config, alias string, logger *log.Logger) (*sshChild, error) {
+	cmd, parentPipe, err := platform.ManagedCommand(config.SSHCommand(c, alias, false))
 	if err != nil {
 		return nil, err
 	}
-	HideChild(cmd)
+	platform.HideChild(cmd)
 	cmd.WaitDelay = 3 * time.Second
 	reader, writer := io.Pipe()
 	cmd.Stdout = writer
@@ -60,7 +64,7 @@ func startSSH(c *Config, alias string, logger *log.Logger) (*sshChild, error) {
 		}
 		return nil, err
 	}
-	job, err := ContainChild(cmd)
+	job, err := platform.ContainChild(cmd)
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()
@@ -90,7 +94,7 @@ func startSSH(c *Config, alias string, logger *log.Logger) (*sshChild, error) {
 	return child, nil
 }
 func (c *sshChild) close() {
-	CloseJob(c.job)
+	platform.CloseJob(c.job)
 	c.job = nil
 	select {
 	case <-c.done:
@@ -101,18 +105,18 @@ func (c *sshChild) close() {
 }
 
 type Supervisor struct {
-	cfg    *Config
-	paths  Paths
+	cfg    *config.Config
+	paths  config.Paths
 	logger *log.Logger
-	bridge *Bridge
+	bridge *bridge.Bridge
 	mu     sync.Mutex
-	status Status
+	status control.Status
 }
 
-func (s *Supervisor) snapshot() Status        { s.mu.Lock(); defer s.mu.Unlock(); return s.status }
-func (s *Supervisor) update(fn func(*Status)) { s.mu.Lock(); fn(&s.status); s.mu.Unlock() }
+func (s *Supervisor) snapshot() control.Status        { s.mu.Lock(); defer s.mu.Unlock(); return s.status }
+func (s *Supervisor) update(fn func(*control.Status)) { s.mu.Lock(); fn(&s.status); s.mu.Unlock() }
 func (s *Supervisor) probe(ctx context.Context) error {
-	return ProbeTargets(ctx, s.bridge, s.cfg.Health.Targets, time.Duration(s.cfg.Health.Timeout)*time.Second)
+	return bridge.ProbeTargets(ctx, s.bridge, s.cfg.Health.Targets, time.Duration(s.cfg.Health.Timeout)*time.Second)
 }
 func (s *Supervisor) awaitReady(ctx context.Context, child *sshChild) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.SSH.ReadyTimeout)*time.Second)
@@ -157,13 +161,13 @@ func (s *Supervisor) monitor(ctx context.Context, child *sshChild) error {
 			if err := s.probe(ctx); err != nil {
 				failures++
 				s.logger.Printf("Health check failed (%d/%d): %v", failures, s.cfg.Health.Failures, err)
-				s.update(func(st *Status) { st.Phase = PhaseDegraded; st.LastError = err.Error() })
+				s.update(func(st *control.Status) { st.Phase = control.PhaseDegraded; st.LastError = err.Error() })
 				if s.cfg.Health.FailoverOnProbeFailure && failures >= s.cfg.Health.Failures {
 					return fmt.Errorf("SSH forwarding health check failed: %w", err)
 				}
 			} else {
 				failures = 0
-				s.update(func(st *Status) { st.Phase = PhaseRunning; st.LastError = "" })
+				s.update(func(st *control.Status) { st.Phase = control.PhaseRunning; st.LastError = "" })
 			}
 		}
 	}
@@ -174,21 +178,21 @@ func (s *Supervisor) supervise(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			s.update(func(st *Status) {
-				st.Phase = PhaseConnecting
+			s.update(func(st *control.Status) {
+				st.Phase = control.PhaseConnecting
 				st.Endpoint = endpoint
-				st.Destination = s.cfg.resolved[endpoint].destination
+				st.Destination = s.cfg.Destination(endpoint)
 				st.SSHPID = 0
 			})
-			s.logger.Printf("Connecting to %s (%s), SSH config: %s", endpoint, s.cfg.resolved[endpoint].destination, s.cfg.SSH.ConfigFile)
+			s.logger.Printf("Connecting to %s (%s), SSH config: %s", endpoint, s.cfg.Destination(endpoint), s.cfg.SSH.ConfigFile)
 			child, err := startSSH(s.cfg, endpoint, s.logger)
 			if err == nil {
-				s.update(func(st *Status) { st.SSHPID = child.cmd.Process.Pid })
+				s.update(func(st *control.Status) { st.SSHPID = child.cmd.Process.Pid })
 				err = s.awaitReady(ctx, child)
 				if err == nil {
 					s.bridge.SetReady(true)
-					s.update(func(st *Status) { st.Phase = PhaseRunning; st.LastError = "" })
-					s.logger.Printf("Ready via %s: SOCKS5 %s; HTTP %s", endpoint, s.cfg.socksAddr(), s.cfg.httpAddr())
+					s.update(func(st *control.Status) { st.Phase = control.PhaseRunning; st.LastError = "" })
+					s.logger.Printf("Ready via %s: SOCKS5 %s; HTTP %s", endpoint, s.cfg.SocksAddr(), s.cfg.HTTPAddr())
 					err = s.monitor(ctx, child)
 				}
 				s.bridge.SetReady(false)
@@ -197,7 +201,11 @@ func (s *Supervisor) supervise(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			s.update(func(st *Status) { st.LastError = err.Error(); st.SSHPID = 0; st.Phase = PhaseReconnecting })
+			s.update(func(st *control.Status) {
+				st.LastError = err.Error()
+				st.SSHPID = 0
+				st.Phase = control.PhaseReconnecting
+			})
 			s.logger.Printf("Endpoint %s failed: %v; trying next endpoint", endpoint, err)
 		}
 		if ctx.Err() != nil {
@@ -212,18 +220,20 @@ func (s *Supervisor) supervise(ctx context.Context) {
 	}
 }
 
-func runSupervisor(p Paths, foreground bool) error {
-	return runSupervisorContext(context.Background(), p, foreground)
+// Run runs the supervisor in this process until it is stopped.
+func Run(p config.Paths, foreground bool) error {
+	return RunContext(context.Background(), p, foreground, false)
 }
 
-func runSupervisorContext(parent context.Context, p Paths, foreground bool) (runErr error) {
+// RunContext also serves OS services, which mark their status as service-owned.
+func RunContext(parent context.Context, p config.Paths, foreground, service bool) (runErr error) {
 	var logger *log.Logger
-	var writer *RunLog
+	var writer *logs.RunLog
 	var err error
 	if inherited := os.Getenv("SSH_PROXY_RUN_LOG"); inherited != "" {
-		logger, writer, err = NewLog(inherited, foreground)
+		logger, writer, err = logs.NewLog(inherited, foreground)
 	} else {
-		logger, writer, err = NewRunLog(p, "logs", foreground)
+		logger, writer, err = logs.NewRunLog(p, "logs", foreground)
 	}
 	if err != nil {
 		return err
@@ -235,13 +245,13 @@ func runSupervisorContext(parent context.Context, p Paths, foreground bool) (run
 			logger.Printf("Error: %v", runErr)
 		}
 	}()
-	logger.Printf("Starting ssh_proxy_cli %s; pid=%d; config=%s", version, os.Getpid(), p.Config)
-	c, err := LoadConfig(p.Config)
+	logger.Printf("Starting ssh_proxy_cli %s; pid=%d; config=%s", config.Version, os.Getpid(), p.Config)
+	c, err := config.LoadConfig(p.Config)
 	if err != nil {
 		return err
 	}
 	writer.SetLimit(c.Logging.MaxSizeMB)
-	unlock, err := LockInstance(p.ID)
+	unlock, err := platform.LockInstance(p.ID)
 	if err != nil {
 		return err
 	}
@@ -250,12 +260,12 @@ func runSupervisorContext(parent context.Context, p Paths, foreground bool) (run
 		return err
 	}
 	// Verify SOCKS is free before starting SSH. The HTTP listener remains reserved.
-	check, err := net.Listen("tcp", c.socksAddr())
+	check, err := net.Listen("tcp", c.SocksAddr())
 	if err != nil {
 		return fmt.Errorf("SOCKS port is unavailable: %w", err)
 	}
 	check.Close()
-	httpListener, err := net.Listen("tcp", c.httpAddr())
+	httpListener, err := net.Listen("tcp", c.HTTPAddr())
 	if err != nil {
 		return fmt.Errorf("HTTP port is unavailable: %w", err)
 	}
@@ -265,22 +275,22 @@ func runSupervisorContext(parent context.Context, p Paths, foreground bool) (run
 		return err
 	}
 	defer controlListener.Close()
-	bridge, err := NewBridge(c.socksAddr(), time.Duration(c.Health.Timeout)*time.Second)
+	httpBridge, err := bridge.NewBridge(c.SocksAddr(), time.Duration(c.Health.Timeout)*time.Second)
 	if err != nil {
 		return err
 	}
-	defer bridge.SetReady(false)
-	s := &Supervisor{cfg: c, paths: p, logger: logger, bridge: bridge, status: Status{Service: parent.Value(serviceModeKey{}) == true, Phase: PhaseStarting, PID: os.Getpid(), Config: p.Config, Started: time.Now(), SOCKS: c.socksAddr(), HTTP: c.httpAddr(), Log: p.Log}}
+	defer httpBridge.SetReady(false)
+	s := &Supervisor{cfg: c, paths: p, logger: logger, bridge: httpBridge, status: control.Status{Service: service, Phase: control.PhaseStarting, PID: os.Getpid(), Config: p.Config, Started: time.Now(), SOCKS: c.SocksAddr(), HTTP: c.HTTPAddr(), Log: p.Log}}
 	ctx, stopSignal := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stopSignal()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	state, err := newState(p, controlListener.Addr().String())
+	state, err := control.NewState(p, controlListener.Addr().String())
 	if err != nil {
 		return err
 	}
-	controlServer := &http.Server{Handler: ControlHandler(state.Token, s.snapshot, cancel), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
-	proxyServer := &http.Server{Handler: bridge, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 90 * time.Second, ErrorLog: logger, BaseContext: func(net.Listener) context.Context { return ctx }}
+	controlServer := &http.Server{Handler: control.ControlHandler(state.Token, s.snapshot, cancel), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+	proxyServer := &http.Server{Handler: httpBridge, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 90 * time.Second, ErrorLog: logger, BaseContext: func(net.Listener) context.Context { return ctx }}
 	defer controlServer.Close()
 	defer proxyServer.Close()
 	go func() {
@@ -295,25 +305,26 @@ func runSupervisorContext(parent context.Context, p Paths, foreground bool) (run
 			cancel()
 		}
 	}()
-	if err = writeState(p, state); err != nil {
+	if err = control.WriteState(p, state); err != nil {
 		return err
 	}
 	defer os.Remove(p.State)
 	s.supervise(ctx)
-	s.update(func(st *Status) { st.Phase = PhaseStopping; st.SSHPID = 0 })
-	bridge.SetReady(false)
+	s.update(func(st *control.Status) { st.Phase = control.PhaseStopping; st.SSHPID = 0 })
+	httpBridge.SetReady(false)
 	logger.Print("Stopped; SSH child and proxy listeners closed")
 	return nil
 }
 
-func startBackground(p Paths, wait time.Duration) error {
-	if _, err := controlCall(p, "GET", "/status"); err == nil {
+// StartBackground starts a detached _run supervisor and waits for readiness.
+func StartBackground(p config.Paths, wait time.Duration) error {
+	if _, err := control.Call(p, "GET", "/status"); err == nil {
 		return nil
 	}
 	if err := os.MkdirAll(p.Runtime, 0700); err != nil {
 		return err
 	}
-	_, file, err := NewRunLog(p, "logs", false)
+	_, file, err := logs.NewRunLog(p, "logs", false)
 	if err != nil {
 		return err
 	}
@@ -323,7 +334,7 @@ func startBackground(p Paths, wait time.Duration) error {
 	if err != nil {
 		return err
 	}
-	cmd, err := StartDetached(func() *exec.Cmd {
+	cmd, err := platform.StartDetached(func() *exec.Cmd {
 		cmd := exec.Command(exe, "_run", "--config", p.Config)
 		cmd.Env = append(os.Environ(), "SSH_PROXY_RUN_LOG="+p.Log)
 		// Bootstrap output goes straight to the run log's file; the supervisor outlives this command.
@@ -338,11 +349,11 @@ func startBackground(p Paths, wait time.Duration) error {
 	exited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(exited) }()
 	deadline := time.Now().Add(wait)
-	var last *Status
+	var last *control.Status
 	for time.Now().Before(deadline) {
-		if st, err := controlCall(p, "GET", "/status"); err == nil {
+		if st, err := control.Call(p, "GET", "/status"); err == nil {
 			last = &st
-			if st.Phase == PhaseRunning {
+			if st.Phase == control.PhaseRunning {
 				return nil
 			}
 		}
@@ -364,20 +375,22 @@ func stringsTrim(data []byte) string {
 	}
 	return string(data)
 }
-func stopBackground(p Paths) error {
-	if _, err := controlCall(p, "GET", "/status"); err != nil {
+
+// StopBackground asks the running supervisor to stop and waits for its lock.
+func StopBackground(p config.Paths) error {
+	if _, err := control.Call(p, "GET", "/status"); err != nil {
 		// A stale state file alone is not authority to kill an arbitrary PID.
-		if state, readErr := readState(p); readErr == nil && ProcessAlive(state.PID) {
+		if state, readErr := control.ReadState(p); readErr == nil && platform.ProcessAlive(state.PID) {
 			return fmt.Errorf("control API unavailable for pid %d; no process was killed; inspect %s", state.PID, p.Log)
 		}
 		return nil
 	}
-	if _, err := controlCall(p, "POST", "/stop"); err != nil {
+	if _, err := control.Call(p, "POST", "/stop"); err != nil {
 		return err
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if unlock, err := LockInstance(p.ID); err == nil {
+		if unlock, err := platform.LockInstance(p.ID); err == nil {
 			unlock()
 			return nil
 		}

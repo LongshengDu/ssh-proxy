@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/cli"
+	"ssh_proxy/src/platform"
 )
 
 func TestUnixGuardianHelper(t *testing.T) {
 	if os.Getenv("SSH_PROXY_GUARDIAN_TEST") != "1" {
 		t.Skip("subprocess only")
 	}
-	if err := proxy.Run([]string{"_ssh", os.Args[0], "-test.run=^TestUnixSSHHelper$"}); err == nil {
+	if err := cli.Run([]string{"_ssh", os.Args[0], "-test.run=^TestUnixSSHHelper$"}); err == nil {
 		t.Fatal("child should be cancelled after parent lease closes")
 	}
 }
@@ -73,7 +74,7 @@ func TestUnixGuardianClosesSSHOnParentExit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if proxy.ProcessAlive(pid) {
+		if platform.ProcessAlive(pid) {
 			t.Fatal("SSH survived the parent lease closing")
 		}
 	case <-time.After(10 * time.Second):

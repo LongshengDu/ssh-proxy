@@ -5,17 +5,19 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
 	"ssh_proxy/src/ui"
 )
 
 func TestConfigOpensOnce(t *testing.T) {
 	seen := ui.SetupPrompts{}
-	invalid := proxy.ConfigCheck{EditFile: "hosts", Error: "no hosts"}
-	if seen.Config(invalid) != "hosts" || seen.Config(invalid) != "" || seen.Config(proxy.ConfigCheck{Valid: true, EditFile: "other"}) != "" {
+	invalid := config.ConfigCheck{EditFile: "hosts", Error: "no hosts"}
+	if seen.Config(invalid) != "hosts" || seen.Config(invalid) != "" || seen.Config(config.ConfigCheck{Valid: true, EditFile: "other"}) != "" {
 		t.Fatal("configuration opener must run once for each invalid file")
 	}
 }
@@ -39,14 +41,15 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 		if err != nil || len(scripts) != want || scripts[0].Name != "Codex" {
 			t.Fatal(goos, scripts, err)
 		}
-		for _, phase := range []proxy.Phase{"stopped", "connecting", "degraded", "running"} {
+		for _, phase := range []control.Phase{"stopped", "connecting", "degraded", "running"} {
 			for _, busy := range []bool{false, true} {
-				items := ui.Menu(proxy.Status{Phase: phase}, false, true, busy, scripts...)
-				if !items[6].Separator || items[7].ID != ui.ScriptBase || items[7].Label != "Run: Codex" {
+				items := ui.Menu(control.Status{Phase: phase}, false, true, busy, scripts...)
+				index := slices.IndexFunc(items, func(item ui.Item) bool { return item.ID == ui.ScriptBase })
+				if index < 1 || !items[index-1].Separator || items[index].Label != "Run: Codex" {
 					t.Fatal(items)
 				}
-				if items[7].Disabled != (busy || phase != "running") {
-					t.Fatal(phase, busy, items[7])
+				if items[index].Disabled != (busy || phase != "running") {
+					t.Fatal(phase, busy, items[index])
 				}
 			}
 		}
@@ -54,9 +57,9 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 }
 
 func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
-	for _, phase := range []proxy.Phase{"stopped", "connecting", "running", "degraded", "unresponsive"} {
+	for _, phase := range []control.Phase{"stopped", "connecting", "running", "degraded", "unresponsive"} {
 		for _, startup := range []bool{false, true} {
-			st := proxy.Status{Phase: phase, Destination: "tester@example.com:2222", Endpoint: "primary", SOCKS: "127.0.0.1:1081", HTTP: "127.0.0.1:8181"}
+			st := control.Status{Phase: phase, Destination: "tester@example.com:2222", Endpoint: "primary", SOCKS: "127.0.0.1:1081", HTTP: "127.0.0.1:8181"}
 			control := "Start proxy"
 			if phase != "stopped" {
 				st.PID = 123
@@ -97,7 +100,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 			}
 		}
 	}
-	for _, item := range ui.Menu(proxy.Status{Phase: "running", PID: 123}, false, false, true) {
+	for _, item := range ui.Menu(control.Status{Phase: "running", PID: 123}, false, false, true) {
 		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup) && !item.Disabled {
 			t.Fatal("mutation enabled during action", item)
 		}
@@ -105,7 +108,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 			t.Fatal("recovery action unavailable", item)
 		}
 	}
-	for _, item := range ui.Menu(proxy.Status{Phase: "error"}, false, true, false) {
+	for _, item := range ui.Menu(control.Status{Phase: "error"}, false, true, false) {
 		if item.ID == ui.ToggleProxy && !item.Disabled {
 			t.Fatal("unknown backend status permits toggle")
 		}

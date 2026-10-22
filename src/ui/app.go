@@ -10,7 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/logs"
 )
 
 // Run creates the app's one continuous log before checking its configuration
@@ -23,7 +24,7 @@ func Run(args []string) (runErr error) {
 		}
 	}()
 	f := flag.NewFlagSet("ssh_proxy_app", flag.ContinueOnError)
-	config := f.String("config", "", "Path to config.toml")
+	configPath := f.String("config", "", "Path to config.toml")
 	backend := f.String("backend", "", "Path to ssh_proxy_cli executable")
 	smoke := f.Bool("smoke-test", false, "Create the tray icon and menu, then exit")
 	parseErr := f.Parse(args)
@@ -41,11 +42,11 @@ func Run(args []string) (runErr error) {
 	if err != nil {
 		return err
 	}
-	p, err := proxy.PathsForExecutable(*config, abs)
+	p, err := config.PathsForExecutable(*configPath, abs)
 	if err != nil {
 		return err
 	}
-	logger, writer, err := proxy.NewRunLog(p, "tray", false)
+	logger, writer, err := logs.NewRunLog(p, "tray", false)
 	if err != nil {
 		return err
 	}

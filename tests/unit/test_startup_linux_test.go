@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/service"
 )
 
 func TestLinuxStartupReportsUserSystemdState(t *testing.T) {
@@ -29,7 +29,7 @@ func TestLinuxStartupReportsUserSystemdState(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(script), 0700); err != nil {
 			t.Fatal(err)
 		}
-		enabled, err := proxy.ServiceAutoStart(name, "status")
+		enabled, err := service.ServiceAutoStart(name, "status")
 		if enabled != tc.want || (err != nil) != tc.wantErr {
 			t.Fatalf("%s: enabled=%v err=%v", tc.output, enabled, err)
 		}

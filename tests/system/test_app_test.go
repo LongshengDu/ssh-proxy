@@ -11,7 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
 	"ssh_proxy/src/ui"
 	"ssh_proxy/tests/helpers"
 )
@@ -22,27 +23,27 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	dir := testutil.IsolatedBuild(t)
 	f := testutil.LocalSSH(t, dir)
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
-	config := filepath.Join(dir, "settings-"+suffix+".txt")
+	configPath := filepath.Join(dir, "settings-"+suffix+".txt")
 	servers := filepath.Join(dir, "servers-"+suffix+".txt")
-	testutil.WriteFile(t, config, strings.Replace(f.Config, `config_file = "ssh_config"`, `config_file = "`+filepath.Base(servers)+`"`, 1))
+	testutil.WriteFile(t, configPath, strings.Replace(f.Config, `config_file = "ssh_config"`, `config_file = "`+filepath.Base(servers)+`"`, 1))
 	sshText := testutil.ReadFile(filepath.Join(dir, "ssh_config"))
 	// Ordered fallback is exercised by CLI tests. This UI workflow starts with
 	// healthy endpoints so transient connection-error dialogs cannot mask later assertions.
 	sshText = sshText[strings.Index(sshText, "Host primary\n"):]
 	testutil.WriteFile(t, servers, "# Add your hosts\n")
-	p, err := proxy.PathsForExecutable(config, testutil.CLIPath(dir))
+	p, err := config.PathsForExecutable(configPath, testutil.CLIPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := func(args ...string) []byte { return testutil.MustCLI(t, dir, append(args, "--config", config)...) }
-	status := func() proxy.Status {
-		var st proxy.Status
+	call := func(args ...string) []byte { return testutil.MustCLI(t, dir, append(args, "--config", configPath)...) }
+	status := func() control.Status {
+		var st control.Status
 		if err := json.Unmarshal(call("status"), &st); err != nil {
 			t.Fatal(err)
 		}
 		return st
 	}
-	t.Cleanup(func() { testutil.CallCLI(dir, "stop", "--config", config); ui.SetStartup(p.ID, "", "", false) })
+	t.Cleanup(func() { testutil.CallCLI(dir, "stop", "--config", configPath); ui.SetStartup(p.ID, "", "", false) })
 	script := filepath.Join(dir, "scripts", "Fixture.sh")
 	record := filepath.Join(dir, "script-ran")
 	scriptText := "printf ran > '" + filepath.ToSlash(record) + "'\n"
@@ -51,7 +52,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 		scriptText = "$ErrorActionPreference = 'Stop'\nSet-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'script-ran') -Value ran"
 	}
 	testutil.WriteFile(t, script, scriptText)
-	app := testutil.StartApp(t, dir, config, testutil.CLIPath(dir))
+	app := testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
 	pid := app.Process.Pid
 	testutil.ExpectDialog(t, pid, "add your hosts")
 	testutil.NativeOpened(t, servers) // Prove the default file opener displayed the failing config.
@@ -68,7 +69,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 		testutil.ExpectMenu(t, pid, "Launch App at Login", false, enabled)
 	}
-	for _, item := range []struct{ label, path string }{{"Open SSH Config", servers}, {"Open App Config", config}, {"Open Current Log", log}, {"Open Installed Location", dir}} {
+	for _, item := range []struct{ label, path string }{{"Open SSH Config", servers}, {"Open App Config", configPath}, {"Open Current Log", log}, {"Open Installed Location", dir}} {
 		testutil.NativeClick(t, pid, item.label)
 		testutil.NativeOpened(t, item.path)
 	}

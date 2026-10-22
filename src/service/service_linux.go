@@ -1,4 +1,4 @@
-package proxy
+package service
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kardianos/service"
+	kardianos "github.com/kardianos/service"
 )
 
 func serviceStartupPath(id string) (string, error) {
@@ -38,8 +38,8 @@ func systemctl(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-func configureService(cfg *service.Config) error {
-	system := service.ChosenSystem()
+func configureService(cfg *kardianos.Config) error {
+	system := kardianos.ChosenSystem()
 	if system == nil || system.String() != "linux-systemd" {
 		return fmt.Errorf("automatic startup requires user systemd; use start or start --foreground without it")
 	}

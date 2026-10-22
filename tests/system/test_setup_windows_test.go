@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -124,7 +124,7 @@ func TestCLIStartLeavesCallerJob(t *testing.T) {
 	closed = true
 	time.Sleep(time.Second)
 	after := testutil.StatusCLI(t, dir)
-	if after.Phase != "running" || after.PID != before.PID || !proxy.ProcessAlive(before.SSHPID) {
+	if after.Phase != "running" || after.PID != before.PID || !platform.ProcessAlive(before.SSHPID) {
 		t.Fatalf("closing the caller's job stopped the proxy: before %+v, after %+v", before, after)
 	}
 }

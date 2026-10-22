@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 )
 
 func NativeLoginLaunch(t *testing.T, id, executable, config string) {
@@ -46,7 +46,7 @@ func NativeLoginLaunch(t *testing.T, id, executable, config string) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	release, err := proxy.ContainChild(cmd)
+	release, err := platform.ContainChild(cmd)
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()

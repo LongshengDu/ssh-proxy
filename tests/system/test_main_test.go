@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 	var unlock func()
 	if runtime.GOOS != "linux" && os.Getenv("SSH_PROXY_SYS_SCOPE") != "cli" {
 		var err error
-		unlock, err = proxy.LockInstance("system-tests-desktop")
+		unlock, err = platform.LockInstance("system-tests-desktop")
 		if err != nil {
 			println("Another native desktop test suite is running; wait for it to finish.")
 			os.Exit(1)

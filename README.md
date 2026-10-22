@@ -43,16 +43,14 @@ Keep protocol and OS behavior in existing libraries. Application builds use `CGO
 src/
   cmd/ssh_proxy_cli/       CLI entry point, all platforms
   cmd/ssh_proxy_app/       Tray entry point, Windows/macOS
-  proxy/
-    config.go             TOML validation, paths, SSH aliases and command arguments
-    bridge.go             HTTP-to-SOCKS integration and connection tracking
-    supervisor.go         SSH lifecycle, readiness, health and failover
-    cli.go, help.go        Commands, flags, reports and aligned help
-    control.go            Local API, runtime state and status
-    platform*.go          Platform locks and process containment
-    guardian.go           Unix SSH child ownership
-    service*.go           Service registration and lifecycle
-    logging.go            Continuous run logs and retention
+  cli/                    Commands, flags, reports and aligned help (help.go)
+  config/                 TOML validation, paths/identity, SSH aliases, ssh -G and command arguments
+  bridge/                 HTTP-to-SOCKS integration, connection tracking and health probes
+  supervisor/             SSH lifecycle, readiness, health, failover and the background run
+  control/                Authenticated local API, runtime state and status
+  platform/               Platform locks, process containment, detach and the Unix SSH guardian
+  service/                OS service registration and lifecycle
+  logs/                   Continuous run logs, retention and size limit
   ui/                     Tray state, setup terminal, errors, login and scripts
   packaging/defaults/     Public TOML, SSH template, bilingual guide and launchers
 scripts/
@@ -70,7 +68,7 @@ build/                    Ignored builds, private settings, reports and caches
 .build-tools/             Ignored downloaded Go toolchain
 ```
 
-All compiled application Go code belongs under `src/`. Test files use `test_*_test.go` names in the two flat suites; reusable helpers belong in `tests/helpers/`. Do not add tests of the build/test scripts themselves. Keep real hosts, usernames, keys and logs out of public defaults. Read [AGENTS.md](AGENTS.md) before working.
+All compiled application Go code belongs under `src/`. Imports flow one way: `config`, `logs`, `platform` and `bridge` at the bottom, then `control` and `supervisor`, then `service`, then `cli`; the tray (`ui`) uses only `config`, `control`, `platform` and `logs`. The packages build into just two programs, `ssh_proxy_cli` and `ssh_proxy_app`; services and internal helper modes (`_run`, `_ssh`, `_service`) reuse the CLI executable. Test files use `test_*_test.go` names in the two flat suites; reusable helpers belong in `tests/helpers/`. Do not add tests of the build/test scripts themselves. Keep real hosts, usernames, keys and logs out of public defaults. Read [AGENTS.md](AGENTS.md) before working.
 
 ## Configuration and SSH contracts
 
@@ -119,7 +117,7 @@ Each tray or proxy run creates one continuous file under `logs/`: `tray_<id>_...
 | Other public commands | Text output; operational errors go to stderr with a nonzero exit |
 | Help/version | `-h` / `--help`, including command-specific help; `-v` / `--version` |
 
-There is no `--json` switch or plain `help`/`version` command. Help returns before reading configuration or accessing services. `help.go` shares flag/default definitions with runtime parsing and renders aligned, plain-text help within 80 columns.
+There is no `--json` switch or plain `help`/`version` command. Help returns before reading configuration or accessing services. `src/cli/help.go` shares flag/default definitions with runtime parsing and renders aligned, plain-text help within 80 columns.
 
 The tray has no network supervisor of its own. It polls CLI JSON about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, configs, logs/location and Exit.
 
@@ -144,7 +142,7 @@ Bundled Codex/Claude launchers start or reuse the CLI, verify readiness, set HTT
 
 ## Optional OS services
 
-Services are part of `src/proxy/service*.go` and every build. They run the same supervisor. Registration uses the current user; ordinary `start`, `stop` and `restart` control the proxy. Service subcommands only install/uninstall, inspect status and enable/disable automatic startup.
+Services are part of `src/service/` and every build. They run the same supervisor. Registration uses the current user; ordinary `start`, `stop` and `restart` control the proxy. Service subcommands only install/uninstall, inspect status and enable/disable automatic startup.
 
 | OS | Integration and requirements |
 | --- | --- |
@@ -224,7 +222,7 @@ Each system run writes `output.txt`, `events.jsonl` and `summary.json` under `bu
 
 ## Maintaining assets and documentation
 
-Keep the developer guide here and the Chinese-first/English user guide in `src/packaging/defaults/README.md`. Update both language sections for user-visible changes. Keep CLI flag descriptions/defaults in `help.go` synchronized with behavior and retain structured JSON contracts for the tray. Do not add chat history, changing verification dates or a second version value to the READMEs.
+Keep the developer guide here and the Chinese-first/English user guide in `src/packaging/defaults/README.md`. Update both language sections for user-visible changes. Keep CLI flag descriptions/defaults in `src/cli/help.go` synchronized with behavior; `tests/unit/testdata/cli/expected.txt` records the exact help and error output and retain structured JSON contracts for the tray. Do not add chat history, changing verification dates or a second version value to the READMEs.
 
 `src/ui/icon.svg` is the canonical artwork; keep a matching PNG and macOS ICNS. Preserve `icon.bak.svg`. The tray embeds the PNG; the Windows builder embeds it into the executable through pure-Go `go-winres` (pinned as a go.mod tool and run with `go tool go-winres`) using `src/packaging/windows-icon.json`. Apply resources before hashes/signing. Optional asset regeneration tools:
 

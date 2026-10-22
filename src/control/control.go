@@ -1,4 +1,5 @@
-package proxy
+// Package control is the supervisor's authenticated loopback API and its state file.
+package control
 
 import (
 	"bytes"
@@ -13,6 +14,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/platform"
 )
 
 type StateFile struct {
@@ -52,14 +56,17 @@ type Status struct {
 	Log         string    `json:"log"`
 }
 
-func newState(p Paths, address string) (StateFile, error) {
+// NewState creates the state for a supervisor run with a fresh bearer token.
+func NewState(p config.Paths, address string) (StateFile, error) {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return StateFile{}, err
 	}
 	return StateFile{PID: os.Getpid(), Address: address, Token: hex.EncodeToString(secret), Config: p.Config, Log: p.Log}, nil
 }
-func writeState(p Paths, s StateFile) error {
+
+// WriteState publishes the state file atomically.
+func WriteState(p config.Paths, s StateFile) error {
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
@@ -70,7 +77,9 @@ func writeState(p Paths, s StateFile) error {
 	}
 	return os.Rename(tmp, p.State)
 }
-func readState(p Paths) (StateFile, error) {
+
+// ReadState reads and validates the state file.
+func ReadState(p config.Paths) (StateFile, error) {
 	var s StateFile
 	data, err := os.ReadFile(p.State)
 	if err != nil {
@@ -85,9 +94,11 @@ func readState(p Paths) (StateFile, error) {
 	}
 	return s, nil
 }
-func controlCall(p Paths, method, path string) (Status, error) {
+
+// Call sends one authenticated request to the running supervisor.
+func Call(p config.Paths, method, path string) (Status, error) {
 	var result Status
-	s, err := readState(p)
+	s, err := ReadState(p)
 	if err != nil {
 		return result, err
 	}
@@ -136,13 +147,13 @@ func ControlHandler(token string, getStatus func() Status, stop func()) http.Han
 }
 
 // QueryStatus is also usable without a live configuration file.
-func QueryStatus(p Paths) Status {
-	st, err := controlCall(p, "GET", "/status")
+func QueryStatus(p config.Paths) Status {
+	st, err := Call(p, "GET", "/status")
 	if err == nil {
 		return st
 	}
-	st = Status{Phase: PhaseStopped, Config: p.Config, Log: latestLog(p.Logs, p.ID)}
-	if state, e := readState(p); e == nil && ProcessAlive(state.PID) {
+	st = Status{Phase: PhaseStopped, Config: p.Config, Log: config.LatestLog(p.Logs, p.ID)}
+	if state, e := ReadState(p); e == nil && platform.ProcessAlive(state.PID) {
 		st.Phase = PhaseUnresponsive
 		st.PID = state.PID
 		st.LastError = err.Error()

@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
 )
 
 // SetupPrompts remembers UI actions only; all proxy state comes from the CLI.
 type SetupPrompts map[string]bool
 
-func (seen SetupPrompts) Config(result proxy.ConfigCheck) string {
+func (seen SetupPrompts) Config(result config.ConfigCheck) string {
 	key := "config:" + result.EditFile
 	if result.Valid || result.EditFile == "" || seen[key] {
 		return ""

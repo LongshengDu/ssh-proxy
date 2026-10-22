@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package proxy
+package platform
 
 import (
 	"fmt"
@@ -49,10 +49,10 @@ type parentLease struct{ reader, writer *os.File }
 
 func (p *parentLease) Close() error { p.reader.Close(); return p.writer.Close() }
 
-// A pipe lease lets the helper stop SSH even if an unmanaged supervisor crashes.
+// ManagedCommand runs native SSH under this executable's _ssh guardian. A pipe
+// lease lets the guardian stop SSH even if an unmanaged supervisor crashes.
 // Native SSH inherits neither end of the lease. OS services also own the process group.
-func managedSSHCommand(c *Config, alias string) (*exec.Cmd, io.Closer, error) {
-	native := SSHCommand(c, alias, false)
+func ManagedCommand(native *exec.Cmd) (*exec.Cmd, io.Closer, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, nil, err

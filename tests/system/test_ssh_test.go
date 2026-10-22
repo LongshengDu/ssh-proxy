@@ -22,7 +22,7 @@ import (
 	"github.com/coder/websocket"
 	socks "golang.org/x/net/proxy"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -132,7 +132,7 @@ func TestCLITunnelLifecycleAndHealth(t *testing.T) {
 	f.Blocked.Store(true)
 	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "degraded" })
 	check := exec.Command(testutil.CLIPath(dir), "test", "--url", f.Origin.URL)
-	proxy.HideChild(check)
+	platform.HideChild(check)
 	// HTTP can reuse an upstream connection; SOCKS must open a new SSH channel.
 	if out, err := check.Output(); err == nil || !strings.Contains(string(out), "FAIL SOCKS5:") {
 		t.Fatalf("failed health checks must report text and exit nonzero: %s %v", out, err)
@@ -159,7 +159,7 @@ func TestCLITunnelLifecycleAndHealth(t *testing.T) {
 	if testutil.StatusCLI(t, dir).Phase != "stopped" {
 		t.Fatal("not stopped")
 	}
-	testutil.WaitFor(t, func() bool { return !proxy.ProcessAlive(after.SSHPID) })
+	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(after.SSHPID) })
 	if out := string(testutil.MustCLI(t, dir, "logs", "--lines", "100")); !strings.Contains(out, "Stopped; SSH child") {
 		t.Fatal(out)
 	}
@@ -171,7 +171,7 @@ func TestCLIProbeFailoverForegroundAndCrashCleanup(t *testing.T) {
 	testutil.WriteFile(t, filepath.Join(dir, "config.toml"), strings.Replace(f.Config, "failover_on_probe_failure = false", "failover_on_probe_failure = true", 1))
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
 	foreground := exec.Command(testutil.CLIPath(dir), "start", "--foreground")
-	proxy.HideChild(foreground)
+	platform.HideChild(foreground)
 	out, err := os.Create(filepath.Join(t.TempDir(), "foreground.txt"))
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func TestCLIProbeFailoverForegroundAndCrashCleanup(t *testing.T) {
 	if err := process.Kill(); err != nil {
 		t.Fatal(err)
 	}
-	testutil.WaitFor(t, func() bool { return !proxy.ProcessAlive(st.SSHPID) })
+	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(st.SSHPID) })
 	testutil.WaitFor(t, func() bool {
 		ln, err := net.Listen("tcp", st.SOCKS)
 		if err != nil {
@@ -219,7 +219,7 @@ func TestCLIProbeFailoverForegroundAndCrashCleanup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	follow := exec.CommandContext(ctx, testutil.CLIPath(dir), "logs", "--follow", "--lines", "1")
-	proxy.HideChild(follow)
+	platform.HideChild(follow)
 	stream, err := follow.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)

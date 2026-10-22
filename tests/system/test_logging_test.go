@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -46,7 +47,7 @@ func TestProxyRunLogs(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, testutil.CLIPath(dir), args...)
-		proxy.HideChild(cmd)
+		platform.HideChild(cmd)
 		return cmd.CombinedOutput()
 	}
 	t.Cleanup(func() {
@@ -87,7 +88,7 @@ func TestProxyRunLogs(t *testing.T) {
 		t.Fatalf("start retrying supervisor: %v: %s", err, out)
 	}
 	files(2)
-	var status proxy.Status
+	var status control.Status
 	out, err := call("status")
 	if err != nil || json.Unmarshal(out, &status) != nil || status.PID == 0 || status.Log == first {
 		t.Fatalf("current run not discoverable: %v: %s", err, out)

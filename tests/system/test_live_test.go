@@ -14,7 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -32,14 +34,14 @@ func TestLiveEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base, err := proxy.LoadConfig(configPath)
+	base, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for index, alias := range base.Endpoints {
 		t.Run(alias, func(t *testing.T) {
 			dir := t.TempDir()
-			config := filepath.Join(dir, "config.toml")
+			liveConfig := filepath.Join(dir, "config.toml")
 			text := string(template)
 			socks, httpPort := strconv.Itoa(testutil.FreePort(t)), strconv.Itoa(testutil.FreePort(t))
 			for socks == httpPort {
@@ -47,7 +49,7 @@ func TestLiveEndpoints(t *testing.T) {
 			}
 			text = strings.Replace(text, "socks_port = "+strconv.Itoa(base.Proxy.SocksPort), "socks_port = "+socks, 1)
 			text = strings.Replace(text, "http_port = "+strconv.Itoa(base.Proxy.HTTPPort), "http_port = "+httpPort, 1)
-			if err = os.WriteFile(config, []byte(text), 0600); err != nil {
+			if err = os.WriteFile(liveConfig, []byte(text), 0600); err != nil {
 				t.Fatal(err)
 			}
 			// Candidates are only declared here. Native Include resolves the actual
@@ -59,8 +61,8 @@ func TestLiveEndpoints(t *testing.T) {
 			call := func(args ...string) ([]byte, error) {
 				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, exe, append(args, "--config", config)...)
-				proxy.HideChild(cmd)
+				cmd := exec.CommandContext(ctx, exe, append(args, "--config", liveConfig)...)
+				platform.HideChild(cmd)
 				return cmd.CombinedOutput()
 			}
 			must := func(args ...string) []byte {
@@ -78,8 +80,8 @@ func TestLiveEndpoints(t *testing.T) {
 			})
 			must("check")
 			must("start", "--wait", "55")
-			status := func() proxy.Status {
-				var st proxy.Status
+			status := func() control.Status {
+				var st control.Status
 				out, err := call("status")
 				if err != nil {
 					t.Fatal(err)
@@ -110,8 +112,8 @@ func TestLiveEndpoints(t *testing.T) {
 			if _, err = os.Stat(tray); runtime.GOOS != "linux" && err == nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
-				cmd := exec.CommandContext(ctx, tray, "--config", config, "--backend", exe, "--smoke-test")
-				proxy.HideChild(cmd)
+				cmd := exec.CommandContext(ctx, tray, "--config", liveConfig, "--backend", exe, "--smoke-test")
+				platform.HideChild(cmd)
 				if out, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("tray: %v: %s", err, out)
 				}
@@ -128,8 +130,8 @@ func TestLiveEndpoints(t *testing.T) {
 			if index == 0 {
 				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()
-				foreground := exec.CommandContext(ctx, exe, "start", "--foreground", "--config", config)
-				proxy.HideChild(foreground)
+				foreground := exec.CommandContext(ctx, exe, "start", "--foreground", "--config", liveConfig)
+				platform.HideChild(foreground)
 				logfile, err := os.Create(filepath.Join(output, "logs", "live-foreground.log"))
 				if err != nil {
 					t.Fatal(err)
@@ -153,7 +155,7 @@ func TestLiveEndpoints(t *testing.T) {
 				}
 			}
 			missing := exec.Command(exe, "--config", filepath.Join(dir, "absent.toml"), "start")
-			proxy.HideChild(missing)
+			platform.HideChild(missing)
 			if err = missing.Run(); err == nil {
 				t.Fatal("missing configuration accepted")
 			}

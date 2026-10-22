@@ -1,4 +1,5 @@
-package proxy
+// Package service registers the supervisor as an OS service for the current user.
+package service
 
 import (
 	"context"
@@ -10,8 +11,12 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/kardianos/service"
+	kardianos "github.com/kardianos/service"
 	"golang.org/x/term"
+
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/supervisor"
 )
 
 func serviceReport(name string, installed bool, state string, startup bool) error {
@@ -28,16 +33,16 @@ func serviceReport(name string, installed bool, state string, startup bool) erro
 }
 
 type serviceProgram struct {
-	paths  Paths
+	paths  config.Paths
 	cancel context.CancelFunc
 	done   chan error
 }
 
-func (p *serviceProgram) Start(service.Service) error {
+func (p *serviceProgram) Start(kardianos.Service) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel, p.done = cancel, make(chan error, 1)
 	go func() {
-		err := runSupervisorContext(context.WithValue(ctx, serviceModeKey{}, true), p.paths, false)
+		err := supervisor.RunContext(ctx, p.paths, false, true)
 		p.done <- err
 		if ctx.Err() == nil {
 			// An unexpected supervisor exit must be visible to OS recovery, not leave
@@ -49,7 +54,7 @@ func (p *serviceProgram) Start(service.Service) error {
 	}()
 	return nil
 }
-func (p *serviceProgram) Stop(service.Service) error {
+func (p *serviceProgram) Stop(kardianos.Service) error {
 	if p.cancel == nil {
 		return nil
 	}
@@ -63,27 +68,28 @@ func (p *serviceProgram) Stop(service.Service) error {
 }
 
 func serviceName(id string) string { return "com.sshproxy." + id }
-func serviceFor(p Paths) (service.Service, *service.Config, error) {
+func serviceFor(p config.Paths) (kardianos.Service, *kardianos.Config, error) {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, nil, err
 	}
-	cfg := &service.Config{Name: serviceName(p.ID), DisplayName: "SSH Proxy (" + p.ID + ")",
+	cfg := &kardianos.Config{Name: serviceName(p.ID), DisplayName: "SSH Proxy (" + p.ID + ")",
 		Description: "Native OpenSSH SOCKS5 tunnel and HTTP proxy", Executable: exe,
 		Arguments: []string{"_service", "--config", p.Config}, WorkingDirectory: filepath.Dir(p.Config),
 		EnvVars: map[string]string{"SSH_PROXY_RUNTIME": p.Runtime},
-		Option: service.KeyValue{"UserService": runtime.GOOS == "darwin", "RunAtLoad": true,
+		Option: kardianos.KeyValue{"UserService": runtime.GOOS == "darwin", "RunAtLoad": true,
 			"KeepAlive": true, "LogOutput": false,
 			"StartType": "automatic", "DelayedAutoStart": true,
 			"OnFailure": "restart", "OnFailureDelayDuration": "5s", "OnFailureResetPeriod": 300}}
 	if err = configureService(cfg); err != nil {
 		return nil, nil, err
 	}
-	svc, err := service.New(&serviceProgram{paths: p}, cfg)
+	svc, err := kardianos.New(&serviceProgram{paths: p}, cfg)
 	return svc, cfg, err
 }
 
-func runService(p Paths) error {
+// Run is the _service entry point that the OS service manager starts.
+func Run(p config.Paths) error {
 	svc, _, err := serviceFor(p)
 	if err != nil {
 		return err
@@ -93,7 +99,7 @@ func runService(p Paths) error {
 
 // installedServiceAction returns handled=false only when no service was installed.
 // Permission failures never silently create an unmanaged duplicate instance.
-func installedServiceAction(p Paths, action string) (bool, error) {
+func installedServiceAction(p config.Paths, action string) (bool, error) {
 	if present, err := servicePresent(p.ID); err != nil || !present {
 		return present, err
 	}
@@ -102,7 +108,7 @@ func installedServiceAction(p Paths, action string) (bool, error) {
 		return false, err
 	}
 	state, err := svc.Status()
-	if errors.Is(err, service.ErrNotInstalled) {
+	if errors.Is(err, kardianos.ErrNotInstalled) {
 		return false, nil
 	}
 	if err != nil {
@@ -111,20 +117,19 @@ func installedServiceAction(p Paths, action string) (bool, error) {
 	return true, controlService(svc, state, action)
 }
 
-func controlService(svc service.Service, state service.Status, action string) error {
-	if (action == "start" && state == service.StatusRunning) || (action == "stop" && state == service.StatusStopped) {
+func controlService(svc kardianos.Service, state kardianos.Status, action string) error {
+	if (action == "start" && state == kardianos.StatusRunning) || (action == "stop" && state == kardianos.StatusStopped) {
 		return nil
 	}
-	if action == "restart" && state == service.StatusStopped {
+	if action == "restart" && state == kardianos.StatusStopped {
 		action = "start"
 	}
-	return service.Control(svc, action)
+	return kardianos.Control(svc, action)
 }
 
-func manageService(p Paths, args []string) error {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		return writeHelp(os.Stdout, "service", nil)
-	}
+// Manage runs one service subcommand. The CLI has already handled help and
+// parsed install's options; args holds the subcommand and its remaining arguments.
+func Manage(p config.Paths, args []string) error {
 	switch args[0] {
 	case "install", "uninstall", "status", "enable", "disable":
 	case "start", "stop", "restart":
@@ -132,14 +137,8 @@ func manageService(p Paths, args []string) error {
 	default:
 		return fmt.Errorf("unknown service command %q", args[0])
 	}
-	if args[0] == "install" {
-		f, _ := commandFlags("service install")
-		if err := f.Parse(args[1:]); err != nil {
-			return err
-		}
-		if f.NArg() != 0 {
-			return fmt.Errorf("unexpected install arguments")
-		}
+	if args[0] == "install" && len(args) != 1 {
+		return fmt.Errorf("unexpected install arguments")
 	} else if len(args) != 1 {
 		return fmt.Errorf("unexpected service arguments")
 	}
@@ -156,10 +155,10 @@ func manageService(p Paths, args []string) error {
 		return err
 	}
 	if args[0] == "install" {
-		if _, err = LoadConfig(p.Config); err != nil {
+		if _, err = config.LoadConfig(p.Config); err != nil {
 			return err
 		}
-		if _, err := controlCall(p, "GET", "/status"); err == nil {
+		if _, err := control.Call(p, "GET", "/status"); err == nil {
 			return fmt.Errorf("stop the current background instance before installing its service")
 		}
 		if runtime.GOOS == "windows" {
@@ -198,14 +197,14 @@ func manageService(p Paths, args []string) error {
 		return serviceReport(cfg.Name, true, "stopped", true)
 	}
 	state, err := svc.Status()
-	if errors.Is(err, service.ErrNotInstalled) && (args[0] == "status" || args[0] == "uninstall") {
+	if errors.Is(err, kardianos.ErrNotInstalled) && (args[0] == "status" || args[0] == "uninstall") {
 		return serviceReport(cfg.Name, false, "not_installed", false)
 	}
 	if err != nil {
 		return err
 	}
 	label := "stopped"
-	if state == service.StatusRunning {
+	if state == kardianos.StatusRunning {
 		label = "running"
 	}
 	switch args[0] {
@@ -216,7 +215,7 @@ func manageService(p Paths, args []string) error {
 		}
 		return serviceReport(cfg.Name, true, label, enabled)
 	case "uninstall":
-		if state == service.StatusRunning {
+		if state == kardianos.StatusRunning {
 			if err = svc.Stop(); err != nil {
 				return err
 			}
@@ -236,23 +235,12 @@ func manageService(p Paths, args []string) error {
 	}
 }
 
-func serviceCommand(p Paths, args []string) (bool, error) {
-	switch args[0] {
-	case "service":
-		return true, manageService(p, args[1:])
-	case "_service":
-		if len(args) != 1 {
-			return true, fmt.Errorf("unexpected service runner arguments")
-		}
-		return true, runService(p)
-	}
-	return false, nil
-}
-
-func serviceAction(p Paths, action string, wait time.Duration) (bool, error) {
+// Action sends start, stop or restart to an installed service. It returns
+// handled=false when no service is installed or a non-service instance runs.
+func Action(p config.Paths, action string, wait time.Duration) (bool, error) {
 	// An authenticated foreground/background instance takes priority over a
 	// stopped service, so stop/restart always reaches the active instance.
-	if st, err := controlCall(p, "GET", "/status"); err == nil && !st.Service {
+	if st, err := control.Call(p, "GET", "/status"); err == nil && !st.Service {
 		return false, nil
 	}
 	handled, err := installedServiceAction(p, action)
@@ -262,18 +250,18 @@ func serviceAction(p Paths, action string, wait time.Duration) (bool, error) {
 	return handled, err
 }
 
-func waitServiceReady(p Paths, wait time.Duration) error {
+func waitServiceReady(p config.Paths, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
-		if st, err := controlCall(p, "GET", "/status"); err == nil {
-			if st.Phase == PhaseRunning || st.Phase == PhaseDegraded {
+		if st, err := control.Call(p, "GET", "/status"); err == nil {
+			if st.Phase == control.PhaseRunning || st.Phase == control.PhaseDegraded {
 				return nil
 			}
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	if _, err := controlCall(p, "GET", "/status"); err == nil {
+	if _, err := control.Call(p, "GET", "/status"); err == nil {
 		return nil
 	}
-	return fmt.Errorf("service has not exposed its control API; inspect %s", latestLog(p.Logs, p.ID))
+	return fmt.Errorf("service has not exposed its control API; inspect %s", config.LatestLog(p.Logs, p.ID))
 }

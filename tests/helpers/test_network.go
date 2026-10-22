@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/bridge"
 )
 
 // A local SOCKS fixture records the requested hostname and connects to a test
@@ -111,15 +111,15 @@ func FakeSOCKS(t *testing.T, origin string) (string, <-chan string) {
 	return listener.Addr().String(), targets
 }
 
-func BridgeFixture(t *testing.T, origin string) (*proxy.Bridge, *httptest.Server, <-chan string) {
+func BridgeFixture(t *testing.T, origin string) (*bridge.Bridge, *httptest.Server, <-chan string) {
 	t.Helper()
 	socks, targets := FakeSOCKS(t, origin)
-	bridge, err := proxy.NewBridge(socks, time.Second)
+	b, err := bridge.NewBridge(socks, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bridge.SetReady(true)
-	server := httptest.NewServer(bridge)
-	t.Cleanup(func() { bridge.SetReady(false); server.Close() })
-	return bridge, server, targets
+	b.SetReady(true)
+	server := httptest.NewServer(b)
+	t.Cleanup(func() { b.SetReady(false); server.Close() })
+	return b, server, targets
 }

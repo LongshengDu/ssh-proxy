@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -31,19 +31,19 @@ func TestSSHConfigPathWithoutValidation(t *testing.T) {
 	} {
 		// The rest of the file is invalid on purpose; only the SSH path matters.
 		text := "[proxy]\nhttp_port = 0\n[ssh]\nexecutable = \"missing-ssh\"\nconfig_file = " + strconv.Quote(tc.value) + "\n"
-		config := filepath.Join(dir, "config.toml")
-		if err := os.WriteFile(config, []byte(text), 0600); err != nil {
+		configPath := filepath.Join(dir, "config.toml")
+		if err := os.WriteFile(configPath, []byte(text), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if got, err := proxy.SSHConfigPath(config); err != nil || got != tc.want {
+		if got, err := config.SSHConfigPath(configPath); err != nil || got != tc.want {
 			t.Fatalf("%s: got %q, %v; want %q", tc.value, got, err, tc.want)
 		}
 	}
-	config := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(config, []byte("[ssh]\n"), 0600); err != nil {
+	configPath := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(configPath, []byte("[ssh]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proxy.SSHConfigPath(config); err == nil || !strings.Contains(err.Error(), "ssh.config_file") {
+	if _, err := config.SSHConfigPath(configPath); err == nil || !strings.Contains(err.Error(), "ssh.config_file") {
 		t.Fatal("missing ssh.config_file accepted", err)
 	}
 }
@@ -59,11 +59,11 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 	if err := os.WriteFile(sshPath, []byte(sshText), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := proxy.LoadConfig(path)
+	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := proxy.SSHCommand(cfg, cfg.Endpoints[0], false)
+	cmd := config.SSHCommand(cfg, cfg.Endpoints[0], false)
 	if cmd.Dir != filepath.Dir(sshPath) {
 		t.Fatal("wrong SSH working directory:", cmd.Dir)
 	}
@@ -78,12 +78,12 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 			t.Errorf("missing effective SSH setting %q", want)
 		}
 	}
-	second := testutil.EffectiveSSH(t, proxy.SSHCommand(cfg, cfg.Endpoints[1], false))
+	second := testutil.EffectiveSSH(t, config.SSHCommand(cfg, cfg.Endpoints[1], false))
 	if !strings.Contains(second, "user fallback\n") {
 		t.Fatal("Host fallback ignored")
 	}
 
-	trust := proxy.SSHCommand(cfg, cfg.Endpoints[0], true)
+	trust := config.SSHCommand(cfg, cfg.Endpoints[0], true)
 	if trust.Dir != filepath.Dir(sshPath) {
 		t.Fatal("trust uses different working directory")
 	}
@@ -105,13 +105,13 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 	if err := os.WriteFile(path, []byte(configured), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := proxy.LoadConfig(path)
+	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := func(c *proxy.Config, trust bool, settings []string) {
+	check := func(c *config.Config, trust bool, settings []string) {
 		t.Helper()
-		cmd := proxy.SSHCommand(c, c.Endpoints[0], trust)
+		cmd := config.SSHCommand(c, c.Endpoints[0], trust)
 		if trust {
 			cmd.Args = cmd.Args[:len(cmd.Args)-1]
 		}
@@ -139,7 +139,7 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 	if err = os.WriteFile(path, []byte(configured), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err = proxy.LoadConfig(path)
+	cfg, err = config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 
 func TestSSHAliasDiscovery(t *testing.T) {
 	path, sshPath := testutil.Config(t, "# Host commented\nHost * !ignored\n User tester\nHost second first\nHost second\nHost THIRD\nHost third\nHost *.example ?other !excluded\nMatch host conditional\n User other\nHost last\n")
-	cfg, err := proxy.LoadConfig(path)
+	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestSSHAliasDiscovery(t *testing.T) {
 		if err := os.WriteFile(sshPath, []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := proxy.LoadConfig(path); err == nil {
+		if _, err := config.LoadConfig(path); err == nil {
 			t.Fatalf("expected no valid candidate: %q", content)
 		}
 	}
@@ -167,13 +167,13 @@ func TestSSHAliasDiscovery(t *testing.T) {
 
 func TestNativeDefaultHostTrust(t *testing.T) {
 	path, sshPath := testutil.Config(t, "Host proxy-primary\n HostName example.invalid\n User tester\n")
-	cfg, err := proxy.LoadConfig(path)
+	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	native := testutil.EffectiveSSH(t, exec.Command(cfg.SSH.Executable, "-F", sshPath, cfg.Endpoints[0]))
 	for _, trust := range []bool{false, true} {
-		cmd := proxy.SSHCommand(cfg, cfg.Endpoints[0], trust)
+		cmd := config.SSHCommand(cfg, cfg.Endpoints[0], trust)
 		for _, arg := range cmd.Args {
 			if strings.Contains(strings.ToLower(arg), "knownhostsfile") {
 				t.Fatal("application must not override native host trust", arg)
@@ -202,7 +202,7 @@ func TestUnconfiguredInstallDoesNotResolveExampleHosts(t *testing.T) {
 	if err := os.WriteFile(path, template, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proxy.LoadConfig(path); err == nil || !strings.Contains(err.Error(), "add your hosts") {
+	if _, err := config.LoadConfig(path); err == nil || !strings.Contains(err.Error(), "add your hosts") {
 		t.Fatalf("expected setup instructions for a fresh install, got %v", err)
 	}
 }
@@ -222,7 +222,7 @@ func TestExistingDynamicForwardAndInvalidSSHConfig(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path, _ := testutil.Config(t, tc.text+"\nHost proxy-primary proxy-backup\n")
-			cfg, err := proxy.LoadConfig(path)
+			cfg, err := config.LoadConfig(path)
 			if !tc.valid {
 				if err == nil {
 					t.Fatal("invalid SSH configuration accepted")
@@ -232,7 +232,7 @@ func TestExistingDynamicForwardAndInvalidSSHConfig(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cmd := proxy.SSHCommand(cfg, cfg.Endpoints[0], false)
+			cmd := config.SSHCommand(cfg, cfg.Endpoints[0], false)
 			hasD := false
 			for _, arg := range cmd.Args {
 				if arg == "-D" {
@@ -255,10 +255,10 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if err := os.Remove(sshPath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proxy.LoadConfig(path); err == nil {
+	if _, err := config.LoadConfig(path); err == nil {
 		t.Fatal("missing SSH config accepted")
 	}
-	defaults, err := proxy.PathsFor("")
+	defaults, err := config.PathsFor("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if defaults.Config != filepath.Join(filepath.Dir(exe), "config.toml") || defaults.Log != filepath.Join(filepath.Dir(exe), "logs", "logs_"+defaults.ID+".txt") {
 		t.Fatal(defaults)
 	}
-	alternate, err := proxy.PathsFor(path)
+	alternate, err := config.PathsFor(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	absent, err := proxy.PathsFor(path)
+	absent, err := config.PathsFor(path)
 	if err != nil || absent != alternate {
 		t.Fatal(absent, err)
 	}

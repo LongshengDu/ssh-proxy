@@ -1,4 +1,4 @@
-package proxy
+package config
 
 import (
 	"context"
@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/BurntSushi/toml"
-	sshconfig "github.com/trzsz/ssh_config"
 	"net"
 	"os"
 	"os/exec"
@@ -17,6 +15,21 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/BurntSushi/toml"
+	sshconfig "github.com/trzsz/ssh_config"
+
+	"ssh_proxy/src/platform"
+)
+
+// Version is set by scripts/build.py from the repository's .version file.
+var Version = "dev"
+
+// Log limits shared by validation and by logging that starts before validation.
+const (
+	DefaultMaxLogFiles = 10
+	DefaultMaxLogMB    = 10
+	MaxLogMB           = 1024
 )
 
 // Config holds supervisor settings; OpenSSH owns connection settings.
@@ -129,8 +142,22 @@ func PathsForExecutable(configPath, exe string) (Paths, error) {
 	// Discover the latest proxy run even after its control state has been removed.
 	logs := filepath.Join(filepath.Dir(exe), "logs")
 	return Paths{Config: abs, Runtime: runtimeDir, State: filepath.Join(runtimeDir, "state.json"),
-		Logs: logs, Log: latestLog(logs, id), ID: id}, nil
+		Logs: logs, Log: LatestLog(logs, id), ID: id}, nil
 }
+
+// LatestLog finds the newest proxy run log for a config identity.
+func LatestLog(directory, id string) string {
+	// Timestamped names sort by creation time. Keep old installations readable.
+	files, _ := os.ReadDir(directory)
+	for i := len(files) - 1; i >= 0; i-- {
+		name := files[i].Name()
+		if !files[i].IsDir() && strings.HasPrefix(name, "logs_"+id+"_") && strings.HasSuffix(name, ".txt") {
+			return filepath.Join(directory, name)
+		}
+	}
+	return filepath.Join(directory, "logs_"+id+".txt")
+}
+
 func resolvePath(base, name string) string {
 	if strings.HasPrefix(name, "~/") || strings.HasPrefix(name, `~\`) {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -173,7 +200,7 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 		}
 	}()
 	c := &Config{Path: path, resolved: map[string]sshSettings{}}
-	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = defaultMaxLogFiles, defaultMaxLogMB
+	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = DefaultMaxLogFiles, DefaultMaxLogMB
 	// Defaults also apply to existing installations whose TOML predates these
 	// fields. Shared tunnel policy never needs to be repeated in host entries.
 	c.SSH.ConnectTimeout, c.SSH.ConnectionAttempts = 10, 1
@@ -188,8 +215,8 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 	if c.Logging.MaxLogFiles < 1 {
 		return nil, fmt.Errorf("logging.max_log_files must be at least 1")
 	}
-	if c.Logging.MaxSizeMB < 1 || c.Logging.MaxSizeMB > maxLogMB {
-		return nil, fmt.Errorf("logging.max_size_mb must be in 1..%d", maxLogMB)
+	if c.Logging.MaxSizeMB < 1 || c.Logging.MaxSizeMB > MaxLogMB {
+		return nil, fmt.Errorf("logging.max_size_mb must be in 1..%d", MaxLogMB)
 	}
 	ip := net.ParseIP(c.Proxy.Bind)
 	if ip == nil || !ip.IsLoopback() {
@@ -291,10 +318,14 @@ func SSHAliases(path string) ([]string, error) {
 	return aliases, nil
 }
 func validPort(p int) bool { return p > 0 && p <= 65535 }
-func (c *Config) socksAddr() string {
+
+// SocksAddr is the SOCKS listener that native ssh -D provides.
+func (c *Config) SocksAddr() string {
 	return net.JoinHostPort(c.Proxy.Bind, strconv.Itoa(c.Proxy.SocksPort))
 }
-func (c *Config) httpAddr() string {
+
+// HTTPAddr is the HTTP proxy listener.
+func (c *Config) HTTPAddr() string {
 	return net.JoinHostPort(c.Proxy.Bind, strconv.Itoa(c.Proxy.HTTPPort))
 }
 func (c *Config) sshBaseArgs(trust bool) []string {
@@ -323,7 +354,7 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.SSH.Executable, append(c.sshBaseArgs(false), "-G", alias)...)
 	cmd.Dir = filepath.Dir(c.SSH.ConfigFile)
-	HideChild(cmd)
+	platform.HideChild(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return sshSettings{}, fmt.Errorf("resolve SSH alias %s with -G -F: %w: %s", alias, err, strings.TrimSpace(string(output)))
@@ -354,11 +385,14 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 	if len(forwards) == 1 {
 		host, port, err := net.SplitHostPort(forwards[0])
 		if err != nil || !net.ParseIP(host).Equal(net.ParseIP(c.Proxy.Bind)) || port != strconv.Itoa(c.Proxy.SocksPort) {
-			return sshSettings{}, fmt.Errorf("%s: SSH DynamicForward %q must match %s from config.toml; remove it to let the supervisor add -D", alias, forwards[0], c.socksAddr())
+			return sshSettings{}, fmt.Errorf("%s: SSH DynamicForward %q must match %s from config.toml; remove it to let the supervisor add -D", alias, forwards[0], c.SocksAddr())
 		}
 	}
 	return sshSettings{destination: one("user") + "@" + net.JoinHostPort(one("hostname"), one("port")), hasDynamicForward: len(forwards) == 1}, nil
 }
+
+// Destination is the user@host:port that OpenSSH resolved for an alias.
+func (c *Config) Destination(alias string) string { return c.resolved[alias].destination }
 
 // SSHCommand uses -F and the alias. SSH-relative paths resolve from its config directory.
 func SSHCommand(c *Config, alias string, trust bool) *exec.Cmd {
@@ -370,7 +404,7 @@ func SSHCommand(c *Config, alias string, trust bool) *exec.Cmd {
 	} else {
 		args = append(args, "-N")
 		if !c.resolved[alias].hasDynamicForward {
-			args = append(args, "-D", c.socksAddr())
+			args = append(args, "-D", c.SocksAddr())
 		}
 		args = append(args, alias)
 	}

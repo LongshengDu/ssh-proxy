@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"strings"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 )
 
 type Script struct{ Name, Path string }
@@ -46,7 +46,7 @@ func runScript(ctx context.Context, script Script, log io.Writer) error {
 		cmd = exec.CommandContext(ctx, shell, "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script.Path)
 	}
 	cmd.Dir = filepath.Dir(script.Path)
-	proxy.HideChild(cmd)
+	platform.HideChild(cmd)
 	cmd.Stdout, cmd.Stderr = log, log
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("Run: %s: %w", script.Name, err)

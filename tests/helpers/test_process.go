@@ -12,7 +12,9 @@ import (
 
 	"golang.org/x/term"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/cli"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
 )
 
 // Child fixtures exercise the actual CLI/tray without a real SSH login.
@@ -32,7 +34,7 @@ func RunProcess() bool {
 	switch os.Getenv("SSH_PROXY_TEST_PROCESS") {
 	case "trust":
 		os.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
-		if err := proxy.Run(os.Args[1:]); err != nil {
+		if err := cli.Run(os.Args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -70,9 +72,9 @@ func RunProcess() bool {
 		}
 		switch os.Args[1] {
 		case "check":
-			json.NewEncoder(os.Stdout).Encode(proxy.ConfigCheck{Valid: true})
+			json.NewEncoder(os.Stdout).Encode(config.ConfigCheck{Valid: true})
 		case "status":
-			st := proxy.Status{Phase: "stopped"}
+			st := control.Status{Phase: "stopped"}
 			if data, _ := os.ReadFile(os.Getenv("SSH_PROXY_TEST_RECORD")); strings.Contains(string(data), `"start"`) {
 				st.PID, st.Phase = 123, "running"
 			}

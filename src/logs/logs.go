@@ -1,4 +1,5 @@
-package proxy
+// Package logs writes one continuous file per tray or proxy run, with retention and a size limit.
+package logs
 
 import (
 	"bytes"
@@ -15,12 +16,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-)
 
-const (
-	defaultMaxLogFiles = 10
-	defaultMaxLogMB    = 10
-	maxLogMB           = 1024
+	"ssh_proxy/src/config"
 )
 
 const truncatedMarker = "--- Earlier lines removed: log reached logging.max_size_mb ---\n"
@@ -46,7 +43,7 @@ func NewLog(path string, foreground bool) (*log.Logger, *RunLog, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	writer := &RunLog{File: file, limit: defaultMaxLogMB << 20}
+	writer := &RunLog{File: file, limit: config.DefaultMaxLogMB << 20}
 	var output io.Writer = writer
 	if foreground {
 		output = io.MultiWriter(writer, os.Stderr)
@@ -98,7 +95,7 @@ func (l *RunLog) truncate(size int64) error {
 }
 
 // NewRunLog allocates exactly one file; all later messages use its open writer.
-func NewRunLog(p Paths, kind string, foreground bool) (*log.Logger, *RunLog, error) {
+func NewRunLog(p config.Paths, kind string, foreground bool) (*log.Logger, *RunLog, error) {
 	if kind != "logs" && kind != "tray" {
 		return nil, nil, fmt.Errorf("unknown run log kind %q", kind)
 	}
@@ -117,15 +114,15 @@ func NewRunLog(p Paths, kind string, foreground bool) (*log.Logger, *RunLog, err
 		return nil, nil, err
 	}
 	// Logging must work before SSH/config validation, including malformed TOML.
-	var c Config
-	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = defaultMaxLogFiles, defaultMaxLogMB
+	var c config.Config
+	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = config.DefaultMaxLogFiles, config.DefaultMaxLogMB
 	if _, err := toml.DecodeFile(p.Config, &c); err != nil {
-		c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = defaultMaxLogFiles, defaultMaxLogMB
+		c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = config.DefaultMaxLogFiles, config.DefaultMaxLogMB
 	}
 	if c.Logging.MaxLogFiles < 1 {
-		c.Logging.MaxLogFiles = defaultMaxLogFiles
+		c.Logging.MaxLogFiles = config.DefaultMaxLogFiles
 	}
-	if c.Logging.MaxSizeMB >= 1 && c.Logging.MaxSizeMB <= maxLogMB {
+	if c.Logging.MaxSizeMB >= 1 && c.Logging.MaxSizeMB <= config.MaxLogMB {
 		writer.SetLimit(c.Logging.MaxSizeMB)
 	}
 	if err := pruneRunLogs(p.Logs, kind, filepath.Base(writer.Name()), c.Logging.MaxLogFiles); err != nil {
@@ -166,19 +163,8 @@ func pruneRunLogs(directory, kind, current string, limit int) error {
 	return nil
 }
 
-func latestLog(directory, id string) string {
-	// Timestamped names sort by creation time. Keep old installations readable.
-	files, _ := os.ReadDir(directory)
-	for i := len(files) - 1; i >= 0; i-- {
-		name := files[i].Name()
-		if !files[i].IsDir() && strings.HasPrefix(name, "logs_"+id+"_") && strings.HasSuffix(name, ".txt") {
-			return filepath.Join(directory, name)
-		}
-	}
-	return filepath.Join(directory, "logs_"+id+".txt")
-}
-
-func showLogs(ctx context.Context, path string, lines int, follow bool) error {
+// Show prints the last lines of a run log and optionally follows it.
+func Show(ctx context.Context, path string, lines int, follow bool) error {
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		_, err := fmt.Printf("No log file yet: %s\n", path)

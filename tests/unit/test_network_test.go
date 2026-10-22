@@ -15,7 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/bridge"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -147,12 +147,12 @@ func TestStalledSOCKSHandshakeTimesOut(t *testing.T) {
 			<-done
 		}
 	}()
-	bridge, err := proxy.NewBridge(ln.Addr().String(), 100*time.Millisecond)
+	b, err := bridge.NewBridge(ln.Addr().String(), 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	if err = bridge.Probe(context.Background(), "unresolved.invalid:443", time.Second); err == nil {
+	if err = b.Probe(context.Background(), "unresolved.invalid:443", time.Second); err == nil {
 		t.Fatal("stalled SOCKS accepted")
 	}
 	if time.Since(start) > 2*time.Second {
@@ -164,11 +164,11 @@ func TestProbeAllowsOneUnavailableTarget(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer origin.Close()
 	address, _ := testutil.FakeSOCKS(t, strings.TrimPrefix(origin.URL, "http://"))
-	bridge, err := proxy.NewBridge(address, time.Second)
+	b, err := bridge.NewBridge(address, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = proxy.ProbeTargets(context.Background(), bridge, []string{"invalid-address", "working.invalid:443"}, time.Second); err != nil {
+	if err = bridge.ProbeTargets(context.Background(), b, []string{"invalid-address", "working.invalid:443"}, time.Second); err != nil {
 		t.Fatal(err)
 	}
 }

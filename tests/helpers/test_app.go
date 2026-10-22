@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/platform"
 )
 
 type NativeItem struct {
@@ -20,7 +20,7 @@ type NativeItem struct {
 func StartApp(t *testing.T, dir, config, backend string) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command(AppPath(dir), "--config", config, "--backend", backend)
-	proxy.HideChild(cmd)
+	platform.HideChild(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func StartApp(t *testing.T, dir, config, backend string) *exec.Cmd {
 	var release func()
 	if runtime.GOOS == "windows" {
 		var err error
-		release, err = proxy.ContainChild(cmd)
+		release, err = platform.ContainChild(cmd)
 		if err != nil {
 			cmd.Process.Kill()
 			cmd.Wait()

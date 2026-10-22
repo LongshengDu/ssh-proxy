@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/cli"
 )
 
 // Expected CLI output: every help topic and the error text and exit code of
@@ -62,7 +62,7 @@ func runCLI(t *testing.T, args []string) (stdout, stderr string, code int) {
 	os.Stdout, os.Stderr = outFile, errFile
 	func() {
 		defer func() { os.Stdout, os.Stderr = savedOut, savedErr }()
-		if err := proxy.Run(args); err != nil && !errors.Is(err, flag.ErrHelp) {
+		if err := cli.Run(args); err != nil && !errors.Is(err, flag.ErrHelp) {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			code = 1
 		}

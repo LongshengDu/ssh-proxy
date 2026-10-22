@@ -1,4 +1,4 @@
-package proxy
+package platform
 
 import (
 	"errors"
@@ -42,8 +42,10 @@ func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
 	}
 	return cmd, err
 }
-func managedSSHCommand(c *Config, alias string) (*exec.Cmd, io.Closer, error) {
-	return SSHCommand(c, alias, false), nil, nil
+
+// ManagedCommand returns native SSH unchanged; ContainChild's job owns it.
+func ManagedCommand(native *exec.Cmd) (*exec.Cmd, io.Closer, error) {
+	return native, nil, nil
 }
 
 // Closing this handle also kills its SSH child if the supervisor crashes.

@@ -13,7 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -35,7 +36,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		// Help must exit successfully on stdout without loading config or doing work.
 		args = append(args, "--config", filepath.Join(dir, "missing.toml"))
 		cmd := exec.CommandContext(ctx, testutil.CLIPath(dir), args...)
-		proxy.HideChild(cmd)
+		platform.HideChild(cmd)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		out, err := cmd.Output()
@@ -144,7 +145,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 			t.Fatalf("%v: %v %s", args, err, out)
 		}
 	}
-	var check proxy.ConfigCheck
+	var check config.ConfigCheck
 	custom := filepath.Join(dir, "alternate config.toml")
 	testutil.WriteFile(t, custom, testutil.ReadFile(filepath.Join(dir, "config.toml")))
 	for _, args := range [][]string{{"-c", custom, "check"}, {"check", "-c", custom}, {"-c=" + custom, "check"}} {

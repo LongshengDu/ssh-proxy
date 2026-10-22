@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 	"unsafe"
@@ -19,7 +18,9 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/src/ui"
 	"ssh_proxy/tests/helpers"
 )
@@ -30,7 +31,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, exe, args...)
-		proxy.HideChild(cmd)
+		platform.HideChild(cmd)
 		return cmd.CombinedOutput()
 	}
 	iconPath, _ := windows.UTF16PtrFromString(filepath.Join(dir, "ssh_proxy_app.exe"))
@@ -46,7 +47,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 	}
 	exe := filepath.Join(dir, "ssh_proxy_cli.exe")
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	p, err := proxy.PathsForExecutable(filepath.Join(dir, "config.toml"), exe)
+	p, err := config.PathsForExecutable(filepath.Join(dir, "config.toml"), exe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		}
 	}
 	tray := exec.Command(filepath.Join(dir, "ssh_proxy_app.exe"))
-	proxy.HideChild(tray)
+	platform.HideChild(tray)
 	if err := tray.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -94,62 +95,38 @@ func TestTrayWindowsMenu(t *testing.T) {
 	// Read the actual native menu (not just the application model).
 	menuState := func(wantStartup, running bool) {
 		t.Helper()
-		win.PostMessage(hwnd, win.WM_USER+100, 0, win.WM_RBUTTONUP)
-		var popup win.HWND
-		limit := time.Now().Add(5 * time.Second)
-		for time.Now().Before(limit) && popup == 0 {
-			popup = findOwned(0, "#32768")
-			time.Sleep(50 * time.Millisecond)
-		}
-		if popup == 0 {
-			t.Fatal("native context menu did not open")
-		}
-		defer func() {
-			win.PostMessage(hwnd, win.WM_CANCELMODE, 0, 0)
-			limit := time.Now().Add(3 * time.Second)
-			for findOwned(0, "#32768") != 0 && time.Now().Before(limit) {
-				time.Sleep(50 * time.Millisecond)
-			}
-			if findOwned(0, "#32768") != 0 {
-				t.Error("menu did not dismiss")
-			}
-		}()
-		menu := win.HMENU(win.SendMessage(popup, 0x01e1, 0, 0)) // MN_GETHMENU
-		if count := win.GetMenuItemCount(menu); count != 19 {
-			t.Fatalf("menu has %d items", count)
-		}
-		phase, control, ssh, socks, http := "○ Stopped", "Start proxy", "SSH: —", "SOCKS5: —", "HTTP: —"
+		items := testutil.NativeMenu(t, tray.Process.Pid)
+		phase, toggle, ssh, socks, http := "○ Stopped", "Start proxy", "SSH: —", "SOCKS5: —", "HTTP: —"
 		if running {
-			phase, control, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
+			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
 		}
-		want := []string{phase, ssh, socks, http, "", control, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app (proxy keeps running)"}
-		for index := uint32(0); index < uint32(len(want)); index++ {
-			var label [256]uint16
-			info := win.MENUITEMINFO{FMask: win.MIIM_STRING | win.MIIM_STATE | win.MIIM_FTYPE, DwTypeData: &label[0], Cch: 255}
-			info.CbSize = uint32(unsafe.Sizeof(info))
-			if !win.GetMenuItemInfo(menu, index, 1, &info) {
-				t.Fatal("read native menu")
+		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app (proxy keeps running)"}
+		if len(items) != len(want) {
+			t.Fatalf("menu has %d items: %+v", len(items), items)
+		}
+		byLabel := map[string]testutil.NativeItem{}
+		for index, item := range items {
+			t.Logf("menu %d: %+v", index, item)
+			if item.Label != want[index] || item.Separator != (want[index] == "") {
+				t.Fatalf("menu %d: got %+v, want %q", index, item, want[index])
 			}
-			name := syscall.UTF16ToString(label[:])
-			t.Logf("menu %d: %s (state=%d)", index, name, info.FState)
-			if name != want[index] {
-				t.Fatalf("menu %d: got %q, want %q", index, name, want[index])
+			byLabel[item.Label] = item
+		}
+		for _, label := range []string{phase, ssh, socks, http} {
+			if !byLabel[label].Disabled {
+				t.Fatal("status row is clickable", label)
 			}
-			if (info.FType&0x800 != 0) != (want[index] == "") {
-				t.Fatal("missing native separator", index)
+		}
+		if byLabel[toggle].Checked {
+			t.Fatal("proxy action has a checkbox")
+		}
+		for _, label := range []string{"Run: Claude", "Run: Codex"} {
+			if byLabel[label].Disabled == running {
+				t.Fatal("script readiness out of sync", label)
 			}
-			if index < 4 && info.FState&win.MFS_DISABLED == 0 {
-				t.Fatal("status row is clickable", index)
-			}
-			if index == 5 && info.FState&win.MFS_CHECKED != 0 {
-				t.Fatal("proxy action has a checkbox")
-			}
-			if (index == 7 || index == 8) && (info.FState&win.MFS_DISABLED != 0) == running {
-				t.Fatal("script readiness out of sync")
-			}
-			if index == 10 && (info.FState&win.MFS_CHECKED != 0) != wantStartup {
-				t.Fatal("startup checkbox out of sync")
-			}
+		}
+		if byLabel["Launch App at Login"].Checked != wantStartup {
+			t.Fatal("startup checkbox out of sync")
 		}
 	}
 	menuState(false, false)
@@ -158,7 +135,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 			t.Errorf("startup cleanup: %v", err)
 		}
 	})
-	testutil.ClickTrayItem(t, tray.Process.Pid, 10)
+	testutil.NativeClick(t, tray.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && enabled })
 	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\SSHProxy\`+p.ID, registry.QUERY_VALUE)
 	if err != nil {
@@ -180,18 +157,18 @@ func TestTrayWindowsMenu(t *testing.T) {
 	}
 	time.Sleep(2300 * time.Millisecond)
 	menuState(true, false)
-	testutil.ClickTrayItem(t, tray.Process.Pid, 10)
+	testutil.NativeClick(t, tray.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && !enabled })
 	time.Sleep(2300 * time.Millisecond)
 	menuState(false, false)
 	// Publish an authenticated backend status fixture. The real CLI reads it,
 	// and the real app must reflect it without owning a separate proxy state.
 	token := strings.Repeat("a", 64)
-	server := httptest.NewServer(proxy.ControlHandler(token, func() proxy.Status {
-		return proxy.Status{PID: os.Getpid(), Config: p.Config, Phase: "running", Endpoint: "primary", Destination: "tester@example.invalid:2222", SOCKS: "127.0.0.1:1088", HTTP: "127.0.0.1:8088", Log: p.Log}
+	server := httptest.NewServer(control.ControlHandler(token, func() control.Status {
+		return control.Status{PID: os.Getpid(), Config: p.Config, Phase: "running", Endpoint: "primary", Destination: "tester@example.invalid:2222", SOCKS: "127.0.0.1:1088", HTTP: "127.0.0.1:8088", Log: p.Log}
 	}, func() {}))
 	defer server.Close()
-	state, _ := json.Marshal(proxy.StateFile{PID: os.Getpid(), Config: p.Config, Token: token, Address: strings.TrimPrefix(server.URL, "http://")})
+	state, _ := json.Marshal(control.StateFile{PID: os.Getpid(), Config: p.Config, Token: token, Address: strings.TrimPrefix(server.URL, "http://")})
 	if err := os.WriteFile(p.State, state, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -205,10 +182,10 @@ func TestTrayWindowsMenu(t *testing.T) {
 	win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)
 	// Native-library shutdown must release the application process.
 	limit := time.Now().Add(5 * time.Second)
-	for proxy.ProcessAlive(tray.Process.Pid) && time.Now().Before(limit) {
+	for platform.ProcessAlive(tray.Process.Pid) && time.Now().Before(limit) {
 		time.Sleep(100 * time.Millisecond)
 	}
-	if proxy.ProcessAlive(tray.Process.Pid) {
+	if platform.ProcessAlive(tray.Process.Pid) {
 		t.Fatal("tray did not exit")
 	}
 	// Release the process handle/image reference.

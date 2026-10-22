@@ -13,7 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 )
 
 func SystemBuild(t *testing.T) string { t.Helper(); return os.Getenv("SSH_PROXY_SYS_DIR") }
@@ -56,7 +57,7 @@ func CallCLI(dir string, args ...string) ([]byte, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, CLIPath(dir), args...)
 	cmd.WaitDelay = time.Second
-	proxy.HideChild(cmd)
+	platform.HideChild(cmd)
 	return cmd.CombinedOutput()
 }
 func MustCLI(t *testing.T, dir string, args ...string) []byte {
@@ -77,9 +78,9 @@ func MustCLI(t *testing.T, dir string, args ...string) []byte {
 	}
 	return out
 }
-func StatusCLI(t *testing.T, dir string) proxy.Status {
+func StatusCLI(t *testing.T, dir string) control.Status {
 	t.Helper()
-	var st proxy.Status
+	var st control.Status
 	if err := json.Unmarshal(MustCLI(t, dir, "status"), &st); err != nil {
 		t.Fatal(err)
 	}

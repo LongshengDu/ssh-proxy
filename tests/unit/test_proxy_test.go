@@ -20,7 +20,12 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/bridge"
+	"ssh_proxy/src/cli"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/logs"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -85,7 +90,7 @@ func TestHTTPSConnectPreservesTLS(t *testing.T) {
 func TestConnectKeepsBufferedBytesAndClosesOnDisconnect(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("pipelined")) }))
 	defer origin.Close()
-	bridge, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
+	b, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
 	client, err := net.Dial("tcp", strings.TrimPrefix(server.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +112,7 @@ func TestConnectKeepsBufferedBytesAndClosesOnDisconnect(t *testing.T) {
 	if string(data) != "pipelined" {
 		t.Fatalf("lost buffered bytes: %q", data)
 	}
-	bridge.SetReady(false)
+	b.SetReady(false)
 	client.SetReadDeadline(time.Now().Add(time.Second))
 	_, err = reader.ReadByte()
 	if err == nil {
@@ -122,15 +127,15 @@ func TestBridgeFailsClosed(t *testing.T) {
 	var calls atomic.Int32
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1) }))
 	defer origin.Close()
-	bridge, err := proxy.NewBridge("127.0.0.1:1", 100*time.Millisecond)
+	b, err := bridge.NewBridge("127.0.0.1:1", 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, ready := range []bool{false, true} {
-		bridge.SetReady(ready)
+		b.SetReady(ready)
 		request := httptest.NewRequest("GET", origin.URL, nil)
 		response := httptest.NewRecorder()
-		bridge.ServeHTTP(response, request)
+		b.ServeHTTP(response, request)
 		want := 503
 		if ready {
 			want = 502
@@ -182,7 +187,7 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 	if err := os.WriteFile(path, template, 0600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := proxy.LoadConfig(path)
+	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +208,7 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			os.WriteFile(path, []byte(strings.Replace(string(template), tc.from, tc.to, 1)), 0600)
-			if _, err := proxy.LoadConfig(path); err == nil {
+			if _, err := config.LoadConfig(path); err == nil {
 				t.Fatal("invalid config accepted")
 			}
 		})
@@ -212,7 +217,7 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 
 func TestControlAuthenticationAndStop(t *testing.T) {
 	stopped := make(chan struct{}, 1)
-	handler := proxy.ControlHandler("test-secret", func() proxy.Status { return proxy.Status{Phase: "running", PID: 123, Config: "test"} }, func() { stopped <- struct{}{} })
+	handler := control.ControlHandler("test-secret", func() control.Status { return control.Status{Phase: "running", PID: 123, Config: "test"} }, func() { stopped <- struct{}{} })
 	request := httptest.NewRequest("POST", "http://localhost/stop", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
@@ -237,27 +242,27 @@ func TestControlAuthenticationAndStop(t *testing.T) {
 
 func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 	id := "test-" + strconv.Itoa(os.Getpid())
-	unlock, err := proxy.LockInstance(id)
+	unlock, err := platform.LockInstance(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if release, err := proxy.LockInstance(id); err == nil {
+	if release, err := platform.LockInstance(id); err == nil {
 		release()
 		unlock()
 		t.Fatal("duplicate instance accepted")
 	}
 	unlock()
-	unlock, err = proxy.LockInstance(id)
+	unlock, err = platform.LockInstance(id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unlock()
 	dir := filepath.Join(t.TempDir(), "portable [logs]")
-	p, err := proxy.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
+	p, err := config.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, writer, err := proxy.NewRunLog(p, "logs", false)
+	_, writer, err := logs.NewRunLog(p, "logs", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +275,7 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer.Close()
-	_, resumed, err := proxy.NewLog(path, false)
+	_, resumed, err := logs.NewLog(path, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,12 +288,12 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 	if len(files) != 1 || !bytes.Equal(current, append(first, []byte("first error\nsecond error\n")...)) {
 		t.Fatal("one run must preserve all normal output and errors in one file")
 	}
-	_, next, err := proxy.NewRunLog(p, "logs", false)
+	_, next, err := logs.NewRunLog(p, "logs", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	next.Close()
-	found, err := proxy.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
+	found, err := config.PathsForExecutable("", filepath.Join(dir, "ssh_proxy_cli"))
 	if err != nil || found.Log != next.Name() || found.Log == path {
 		t.Fatal("new process run needs a new discoverable file", found, err)
 	}
@@ -301,22 +306,22 @@ func TestSSHJobCleanup(t *testing.T) {
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestSSHJobCleanup$")
 	cmd.Env = append(os.Environ(), "SSH_PROXY_JOB_HELPER=1")
-	proxy.HideChild(cmd)
+	platform.HideChild(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer cmd.Process.Kill()
-	job, err := proxy.ContainChild(cmd)
+	job, err := platform.ContainChild(cmd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxy.CloseJob(job)
+	platform.CloseJob(job)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
 	case <-done:
 		// Windows can report exit code zero for kill-on-job-close termination.
-		if proxy.ProcessAlive(cmd.Process.Pid) {
+		if platform.ProcessAlive(cmd.Process.Pid) {
 			t.Fatal("child is still active after job close")
 		}
 	case <-time.After(3 * time.Second):
@@ -330,13 +335,13 @@ func TestConfigFlagParsing(t *testing.T) {
 			{"start", option, "C:\\space path\\config.toml", "--foreground"},
 			{option + "=C:\\space path\\config.toml", "start", "--foreground"},
 		} {
-			path, args, err := proxy.TakeConfig(input)
+			path, args, err := cli.TakeConfig(input)
 			if err != nil || path != "C:\\space path\\config.toml" || strings.Join(args, " ") != "start --foreground" {
 				t.Fatal(path, args, err)
 			}
 		}
 		for _, input := range [][]string{{option}, {option + "="}} {
-			if _, _, err := proxy.TakeConfig(input); err == nil {
+			if _, _, err := cli.TakeConfig(input); err == nil {
 				t.Fatal("missing config path accepted", input)
 			}
 		}
@@ -344,11 +349,11 @@ func TestConfigFlagParsing(t *testing.T) {
 }
 
 func TestProbeRequiresWorkingSOCKS(t *testing.T) {
-	bridge, err := proxy.NewBridge("127.0.0.1:1", 100*time.Millisecond)
+	b, err := bridge.NewBridge("127.0.0.1:1", 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bridge.Probe(context.Background(), "example.com:443", time.Second); err == nil {
+	if err := b.Probe(context.Background(), "example.com:443", time.Second); err == nil {
 		t.Fatal("unusable tunnel marked ready")
 	}
 }

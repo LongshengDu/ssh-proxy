@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -56,7 +57,7 @@ func TestSSHChildDiagnostics(t *testing.T) {
 				defer cancel()
 				cmd := exec.CommandContext(ctx, testutil.CLIPath(dir), args...)
 				cmd.Env = env
-				proxy.HideChild(cmd)
+				platform.HideChild(cmd)
 				return cmd.CombinedOutput()
 			}
 			t.Cleanup(func() {
@@ -68,7 +69,7 @@ func TestSSHChildDiagnostics(t *testing.T) {
 				t.Fatalf("start: %v: %s", err, out)
 			}
 			out, err := call("status")
-			var st proxy.Status
+			var st control.Status
 			if err != nil || json.Unmarshal(out, &st) != nil {
 				t.Fatalf("status: %v: %s", err, out)
 			}

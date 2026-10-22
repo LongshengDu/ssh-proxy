@@ -202,7 +202,7 @@ def compile_apps(go, env, target, output):
         shutil.copy2(SRC / "ui" / "icon.icns", output / MAC_ICON)
     for command, path, gui in jobs:
         path.parent.mkdir(parents=True, exist_ok=True)
-        flags = f"-s -w -X ssh_proxy/src/proxy.version={APP_VERSION}" + (" -H=windowsgui" if windows and gui else "")
+        flags = f"-s -w -X ssh_proxy/src/config.Version={APP_VERSION}" + (" -H=windowsgui" if windows and gui else "")
         run([go, "build", "-trimpath", "-buildvcs=false", "-ldflags", flags, "-o", path, "./src/cmd/" + command], env)
         if windows and gui:
             # Pure-Go resource tool runs on the build host, also for cross-builds.

@@ -1,4 +1,4 @@
-package proxy
+package platform
 
 import (
 	"context"
@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-// runSSHGuardian is used on macOS and Linux. EOF means the owning supervisor exited.
-func runSSHGuardian(args []string) error {
+// RunGuardian is the _ssh helper used on macOS and Linux. EOF means the owning supervisor exited.
+func RunGuardian(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing SSH executable")
 	}

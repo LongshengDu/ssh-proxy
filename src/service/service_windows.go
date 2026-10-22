@@ -1,4 +1,4 @@
-package proxy
+package service
 
 import (
 	"golang.org/x/sys/windows"

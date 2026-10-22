@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/proxy"
+	"ssh_proxy/src/config"
+	"ssh_proxy/src/logs"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -23,7 +24,7 @@ func TestRunLogRetention(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			p := proxy.Paths{Config: filepath.Join(dir, "config.toml"), Logs: filepath.Join(dir, "logs"), ID: "abcdef0123456789"}
+			p := config.Paths{Config: filepath.Join(dir, "config.toml"), Logs: filepath.Join(dir, "logs"), ID: "abcdef0123456789"}
 			if err := os.WriteFile(p.Config, []byte(tc.config), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -34,7 +35,7 @@ func TestRunLogRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 			for index, kind := range []string{"logs", "tray"} {
-				logger, file, err := proxy.NewRunLog(p, kind, false)
+				logger, file, err := logs.NewRunLog(p, kind, false)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -75,7 +76,7 @@ func TestRunLogRetention(t *testing.T) {
 
 func TestRunLogSizeLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "logs", "run.txt")
-	logger, writer, err := proxy.NewLog(path, false)
+	logger, writer, err := logs.NewLog(path, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +132,7 @@ func TestLogSizeAndRemovedLegacyConfig(t *testing.T) {
 			if err := os.WriteFile(path, []byte(strings.Replace(template, tc.from, tc.to, 1)), 0600); err != nil {
 				t.Fatal(err)
 			}
-			cfg, err := proxy.LoadConfig(path)
+			cfg, err := config.LoadConfig(path)
 			if tc.want == "" {
 				if err != nil || cfg.Logging.MaxSizeMB != 5 {
 					t.Fatal("size limit not loaded", err)
@@ -151,7 +152,7 @@ func TestLogRetentionConfig(t *testing.T) {
 			if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 				t.Fatal(err)
 			}
-			cfg, err := proxy.LoadConfig(path)
+			cfg, err := config.LoadConfig(path)
 			if limit < 1 {
 				if err == nil || !strings.Contains(err.Error(), "logging.max_log_files") {
 					t.Fatal("invalid limit accepted", err)
