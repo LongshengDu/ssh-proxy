@@ -20,6 +20,7 @@ type fakeBackend struct {
 	status                      control.Status
 	check                       config.ConfigCheck
 	logins                      []error // Results of successive silent login checks; nil once exhausted.
+	onLogin                     func()
 	trustErr, startErr, stopErr error
 	autoStart                   bool
 	calls                       []string
@@ -32,6 +33,9 @@ func (b *fakeBackend) Check(context.Context) (config.ConfigCheck, error) {
 }
 func (b *fakeBackend) CheckLogin(context.Context) error {
 	b.calls = append(b.calls, "login")
+	if b.onLogin != nil {
+		b.onLogin()
+	}
 	if len(b.logins) == 0 {
 		return nil
 	}
@@ -179,6 +183,17 @@ func TestTrayControllerCancelledSetupDoesNotStart(t *testing.T) {
 	}
 	if !slices.Equal(desktop.messages, []string{"SSH setup exited with code 7"}) {
 		t.Fatal("setup failure must be reported once", desktop.messages)
+	}
+}
+
+func TestTrayControllerClosingDuringLoginDoesNotOpenTerminal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	backend := &fakeBackend{check: validConfig, logins: []error{context.Canceled}, onLogin: cancel}
+	c, desktop, _ := newController(backend)
+	run(ctx, c, ui.ToggleProxy)
+	if !slices.Equal(backend.calls, []string{"check", "login"}) || len(desktop.messages) != 0 {
+		t.Fatal("closing the app must not open setup, start a proxy or show errors", backend.calls, desktop.messages)
 	}
 }
 

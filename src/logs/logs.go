@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,11 @@ import (
 	"ssh_proxy/src/config"
 )
 
-const truncatedMarker = "--- Earlier lines removed: log reached logging.max_size_mb ---\n"
+// The byte number is cumulative across cuts, excluding marker lines. Followers
+// can recover their position even when several cuts happen between polls.
+const truncatedMarker = "--- Earlier lines removed: log reached logging.max_size_mb; continuing from byte %d of this run ---\n"
+
+var truncatedLine = regexp.MustCompile(`^--- Earlier lines removed: log reached logging\.max_size_mb; continuing from byte (\d+) of this run ---$`)
 
 // Match only application run logs, including the original untimestamped names.
 var runLogName = regexp.MustCompile(`^(logs|tray)_[0-9a-f]{16}(?:_[0-9]{8}_[0-9]{6}\.[0-9]{9}_[0-9]+)?\.txt$`)
@@ -28,10 +33,15 @@ var runLogName = regexp.MustCompile(`^(logs|tray)_[0-9a-f]{16}(?:_[0-9]{8}_[0-9]
 // RunLog appends one run's output to one file. A run is never split into
 // several files; when the file would exceed its size limit, the oldest half is
 // removed in place and a marker line notes the cut.
+//
+// Only the process that owns the log truncates it. Writes from other processes
+// (another RunLog with no limit, native ssh -E) would be lost if they landed
+// during a cut, so the owner holds truncation off while they run.
 type RunLog struct {
 	*os.File
 	mu    sync.Mutex
-	limit int64
+	limit int64 // 0: never truncate, for appending to a log another process owns.
+	holds int
 }
 
 // NewLog appends for the lifetime of one process, using the default size limit.
@@ -51,46 +61,69 @@ func NewLog(path string, foreground bool) (*log.Logger, *RunLog, error) {
 	return log.New(output, "", log.Ldate|log.Ltime|log.Lmicroseconds), writer, nil
 }
 
-// SetLimit applies logging.max_size_mb once the configuration is known.
+// SetLimit applies logging.max_size_mb once the configuration is known. Zero
+// turns truncation off.
 func (l *RunLog) SetLimit(megabytes int) {
 	l.mu.Lock()
 	l.limit = int64(megabytes) << 20
 	l.mu.Unlock()
 }
 
+// Hold defers truncation while another process appends to this file, such as
+// interactive trust with native ssh -E. Writes continue; the first write after
+// the last release applies the limit.
+func (l *RunLog) Hold() (release func()) {
+	l.mu.Lock()
+	l.holds++
+	l.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			l.mu.Lock()
+			l.holds--
+			l.mu.Unlock()
+		})
+	}
+}
+
 func (l *RunLog) Write(p []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if info, err := l.File.Stat(); err == nil && info.Size()+int64(len(p)) > l.limit {
+	if l.limit == 0 || l.holds > 0 {
+		return l.File.Write(p)
+	}
+	n, err := l.File.Write(p)
+	if info, statErr := l.File.Stat(); statErr == nil && info.Size() > l.limit {
 		// A failed cut must not lose the message; the next write retries.
 		_ = l.truncate(info.Size())
 	}
-	return l.File.Write(p)
+	return n, err
 }
 
 // truncate keeps the newest whole lines from the last half of the limit.
 // It uses a second handle because append-only handles cannot truncate on
-// every OS. Other appenders (child output, native ssh -E) continue at the new end.
+// every OS.
 func (l *RunLog) truncate(size int64) error {
 	file, err := os.OpenFile(l.Name(), os.O_RDWR, 0)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
+	head, _ := firstLine(file)
 	keep := min(size, l.limit/2)
 	tail := make([]byte, keep)
 	n, err := file.ReadAt(tail, size-keep)
 	if err != nil && err != io.EOF {
 		return err
 	}
-	tail = tail[:n]
+	tail, start := tail[:n], size-keep
 	if i := bytes.IndexByte(tail, '\n'); i >= 0 && keep < size {
-		tail = tail[i+1:]
+		tail, start = tail[i+1:], start+int64(i+1)
 	}
 	if err := file.Truncate(0); err != nil {
 		return err
 	}
-	_, err = file.WriteAt(append([]byte(truncatedMarker), tail...), 0)
+	_, err = file.WriteAt(append([]byte(fmt.Sprintf(truncatedMarker, logOffset(head)+start)), tail...), 0)
 	return err
 }
 
@@ -165,72 +198,113 @@ func pruneRunLogs(directory, kind, current string, limit int) error {
 
 // Show prints the last lines of a run log and optionally follows it.
 func Show(ctx context.Context, path string, lines int, follow bool) error {
-	f, err := os.Open(path)
-	if os.IsNotExist(err) {
-		_, err := fmt.Printf("No log file yet: %s\n", path)
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	lastInfo, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return err
-	}
-	offset := lastInfo.Size()
-	tail, err := lastLines(f, offset, lines)
-	f.Close()
-	if err != nil {
-		return err
-	}
-	for _, line := range tail {
-		fmt.Println(line)
-	}
-	if !follow {
-		return nil
-	}
+	var cursor logCursor
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		data, err := cursor.read(path, lines)
+		if os.IsNotExist(err) {
+			if cursor.info == nil {
+				_, err = fmt.Printf("No log file yet: %s\n", path)
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		if _, err := os.Stdout.Write(data); err != nil {
+			return err
+		}
+		if !follow && cursor.info != nil {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			info, err := os.Stat(path)
-			if os.IsNotExist(err) {
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			if !os.SameFile(lastInfo, info) {
-				offset = 0 // Replaced file: show it from the start.
-			} else if info.Size() < offset {
-				// The size limit removed older lines. Skip the kept copy instead of
-				// printing it again; lines written since the last poll may be skipped too.
-				fmt.Println(strings.TrimSuffix(truncatedMarker, "\n"))
-				offset = info.Size()
-			}
-			lastInfo = info
-			if info.Size() > offset {
-				f, err := os.Open(path)
-				if err != nil {
-					continue
-				}
-				_, err = f.Seek(offset, io.SeekStart)
-				if err == nil {
-					n, copyErr := io.Copy(os.Stdout, f)
-					offset += n
-					err = copyErr
-				}
-				f.Close()
-				if err != nil {
-					return err
-				}
-			}
 		}
 	}
+}
+
+// logOffset maps a physical file position to its position in the original run.
+func logOffset(head string) int64 {
+	match := truncatedLine.FindStringSubmatch(head)
+	if match == nil {
+		return 0
+	}
+	start, err := strconv.ParseInt(match[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return start - int64(len(head)+1)
+}
+
+type logCursor struct {
+	info   os.FileInfo
+	head   string
+	offset int64
+}
+
+// Read a bounded snapshot before printing anything. An in-place cut during the
+// read changes the cumulative marker; discard that snapshot and retry next poll.
+func (c *logCursor) read(path string, lines int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	head, complete := firstLine(f)
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !complete && c.info != nil && info.Size() < c.offset {
+		return nil, nil // Between truncate and rewrite; keep the old cursor.
+	}
+	offset, missed := int64(0), false
+	if c.info != nil && os.SameFile(c.info, info) {
+		offset = c.offset
+		if head != c.head && truncatedLine.MatchString(head) {
+			offset += logOffset(c.head) - logOffset(head)
+			body := int64(len(head) + 1)
+			missed = offset < body
+			offset = max(body, offset)
+		} else if info.Size() < offset {
+			offset = 0 // External truncation without our marker.
+		}
+	}
+	var data []byte
+	if c.info == nil {
+		var tail []string
+		tail, err = lastLines(f, info.Size(), lines)
+		if len(tail) > 0 {
+			data = []byte(strings.Join(tail, "\n") + "\n")
+		}
+	} else {
+		data, err = io.ReadAll(io.NewSectionReader(f, offset, max(0, info.Size()-offset)))
+		if int64(len(data)) != max(0, info.Size()-offset) {
+			return nil, nil // A cut shortened the file while it was read.
+		}
+	}
+	after, _ := firstLine(f)
+	if after != head || err == io.EOF {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	*c = logCursor{info: info, head: head, offset: info.Size()}
+	if missed {
+		data = append([]byte("--- Lines were removed by logging.max_size_mb before they could be shown ---\n"), data...)
+	}
+	return data, nil
+}
+
+// firstLine uses the same handle as the snapshot, including after replacement.
+func firstLine(file *os.File) (string, bool) {
+	data := make([]byte, 512)
+	n, _ := file.ReadAt(data, 0)
+	line, _, complete := strings.Cut(string(data[:n]), "\n")
+	return line, complete
 }
 
 // lastLines reads backward from size until it has n whole lines, so a large
@@ -242,7 +316,7 @@ func lastLines(f *os.File, size int64, n int) ([]string, error) {
 	for block := int64(64 << 10); ; block *= 4 {
 		start := max(0, size-block)
 		data := make([]byte, size-start)
-		if _, err := f.ReadAt(data, start); err != nil && err != io.EOF {
+		if _, err := f.ReadAt(data, start); err != nil {
 			return nil, err
 		}
 		lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")

@@ -16,6 +16,9 @@ func defaultBackend(exe string) string {
 func openPath(path string) error { return exec.Command("/usr/bin/open", path).Run() }
 
 func RunTrustTerminal(ctx context.Context, backend, config, logPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 	dir, err := os.MkdirTemp("", "ssh-proxy-trust-")
 	if err != nil {

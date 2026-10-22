@@ -198,6 +198,9 @@ func (c *Controller) startProxy(ctx context.Context) error {
 		return err
 	}
 	if err := c.backend.CheckLogin(ctx); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		c.logger.Printf("Unattended SSH login check failed; opening SSH setup terminal: %v", err)
 		if err := c.backend.Trust(ctx); err != nil {
 			return err

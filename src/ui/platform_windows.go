@@ -47,6 +47,9 @@ func openPath(path string) error {
 // Start a console program with real terminal handles, not the hidden tray's
 // stdin/stdout. Windows uses the configured default terminal host. No shell.
 func RunTrustTerminal(ctx context.Context, backend, config, logPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{backend, "trust", "--log", logPath, "--config", config}))
 	if err != nil {
 		return err

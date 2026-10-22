@@ -84,7 +84,7 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	desktop := &desktopOS{id: p.ID, config: p.Config, log: writer}
-	controller := NewController(cliBackend{paths: p, exe: backend}, desktop, view, logger, p, filepath.Dir(backend), scripts)
+	controller := NewController(cliBackend{paths: p, exe: backend, log: writer}, desktop, view, logger, p, filepath.Dir(backend), scripts)
 	var worker sync.WaitGroup
 	worker.Add(1)
 	go func() {
@@ -209,6 +209,7 @@ func (d *desktopOS) ShowError(err error) {
 type cliBackend struct {
 	paths config.Paths
 	exe   string
+	log   *logs.RunLog // The tray log that interactive trust appends to.
 }
 
 func (b cliBackend) Status() control.Status { return control.QueryStatus(b.paths) }
@@ -225,7 +226,17 @@ func (b cliBackend) CheckLogin(ctx context.Context) error {
 	return err
 }
 func (b cliBackend) Trust(ctx context.Context) error {
-	return RunTrustTerminal(ctx, b.exe, b.paths.Config, b.paths.Log)
+	// The trust CLI and native ssh -E append to the tray log meanwhile; a cut
+	// during their writes would lose them.
+	release := b.log.Hold()
+	defer release()
+	err := RunTrustTerminal(ctx, b.exe, b.paths.Config, b.paths.Log)
+	if ctx.Err() != nil {
+		// Closing the app leaves the user's setup terminal alive. Its log writes
+		// can outlive this call, so do not resume cuts during app shutdown.
+		b.log.SetLimit(0)
+	}
+	return err
 }
 func (b cliBackend) Start(ctx context.Context) error {
 	_, err := commandBackend(ctx, b.paths, b.exe, "start", "--wait", "1")

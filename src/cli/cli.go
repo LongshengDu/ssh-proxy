@@ -268,6 +268,7 @@ func Run(args []string) error {
 				return err
 			}
 			defer file.Close()
+			file.SetLimit(0) // The process that owns this log applies its size limit.
 			output = io.MultiWriter(os.Stdout, file)
 			errorOutput = io.MultiWriter(os.Stderr, file)
 		}

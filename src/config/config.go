@@ -51,6 +51,7 @@ type Config struct {
 		RetryDelay          int    `toml:"retry_delay_seconds"`
 	} `toml:"ssh"`
 	Health struct {
+		Target                 string   `toml:"target"` // Legacy single target; appended to Targets.
 		Targets                []string `toml:"targets"`
 		FailoverOnProbeFailure bool     `toml:"failover_on_probe_failure"`
 		Interval               int      `toml:"interval_seconds"`
@@ -60,6 +61,7 @@ type Config struct {
 	Logging struct {
 		MaxLogFiles int `toml:"max_log_files"`
 		MaxSizeMB   int `toml:"max_size_mb"`
+		Backups     int `toml:"backups"` // Legacy setting; ignored.
 	} `toml:"logging"`
 	App struct {
 		StartProxyOnLaunch bool `toml:"start_proxy_on_launch"` // Read by the Windows/macOS tray only.
@@ -235,6 +237,9 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 		if value < 1 || value > 3600 {
 			return nil, fmt.Errorf("%s must be in 1..3600", name)
 		}
+	}
+	if c.Health.Target != "" {
+		c.Health.Targets = append(c.Health.Targets, c.Health.Target)
 	}
 	if len(c.Health.Targets) == 0 {
 		return nil, fmt.Errorf("health.targets needs at least one host:port")
