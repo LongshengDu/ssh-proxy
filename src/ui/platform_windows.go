@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lxn/win"
 	"golang.org/x/sys/windows"
 )
 
@@ -16,23 +15,23 @@ func defaultBackend(exe string) string { return filepath.Join(filepath.Dir(exe),
 
 // Windows opens files through their registered application. If an extension
 // has no association (often .toml), let the user choose through Open With.
-func openPath(path string) error { return shellOpen(path, "") }
-
-func shellOpen(path, parameters string) error {
+func openPath(path string) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	hr := win.CoInitializeEx(nil, win.COINIT_APARTMENTTHREADED)
-	if hr >= 0 {
-		defer win.CoUninitialize()
+	if err := windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED); err == nil || err == syscall.Errno(windows.S_FALSE) {
+		defer windows.CoUninitialize()
 	}
+	file, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	// Call ShellExecuteW directly: x/sys's wrapper drops the SE_ERR_* result code.
 	shell := windows.NewLazySystemDLL("shell32.dll")
-	file := syscall.StringToUTF16Ptr(path)
-	args := syscall.StringToUTF16Ptr(parameters)
-	result, _, _ := shell.NewProc("ShellExecuteW").Call(0, 0, uintptr(unsafe.Pointer(file)), uintptr(unsafe.Pointer(args)), 0, win.SW_SHOWNORMAL)
+	result, _, _ := shell.NewProc("ShellExecuteW").Call(0, 0, uintptr(unsafe.Pointer(file)), 0, 0, windows.SW_SHOWNORMAL)
 	if result > 32 {
 		return nil
 	}
-	if result == 31 && parameters == "" { // SE_ERR_NOASSOC
+	if result == 31 { // SE_ERR_NOASSOC
 		info := struct {
 			File, Class *uint16
 			Flags       uint32
@@ -80,8 +79,13 @@ func RunTrustTerminal(ctx context.Context, backend, config, logPath string) erro
 }
 
 func errorMessage(message string) error {
-	if win.MessageBox(0, syscall.StringToUTF16Ptr(message), syscall.StringToUTF16Ptr("SSH Proxy — Error"), win.MB_OK|win.MB_ICONERROR|win.MB_SETFOREGROUND|win.MB_TASKMODAL) == 0 {
-		return fmt.Errorf("could not show error dialog: %s", message)
+	text, err := windows.UTF16PtrFromString(message)
+	if err != nil {
+		return err
+	}
+	title, _ := windows.UTF16PtrFromString("SSH Proxy — Error")
+	if ret, err := windows.MessageBox(0, text, title, windows.MB_OK|windows.MB_ICONERROR|windows.MB_SETFOREGROUND|windows.MB_TASKMODAL); ret == 0 {
+		return fmt.Errorf("could not show error dialog: %w: %s", err, message)
 	}
 	return nil
 }

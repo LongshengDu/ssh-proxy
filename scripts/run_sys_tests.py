@@ -90,6 +90,17 @@ def request_macos_permissions():
         input("Grant the requested access in System Settings, then press Enter to recheck (Ctrl+C cancels): ")
 
 
+def in_scope(name, scope):
+    return scope == "all" or (name.startswith("TestTray") == (scope == "app"))
+
+
+def list_tests(go, env, scope):
+    """Every top-level test compiled for this host and scope is required."""
+    output = b.run([go, "test", "-list", ".", "./tests/system"], env, capture=True)
+    names = [line.strip() for line in output.splitlines() if line.startswith("Test")]
+    return sorted(name for name in names if in_scope(name, scope))
+
+
 def run_tests(go, env, report, scope):
     command = [go, "test", "-json", "-count=1", "-timeout", "12m"]
     if scope == "cli":
@@ -109,32 +120,26 @@ def run_tests(go, env, report, scope):
                     event = {"Output": line}
                 message = event.get("Output", "")
                 output.write(message)
+                output.flush()
                 print(message, end="", flush=True)
                 if event.get("Test") and event.get("Action") in ("pass", "fail", "skip"):
                     results[event["Test"]] = event["Action"]
             return process.wait(), results
 
 
-def assess_results(code, results, args, target):
+# Only these tests may skip, and only under the stated condition.
+ALLOWED_SKIPS = {"TestLiveEndpoints": lambda args: not args.live_config}
+
+
+def assess_results(code, results, required, args):
     """Missing tests and unexpected skips cannot produce a passing report."""
-    unexpected = [name for name, state in results.items() if state == "skip"
-                  and not (name == "TestLiveEndpoints" and not args.live_config)]
-    required = set()
-    if args.scope != "app":
-        required.update({"TestCLICommandsAndConfiguration", "TestCLITunnelLifecycleAndHealth", "TestCLIHTTPSStreamingAndWebSocket",
-                         "TestCLIProbeFailoverForegroundAndCrashCleanup", "TestProxyRunLogs", "TestSSHChildDiagnostics", "TestServiceCommands"})
-        if args.live_config:
-            required.add("TestLiveEndpoints")
-        if target.startswith("windows"):
-            required.add("TestTrustLoggingPreservesConsole")
-    if not target.startswith("linux") and args.scope != "cli":
-        required.update({"TestTrayNativeWorkflow", "TestTrayInteractiveTerminal", "TestTrayRecoveryErrors",
-                         "TestTraySingleInstance", "TestTrayLoginLaunch", "TestTrayFirstHostKeySetup"})
-        if target.startswith("windows"):
-            required.add("TestTrayWindowsMenu")
-    missing = sorted(name for name in required if results.get(name) != "pass")
+    allowed = {name for name, condition in ALLOWED_SKIPS.items() if condition(args)}
+    unexpected = [name for name, state in results.items() if state == "skip" and name not in allowed]
+    missing = sorted(name for name in required if name not in allowed and results.get(name) != "pass")
+    if not required:
+        missing = ["(no system tests found for this scope)"]
     passed = code == 0 and not unexpected and not missing
-    return dict(result="pass" if passed else "fail", tests=results,
+    return dict(result="pass" if passed else "fail", required=required, tests=results,
                 unexpected_skips=unexpected, required_not_passed=missing)
 
 
@@ -153,8 +158,9 @@ def main(argv=None):
         env["SSH_PROXY_SYS_DIR"] = str(stage_programs(directory, target, report, args.scope))
         if target.startswith("darwin") and args.scope != "cli":
             request_macos_permissions()
+        required = list_tests(go, env, args.scope)
         code, results = run_tests(go, env, report, args.scope)
-        summary.update(assess_results(code, results, args, target))
+        summary.update(assess_results(code, results, required, args))
     except (OSError, RuntimeError, subprocess.SubprocessError, EOFError, KeyboardInterrupt) as error:
         summary.update(result="fail", error=str(error) or "Testing cancelled")
     (report / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

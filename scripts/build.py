@@ -146,17 +146,17 @@ def ensure_go(host, env, explicit=None):
 
 
 def ensure_ssh(host, env):
-    if shutil.which("ssh", path=env["PATH"]):
-        return
     if host.startswith("windows"):
+        # Prefer Windows OpenSSH over other ssh.exe builds on PATH, such as Git for Windows' MSYS ssh.
         native = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "OpenSSH"
-        if not (native / "ssh.exe").is_file():
+        if not (native / "ssh.exe").is_file() and not shutil.which("ssh", path=env["PATH"]):
             print("Installing Windows OpenSSH Client (Windows requires an elevated terminal).", flush=True)
             run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
                  "$ErrorActionPreference = 'Stop'; Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0"], env)
         if (native / "ssh.exe").is_file():
             env["PATH"] = str(native) + os.pathsep + env["PATH"]
-            return
+    if shutil.which("ssh", path=env["PATH"]):
+        return
     raise RuntimeError("Native OpenSSH is missing. Install your OS OpenSSH client (Linux: openssh-client/openssh-clients) and retry; Windows installation needs an elevated terminal.")
 
 

@@ -101,7 +101,7 @@ func controlCall(p Paths, method, path string) (Status, error) {
 func ControlHandler(token string, getStatus func() Status, stop func()) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+token)) != 1 {
-			http.Error(w, "Unauthorized", 401)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 		if (r.URL.Path != "/status" || r.Method != http.MethodGet) && (r.URL.Path != "/stop" || r.Method != http.MethodPost) {

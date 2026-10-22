@@ -205,7 +205,7 @@ python scripts/run_sys_tests.py --cli-only
 # Choose --app-only for tray changes, or omit the selection to run all supported tests.
 ```
 
-Run builds/tests in a visible native terminal and retain output/completion status under `build/test-results/`. On Windows use a normal visible PowerShell window and leave it open for review; `python scripts/visible.py --name NAME -- COMMAND` does this and records `output.txt` and `completion.json`. The builder does not run tests or vet. Unit validation verifies modules, runs vet once, then executes `tests/unit/`.
+Run builds/tests in a visible native terminal and retain output/completion status under `build/test-results/`. On Windows use a normal visible PowerShell window and leave it open for review; `python scripts/visible.py --name NAME -- COMMAND` does this and records `output.txt` and `completion.json`. The builder does not run tests or vet. Unit validation verifies modules, fails on unformatted files (`gofmt -l`), runs `go vet` and `staticcheck` (pinned as a go.mod tool; settings in `staticcheck.conf`) for Windows, macOS and Linux, then executes `tests/unit/` on the host. On Windows the runners put the native `System32\OpenSSH` client ahead of other `ssh` builds on PATH.
 
 System tests use the existing build, compile with the `systemtest` tag, and stage public defaults with the built programs. They use isolated config identities, ephemeral keys, loopback SSH/HTTP servers and native OpenSSH. They cover CLI configuration/help/reports, tunnel lifecycle, health/failover, HTTP/HTTPS/streaming/WebSockets, logging and crash cleanup; app tests cover actual menus, scripts, setup terminals, file opening, error dialogs, login registration and single-instance behavior. They do not install real proxy services or alter user SSH trust/keys.
 
@@ -220,7 +220,7 @@ python scripts/run_sys_tests.py --cli-only --live-config build/windows-amd64/con
 
 App tests need an unlocked desktop and a working default text editor. On macOS first run `python3 -m pip install -r requirements.txt`. The runner requests Accessibility and Automation access for Python/Terminal/System Events, opens System Settings when needed, and waits for the user to grant permission. CLI-only does not need these UI permissions. No Windows/Linux Python packages are required.
 
-Each system run writes `output.txt`, `events.jsonl` and `summary.json` under `build/test-results/system-<timestamp>/`. A pass requires all mandatory tests in the chosen scope and no unexpected skips. Scope is recorded; Windows tests or a cross-build do not certify macOS/Linux. Live network endurance, OS boot/login behavior and real service credentials need separate native verification.
+Each system run writes `output.txt`, `events.jsonl` and `summary.json` under `build/test-results/system-<timestamp>/`. A pass requires every system test compiled for the host in the chosen scope (discovered with `go test -list`) to pass, with no skips except `TestLiveEndpoints` without `--live-config`. Scope is recorded; Windows tests or a cross-build do not certify macOS/Linux. Live network endurance, OS boot/login behavior and real service credentials need separate native verification.
 
 ## Maintaining assets and documentation
 

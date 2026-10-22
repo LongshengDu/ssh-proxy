@@ -33,7 +33,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		proxy.HideChild(cmd)
 		return cmd.CombinedOutput()
 	}
-	iconPath := syscall.StringToUTF16Ptr(filepath.Join(dir, "ssh_proxy_app.exe"))
+	iconPath, _ := windows.UTF16PtrFromString(filepath.Join(dir, "ssh_proxy_app.exe"))
 	icons, _, _ := windows.NewLazySystemDLL("shell32.dll").NewProc("ExtractIconExW").Call(uintptr(unsafe.Pointer(iconPath)), ^uintptr(0), 0, 0, 0)
 	if icons != 1 {
 		t.Fatalf("expected one embedded application icon, got %d", icons)

@@ -15,8 +15,9 @@ import (
 func FindNativeWindow(pid int, parent uintptr, class string) win.HWND {
 	find := windows.NewLazySystemDLL("user32.dll").NewProc("FindWindowExW")
 	var after uintptr
+	name, _ := windows.UTF16PtrFromString(class)
 	for {
-		value, _, _ := find.Call(parent, after, uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(class))), 0)
+		value, _, _ := find.Call(parent, after, uintptr(unsafe.Pointer(name)), 0)
 		if value == 0 {
 			return 0
 		}
