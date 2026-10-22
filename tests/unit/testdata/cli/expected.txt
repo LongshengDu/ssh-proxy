@@ -429,6 +429,111 @@ Examples:
   ssh_proxy_cli start
   ssh_proxy_cli start --foreground
 --- stderr
+=== ssh_proxy_cli start --wait invalid --help
+exit 0
+--- stdout
+Start the proxy in the background
+
+Usage:
+  ssh_proxy_cli start [options]
+
+Options:
+  --foreground        Run in this terminal; Ctrl+C stops the proxy
+  --wait SECONDS      Wait SECONDS for background readiness (default: 20)
+
+Global options:
+  -c, --config PATH   Read configuration from PATH
+                      (default: config.toml beside the executable)
+  -h, --help          Show help
+
+Notes:
+  Background mode requires SSH keys or ssh-agent. Run trust for setup.
+  After --wait expires, the proxy may keep retrying; check status for readiness.
+  --wait accepts 1..3600 seconds and has no effect with --foreground.
+
+Examples:
+  ssh_proxy_cli start
+  ssh_proxy_cli start --foreground
+--- stderr
+=== ssh_proxy_cli trust --log --help
+exit 0
+--- stdout
+Set up SSH login and host-key trust
+
+Usage:
+  ssh_proxy_cli trust [options] [ENDPOINT_NAME]
+
+Options:
+  --log FILE          Append SSH diagnostics to FILE (used by the tray)
+
+Global options:
+  -c, --config PATH   Read configuration from PATH
+                      (default: config.toml beside the executable)
+  -h, --help          Show help
+
+Notes:
+  Without an endpoint, try SSH aliases in file order until one succeeds.
+  Verify host fingerprints before accepting. Already working logins exit 0.
+
+Examples:
+  ssh_proxy_cli trust
+  ssh_proxy_cli trust my-proxy
+--- stderr
+=== ssh_proxy_cli logs --bogus -h
+exit 0
+--- stdout
+Show or follow proxy logs
+
+Usage:
+  ssh_proxy_cli logs [options]
+
+Options:
+  -f, --follow        Follow new log lines
+  --lines N           Show the last N lines (default: 60)
+
+Global options:
+  -c, --config PATH   Read configuration from PATH
+                      (default: config.toml beside the executable)
+  -h, --help          Show help
+
+Notes:
+  --lines accepts 1..10000. Output is plain text.
+
+Examples:
+  ssh_proxy_cli logs
+  ssh_proxy_cli logs --follow
+--- stderr
+=== ssh_proxy_cli bogus --help
+exit 1
+--- stdout
+--- stderr
+Error: unknown help topic "bogus"; use --help
+=== ssh_proxy_cli service bogus --help
+exit 1
+--- stdout
+--- stderr
+Error: unknown help topic "service bogus"; use --help
+=== ssh_proxy_cli _run --help
+exit 1
+--- stdout
+--- stderr
+Error: unknown help topic "_run"; use --help
+=== ssh_proxy_cli stop extra --help
+exit 0
+--- stdout
+Stop the proxy and its SSH tunnel
+
+Usage:
+  ssh_proxy_cli stop [options]
+
+Global options:
+  -c, --config PATH   Read configuration from PATH
+                      (default: config.toml beside the executable)
+  -h, --help          Show help
+
+Examples:
+  ssh_proxy_cli stop
+--- stderr
 === ssh_proxy_cli service
 exit 0
 --- stdout

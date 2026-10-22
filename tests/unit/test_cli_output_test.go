@@ -21,6 +21,9 @@ var cliOutputCases = [][]string{
 	{"start", "--help"}, {"restart", "-h"}, {"stop", "--help"}, {"status", "--help"},
 	{"trust", "--help"}, {"logs", "--help"}, {"test", "--help"}, {"check", "--help"},
 	{"start", "--wait", "0", "--help"},
+	// Help wins over invalid options and arguments; unknown topics are errors.
+	{"start", "--wait", "invalid", "--help"}, {"trust", "--log", "--help"}, {"logs", "--bogus", "-h"},
+	{"bogus", "--help"}, {"service", "bogus", "--help"}, {"_run", "--help"}, {"stop", "extra", "--help"},
 	{"service"}, {"service", "-h"}, {"service", "--help"},
 	{"service", "install", "--help"}, {"service", "uninstall", "--help"}, {"service", "status", "--help"},
 	{"service", "enable", "--help"}, {"service", "disable", "-h"},
