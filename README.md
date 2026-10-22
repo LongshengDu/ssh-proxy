@@ -22,7 +22,7 @@ Both listeners run locally. The server needs SSH access with TCP forwarding enab
 
 The two listeners require distinct ports and numeric loopback addresses. A shared HTTP/SOCKS port would need a protocol-dispatching listener; this implementation has no mixed-port mode. It provides TCP proxying, not a VPN or system-wide traffic interception.
 
-The tray invokes the CLI for validation, trust, lifecycle and status. Lifecycle/status commands communicate with the running supervisor through an authenticated loopback API. Closing the tray does not stop the supervisor or its SSH child.
+The tray invokes the CLI for validation, trust and lifecycle, and reads status in-process from the running supervisor's authenticated loopback API, the same API the CLI uses. Closing the tray does not stop the supervisor or its SSH child.
 
 | Responsibility | Implementation |
 | --- | --- |
@@ -119,7 +119,7 @@ Each tray or proxy run creates one continuous file under `logs/`: `tray_<id>_...
 
 There is no `--json` switch or plain `help`/`version` command. Help returns before reading configuration or accessing services. `src/cli/help.go` shares flag/default definitions with runtime parsing and renders aligned, plain-text help within 80 columns.
 
-The tray has no network supervisor of its own. It polls CLI JSON about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, configs, logs/location and Exit.
+The tray has no network supervisor of its own. `src/ui/controller.go` holds its state: it reads status about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, configs, logs/location and Exit.
 
 At launch, `check` identifies invalid configuration. Missing/invalid SSH configuration opens for editing once per tray run. Other failures use a native error dialog and the current tray log; repeated identical polling errors are suppressed until recovery. File actions use OS associations.
 
