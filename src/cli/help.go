@@ -10,7 +10,7 @@ import (
 )
 
 type cliOptions struct {
-	foreground, follow, batch bool
+	foreground, follow, check bool
 	wait, lines               int
 	url, log                  string
 }
@@ -32,7 +32,7 @@ func commandFlags(name string) (*flag.FlagSet, *cliOptions) {
 	case "test":
 		f.StringVar(&o.url, "url", "https://example.com/", "Fetch `URL`")
 	case "trust":
-		f.BoolVar(&o.batch, "batch", false, "Check unattended login only: no prompts or new host keys")
+		f.BoolVar(&o.check, "check", false, "Check unattended login only: no prompts or new host keys")
 		f.StringVar(&o.log, "log", "", "Append SSH diagnostics to `FILE` (used by the tray)")
 	}
 	return f, o
@@ -49,7 +49,7 @@ var commandDocs = []commandDoc{
 	{"restart", "Restart with the current configuration", "[options]", startNotes, "restart\nrestart --wait 30"},
 	{"stop", "Stop the proxy and its SSH tunnel", "[options]", "", "stop"},
 	{"status", "Show endpoint and health as JSON", "[options]", "", "status"},
-	{"trust", "Set up SSH login and host-key trust", "[options] [ENDPOINT_NAME]", "Without an endpoint, try SSH aliases in file order until one succeeds.\nVerify host fingerprints before accepting. Already working logins exit 0.\n--batch fails instead of prompting; the tray runs it before each start.", "trust\ntrust my-proxy"},
+	{"trust", "Set up SSH login and host-key trust", "[options] [ENDPOINT_NAME]", "Without an endpoint, try SSH aliases in file order until one succeeds.\nVerify host fingerprints before accepting. Already working logins exit 0.\n--check fails instead of prompting; the tray runs it before each start.", "trust\ntrust my-proxy"},
 	{"logs", "Show or follow proxy logs", "[options]", "--lines accepts 1..10000. Output is plain text.", "logs\nlogs --follow"},
 	{"test", "Test HTTP and SOCKS5 forwarding", "[options]", "The proxy must be running. A failed check returns a nonzero exit code.", "test\ntest --url https://example.com/"},
 	{"check", "Validate configuration as JSON", "[options]", "Inspect the valid field in the JSON report to determine validity.", "check\n-c ./config.toml check"},

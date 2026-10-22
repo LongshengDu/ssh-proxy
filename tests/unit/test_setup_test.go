@@ -63,10 +63,10 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 	t.Setenv("SSH_PROXY_TEST_DIAGNOSTIC", "fixture SSH refused login")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "second")
 	// The tray's silent check uses the same ordered endpoints without prompting.
-	if err := cli.Run([]string{"trust", "--batch", "--config", configPath}); err != nil {
+	if err := cli.Run([]string{"trust", "--check", "--config", configPath}); err != nil {
 		t.Fatal("silent check must succeed through the second endpoint", err)
 	}
-	if err := cli.Run([]string{"trust", "--batch", "first", "--config", configPath}); err == nil {
+	if err := cli.Run([]string{"trust", "--check", "first", "--config", configPath}); err == nil {
 		t.Fatal("failed silent check returned success")
 	}
 	log := filepath.Join(t.TempDir(), "trust.txt")

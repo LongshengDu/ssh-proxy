@@ -91,11 +91,11 @@ func RunProcess() bool {
 			}{os.Args[1:], term.IsTerminal(int(os.Stdin.Fd())), term.IsTerminal(int(os.Stdout.Fd())), os.Getpid()})
 			file.Close()
 			// The silent check passes after an interactive setup exited 0, unless
-			// SSH_PROXY_TEST_BATCH is "never" (password-only login) or "always".
+			// SSH_PROXY_TEST_CHECK is "never" (password-only login) or "always".
 			trusted := os.Getenv("SSH_PROXY_TEST_RECORD") + ".trusted"
-			if os.Args[1] == "trust" && slices.Contains(os.Args, "--batch") {
+			if os.Args[1] == "trust" && slices.Contains(os.Args, "--check") {
 				_, err := os.Stat(trusted)
-				switch mode := os.Getenv("SSH_PROXY_TEST_BATCH"); {
+				switch mode := os.Getenv("SSH_PROXY_TEST_CHECK"); {
 				case mode == "always", mode != "never" && err == nil:
 					os.Exit(0)
 				}

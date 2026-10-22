@@ -222,7 +222,7 @@ func (b cliBackend) Check(ctx context.Context) (config.ConfigCheck, error) {
 	return result, err
 }
 func (b cliBackend) CheckLogin(ctx context.Context) error {
-	_, err := commandBackend(ctx, b.paths, b.exe, "trust", "--batch")
+	_, err := commandBackend(ctx, b.paths, b.exe, "trust", "--check")
 	return err
 }
 func (b cliBackend) Trust(ctx context.Context) error {

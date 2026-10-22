@@ -278,14 +278,14 @@ func Run(args []string) error {
 				continue
 			}
 			mode := config.SSHTrust
-			if options.batch {
+			if options.check {
 				mode = config.SSHCheck
 				fmt.Fprintf(output, "Checking unattended SSH login for %s.\n", e)
 			} else {
 				fmt.Fprintf(output, "SSH login for %s. Verify any host fingerprint before accepting.\n", e)
 			}
 			cmd := config.SSHCommand(c, e, mode)
-			if !options.batch {
+			if !options.check {
 				cmd.Stdin = os.Stdin
 			}
 			cmd.Stdout = os.Stdout

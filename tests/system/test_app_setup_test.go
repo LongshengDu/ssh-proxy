@@ -77,7 +77,7 @@ func TestTrayLoginLaunch(t *testing.T) {
 // opens the interactive setup terminal, and a successful setup is checked again.
 func TestTrayInteractiveTerminal(t *testing.T) {
 	testutil.NativeDesktop(t)
-	for _, tc := range []struct{ name, trustExit, batch, dialog string }{
+	for _, tc := range []struct{ name, trustExit, check, dialog string }{
 		{"already-trusted", "0", "always", ""},
 		{"setup-ok", "0", "", ""},
 		{"setup-failed", "7", "", "code 7"},
@@ -99,7 +99,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 			}
 			configPath, record, gate := filepath.Join(dir, "literal ' config.txt"), filepath.Join(dir, "commands.jsonl"), filepath.Join(dir, "release-trust")
 			settings := map[string]string{"SSH_PROXY_TEST_PROCESS": "cli", "SSH_PROXY_TEST_RECORD": record, "SSH_PROXY_TEST_GATE": gate,
-				"SSH_PROXY_TEST_TRUST_EXIT": tc.trustExit, "SSH_PROXY_TEST_BATCH": tc.batch}
+				"SSH_PROXY_TEST_TRUST_EXIT": tc.trustExit, "SSH_PROXY_TEST_CHECK": tc.check}
 			data, _ = json.Marshal(settings)
 			testutil.WriteFile(t, filepath.Join(dir, "fixture.json"), string(data))
 			t.Cleanup(func() { os.WriteFile(gate, nil, 0600) })
@@ -117,7 +117,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 					switch {
 					case entry.Args[0] == "start":
 						started = true
-					case slices.Contains(entry.Args, "--batch"):
+					case slices.Contains(entry.Args, "--check"):
 						silent++
 						if entry.Terminal {
 							t.Fatalf("silent login check had a terminal: %+v", entry)
@@ -135,7 +135,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 			})
 			testutil.NativeClick(t, pid, "Start proxy")
-			if tc.batch == "always" {
+			if tc.check == "always" {
 				testutil.WaitFor(t, func() bool { _, _, started := commands(); return started })
 				if silent, setup, _ := commands(); silent != 1 || setup != nil {
 					t.Fatalf("working unattended login must start without a terminal: %d checks, setup %+v", silent, setup)
