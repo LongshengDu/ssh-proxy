@@ -1,0 +1,8 @@
+.tmp/
+.cache/
+.vscode/
+.build-tools/
+
+__pycache__/
+
+build/

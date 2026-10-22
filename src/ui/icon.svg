@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
+  <title>SSH Proxy</title>
+  <desc>Two network endpoints connect through a central proxy relay inside a uniform-width NVIDIA-green triangle.</desc>
+  <!-- One continuous stroke gives all three sides exactly the same width. -->
+  <path d="M32 6.5 60 55H4Z" fill="#142408" stroke="#76B900"
+        stroke-width="4" stroke-linejoin="round"/>
+  <!-- Client and destination connect only through the central proxy relay. -->
+  <path d="M18 46.5 32 27 46 46.5" fill="none" stroke="#F1FFD9"
+        stroke-width="4.2" stroke-linejoin="round"/>
+  <circle cx="18" cy="46.5" r="4.5" fill="#F1FFD9"/>
+  <circle cx="46" cy="46.5" r="4.5" fill="#F1FFD9"/>
+  <path d="M32 17 39.8 27 32 37 24.2 27Z" fill="#A6E22E" stroke="#142408" stroke-width="1.8"/>
+</svg>

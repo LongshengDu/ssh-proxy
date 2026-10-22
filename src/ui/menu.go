@@ -1,0 +1,83 @@
+//go:build windows || darwin
+
+package ui
+
+import (
+	"ssh_proxy/src/proxy"
+	"strings"
+)
+
+const (
+	ToggleProxy = 1 + iota
+	ToggleStartup
+	OpenLog
+	OpenConfig
+	OpenSSHConfig
+	OpenLocation
+	Quit
+	StatusLabel
+	SSHLabel
+	SOCKSLabel
+	HTTPLabel
+	ScriptBase
+)
+
+type Item struct {
+	ID                           int
+	Label                        string
+	Checked, Disabled, Separator bool
+}
+
+// Menu is a snapshot of backend state, never a separate tray-owned proxy state.
+func Menu(st proxy.Status, startup, startupKnown, busy bool, scripts ...Script) []Item {
+	if st.Phase == "" {
+		st.Phase = "checking"
+	}
+	label := "○ " + strings.ToUpper(st.Phase[:1]) + st.Phase[1:]
+	if st.Phase == "running" {
+		label = "● Running"
+	}
+	if busy {
+		label += " — working…"
+	}
+	value := func(s string) string {
+		if s == "" {
+			return "—"
+		}
+		return s
+	}
+	ssh := value(st.Destination)
+	if st.Endpoint != "" {
+		ssh += " (" + st.Endpoint + ")"
+	}
+	control := "Start proxy"
+	if st.PID != 0 {
+		control = "Stop proxy"
+	}
+	items := []Item{
+		{ID: StatusLabel, Label: label, Disabled: true},
+		{ID: SSHLabel, Label: "SSH: " + ssh, Disabled: true},
+		{ID: SOCKSLabel, Label: "SOCKS5: " + value(st.SOCKS), Disabled: true},
+		{ID: HTTPLabel, Label: "HTTP: " + value(st.HTTP), Disabled: true},
+		{Separator: true},
+		{ID: ToggleProxy, Label: control, Disabled: busy || st.Phase == "checking" || st.Phase == "error"},
+		{Separator: true},
+	}
+	for i, script := range scripts {
+		items = append(items, Item{ID: ScriptBase + i, Label: "Run: " + script.Name, Disabled: busy || st.Phase != "running"})
+	}
+	if len(scripts) != 0 {
+		items = append(items, Item{Separator: true})
+	}
+	return append(items, []Item{
+		{ID: ToggleStartup, Label: "Launch App at Login", Checked: startup, Disabled: busy || !startupKnown},
+		{Separator: true},
+		{ID: OpenSSHConfig, Label: "Open SSH Config"},
+		{ID: OpenConfig, Label: "Open App Config"},
+		{Separator: true},
+		{ID: OpenLog, Label: "Open Current Log"},
+		{ID: OpenLocation, Label: "Open Installed Location"},
+		{Separator: true},
+		{ID: Quit, Label: "Exit app (proxy keeps running)"},
+	}...)
+}

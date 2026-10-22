@@ -1,0 +1,32 @@
+# 连接列表及顺序来自 ssh_config 中的 Host；主机信任使用 OpenSSH 默认设置。
+# Host declarations in ssh_config define connection order. OpenSSH manages host trust.
+
+[proxy]
+bind = "127.0.0.1"
+socks_port = 1081
+http_port = 8181
+
+[ssh]
+executable = "ssh"
+config_file = "ssh_config"
+# Shared SSH behavior; file paths are relative to this config.toml.
+connect_timeout_seconds = 10
+connection_attempts = 1
+server_alive_interval_seconds = 15
+server_alive_count_max = 3
+ready_timeout_seconds = 25
+retry_delay_seconds = 5
+
+[health]
+targets = ["example.com:443", "www.microsoft.com:443"]
+failover_on_probe_failure = false
+interval_seconds = 30
+timeout_seconds = 8
+failures_before_failover = 3
+
+# 每次运行写入一个连续日志文件，位于 logs/；错误追加到同一个文件。
+# Each process run writes one continuous file in logs/; errors append to it.
+[logging]
+# 每类分别保留的最新日志数量，包含当前日志。
+# Keep this many recent files per kind (tray / proxy), including the current run.
+max_log_files = 10

@@ -1,0 +1,3 @@
+# Build and test runners otherwise use only the Python standard library.
+# Provides Apple's supported Accessibility permission request API on macOS.
+pyobjc-framework-ApplicationServices>=11,<13; sys_platform == "darwin"
