@@ -5,12 +5,48 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
 	"ssh_proxy/src/proxy"
 	"ssh_proxy/tests/helpers"
 )
+
+func TestSSHConfigPathWithoutValidation(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "path with spaces")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	absolute := filepath.Join(t.TempDir(), "absolute_ssh_config")
+	for _, tc := range []struct{ value, want string }{
+		{"ssh_config", filepath.Join(dir, "ssh_config")},
+		{"nested/../hosts", filepath.Join(dir, "hosts")},
+		{"~/.ssh/proxy_config", filepath.Join(home, ".ssh", "proxy_config")},
+		{filepath.ToSlash(absolute), absolute},
+	} {
+		// The rest of the file is invalid on purpose; only the SSH path matters.
+		text := "[proxy]\nhttp_port = 0\n[ssh]\nexecutable = \"missing-ssh\"\nconfig_file = " + strconv.Quote(tc.value) + "\n"
+		config := filepath.Join(dir, "config.toml")
+		if err := os.WriteFile(config, []byte(text), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := proxy.SSHConfigPath(config); err != nil || got != tc.want {
+			t.Fatalf("%s: got %q, %v; want %q", tc.value, got, err, tc.want)
+		}
+	}
+	config := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(config, []byte("[ssh]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := proxy.SSHConfigPath(config); err == nil || !strings.Contains(err.Error(), "ssh.config_file") {
+		t.Fatal("missing ssh.config_file accepted", err)
+	}
+}
 
 func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 	path, sshPath := testutil.Config(t, "")

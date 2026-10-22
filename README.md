@@ -180,7 +180,7 @@ All six OS/architecture combinations are supported build targets. The CLI is inc
 
 Development builds preserve existing public-default files—including TOML, SSH config, scripts and README—and add missing ones. Binaries/resources, notices, build information and hashes refresh. Close programs using the target executables before replacing them, or use another target directory. Inspect edited documentation/scripts in source; rebuilding does not overwrite their existing development copies.
 
-Releases replace packaged files with public defaults and produce a ZIP from an explicit payload plus an empty `logs/`. Private development settings are never the release source. Existing unrelated destination files/logs are left on disk but excluded from the ZIP. Payload metadata includes `.version`, `BUILDINFO.txt`, `THIRD_PARTY_NOTICES.txt` and `SHA256SUMS`. Extraction changes no system proxy, PATH, startup or service settings.
+Releases replace packaged files with public defaults and produce a ZIP from an explicit payload plus an empty `logs/`. Private development settings are never the release source. Existing unrelated destination files/logs are left on disk but excluded from the ZIP. Payload metadata includes `.version`, `BUILDINFO.txt`, `THIRD_PARTY_NOTICES.txt` and `SHA256SUMS`. The notices cover only the modules linked into that target's binaries, as listed by `go version -m` (the same data as `BUILDINFO.txt`), not test or tool dependencies. Extraction changes no system proxy, PATH, startup or service settings.
 
 The root [.version](.version) is the sole version source. The builder injects it into binaries and bundle metadata and never increments it. Change it only when requested. Build caches/temp files live in `build/`; downloaded tools live in `.build-tools/`.
 
@@ -226,7 +226,7 @@ Each system run writes `output.txt`, `events.jsonl` and `summary.json` under `bu
 
 Keep the developer guide here and the Chinese-first/English user guide in `src/packaging/defaults/README.md`. Update both language sections for user-visible changes. Keep CLI flag descriptions/defaults in `help.go` synchronized with behavior and retain structured JSON contracts for the tray. Do not add chat history, changing verification dates or a second version value to the READMEs.
 
-`src/ui/icon.svg` is the canonical artwork; keep a matching PNG and macOS ICNS. Preserve `icon.bak.svg`. The tray embeds the PNG; the Windows builder embeds it into the executable through pure-Go `go-winres` using `src/packaging/windows-icon.json`. Apply resources before hashes/signing. Optional asset regeneration tools:
+`src/ui/icon.svg` is the canonical artwork; keep a matching PNG and macOS ICNS. Preserve `icon.bak.svg`. The tray embeds the PNG; the Windows builder embeds it into the executable through pure-Go `go-winres` (pinned as a go.mod tool and run with `go tool go-winres`) using `src/packaging/windows-icon.json`. Apply resources before hashes/signing. Optional asset regeneration tools:
 
 ```sh
 uv run --with resvg-py==0.5.0 python -c "from pathlib import Path; import resvg_py; p=Path('src/ui/icon.svg'); p.with_suffix('.png').write_bytes(resvg_py.svg_to_bytes(svg_path=str(p), skip_system_fonts=True))"

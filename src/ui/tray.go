@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/gogpu/systray"
 	"ssh_proxy/src/proxy"
 )
@@ -273,24 +272,9 @@ func perform(ctx context.Context, p proxy.Paths, backend string, id int, active,
 	case OpenConfig:
 		return openPath(p.Config)
 	case OpenSSHConfig:
-		// Only decode the path: editing must work even if SSH is unavailable.
-		var c proxy.Config
-		if _, err := toml.DecodeFile(p.Config, &c); err != nil {
+		path, err := proxy.SSHConfigPath(p.Config)
+		if err != nil {
 			return err
-		}
-		path := c.SSH.ConfigFile
-		if path == "" {
-			return fmt.Errorf("ssh.config_file is missing in config.toml")
-		}
-		if strings.HasPrefix(path, "~/") || strings.HasPrefix(path, "~\\") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return err
-			}
-			path = filepath.Join(home, path[2:])
-		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(filepath.Dir(p.Config), path)
 		}
 		return openEditable(path)
 	case OpenLocation:

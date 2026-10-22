@@ -32,7 +32,6 @@ COMMON = (*PUBLIC, ".version", "THIRD_PARTY_NOTICES.txt", "BUILDINFO.txt")
 MAC_APP = "ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app"
 MAC_PLIST = "ssh_proxy_app.app/Contents/Info.plist"
 MAC_ICON = "ssh_proxy_app.app/Contents/Resources/icon.icns"
-WINRES = "github.com/tc-hib/go-winres@v0.3.3"
 
 
 def run(args, env=None, capture=False):
@@ -208,16 +207,27 @@ def compile_apps(go, env, target, output):
         if windows and gui:
             # Pure-Go resource tool runs on the build host, also for cross-builds.
             # Patch only the staged unsigned executable; no generated objects in src/.
-            run([go, "run", WINRES, "patch", "--no-backup", "--in", SRC / "packaging" / "windows-icon.json", path], environment(host_target()))
+            run([go, "tool", "go-winres", "patch", "--no-backup", "--in", SRC / "packaging" / "windows-icon.json", path], environment(host_target()))
         path.chmod(0o755)
     return [job[1] for job in jobs]
 
 
-def notices(go, env):
+def linked_modules(build_info):
+    """Module paths linked into the binaries, read from `go version -m` output."""
+    modules = set()
+    for text in build_info:
+        for fields in (line.split() for line in text.splitlines()):
+            if fields[:1] in (["dep"], ["=>"]) and len(fields) > 1:
+                modules.add(fields[1])
+    return modules
+
+
+def notices(go, env, modules):
+    """Licenses of the linked modules only, not test or tool dependencies."""
     texts = ["Third-party software bundled with SSH Proxy. Native OpenSSH is supplied by the OS, not bundled."]
     for line in run([go, "list", "-m", "-f", "{{if .Dir}}{{.Path}}|{{.Version}}|{{.Dir}}{{end}}", "all"], env, capture=True).splitlines():
         module, revision, directory = line.split("|", 2)
-        if module == "ssh_proxy":
+        if module not in modules:
             continue
         licenses = sorted(path for path in Path(directory).iterdir() if path.is_file() and re.match(r"^(LICENSE|COPYING|NOTICE)", path.name, re.I))
         if not licenses:
@@ -266,8 +276,9 @@ def build_target(go, env, target, target_dir, release=False):
                 (staging / name).chmod(0o755)
         (staging / "logs").mkdir()
         (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8")
-        (staging / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env), encoding="utf-8")
-        metadata = "\n".join(run([go, "version", "-m", path], env, capture=True).replace(str(path), path.name) for path in binaries)
+        build_info = {path: run([go, "version", "-m", path], env, capture=True) for path in binaries}
+        (staging / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8")
+        metadata = "\n".join(text.replace(str(path), path.name) for path, text in build_info.items())
         (staging / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8")
         (staging / "SHA256SUMS").write_text("".join(f"{digest(staging / name)}  {name}\n" for name in payload_names(target)), encoding="utf-8")
         # Defaults are installed only when absent; binaries/metadata always refresh.

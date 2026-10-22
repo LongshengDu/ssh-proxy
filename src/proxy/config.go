@@ -143,6 +143,23 @@ func resolvePath(base, name string) string {
 	return filepath.Clean(name)
 }
 
+// SSHConfigPath resolves ssh.config_file without validating anything else or
+// running ssh, so the file can be opened for editing while setup is incomplete.
+func SSHConfigPath(configPath string) (string, error) {
+	path, err := filepath.Abs(configPath)
+	if err != nil {
+		return "", err
+	}
+	var c Config
+	if _, err := toml.DecodeFile(path, &c); err != nil {
+		return "", err
+	}
+	if c.SSH.ConfigFile == "" {
+		return "", fmt.Errorf("ssh.config_file is missing in config.toml")
+	}
+	return resolvePath(filepath.Dir(path), c.SSH.ConfigFile), nil
+}
+
 // LoadConfig validates TOML and resolves aliases through the native ssh -G -F.
 func LoadConfig(path string) (config *Config, loadErr error) {
 	path, err := filepath.Abs(path)
