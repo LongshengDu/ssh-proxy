@@ -106,7 +106,7 @@ func writeHelp(out io.Writer, name string, flags *flag.FlagSet) error {
 					options = "[--foreground] [--wait SECONDS]"
 					summary = "Foreground; wait defaults to " + f.Lookup("wait").DefValue + "s"
 				case "trust":
-					options, summary = "[--log FILE] [ENDPOINT_NAME]", "Append diagnostics; select an endpoint"
+					options, summary = "[--check] [--log FILE] [ENDPOINT_NAME]", "Check only; log; select an endpoint"
 				case "logs":
 					options = "[--follow|-f] [--lines N]"
 					summary = "Follow; last " + f.Lookup("lines").DefValue + " lines by default"
@@ -114,7 +114,7 @@ func writeHelp(out io.Writer, name string, flags *flag.FlagSet) error {
 					options, summary = "[--url URL]", "Default: "+f.Lookup("url").DefValue
 				}
 				if options != "" {
-					fmt.Fprintf(w, "    %-31s  %s\n", options, summary)
+					fmt.Fprintf(w, "    %-38s  %s\n", options, summary)
 				}
 			} else if name == "service" && strings.HasPrefix(item.name, "service ") {
 				fmt.Fprintf(w, "  %s\t%s\n", strings.TrimPrefix(item.name, "service "), item.summary)

@@ -8,18 +8,18 @@ Usage:
 
 Commands:
   start               Start the proxy in the background
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   restart             Restart with the current configuration
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   stop                Stop the proxy and its SSH tunnel
   status              Show endpoint and health as JSON
 
   trust               Set up SSH login and host-key trust
-    [--log FILE] [ENDPOINT_NAME]     Append diagnostics; select an endpoint
+    [--check] [--log FILE] [ENDPOINT_NAME]  Check only; log; select an endpoint
   logs                Show or follow proxy logs
-    [--follow|-f] [--lines N]        Follow; last 60 lines by default
+    [--follow|-f] [--lines N]               Follow; last 60 lines by default
   test                Test HTTP and SOCKS5 forwarding
-    [--url URL]                      Default: https://example.com/
+    [--url URL]                             Default: https://example.com/
   check               Validate configuration as JSON
 
   Use "ssh_proxy_cli <command> --help" for details and examples.
@@ -54,18 +54,18 @@ Usage:
 
 Commands:
   start               Start the proxy in the background
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   restart             Restart with the current configuration
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   stop                Stop the proxy and its SSH tunnel
   status              Show endpoint and health as JSON
 
   trust               Set up SSH login and host-key trust
-    [--log FILE] [ENDPOINT_NAME]     Append diagnostics; select an endpoint
+    [--check] [--log FILE] [ENDPOINT_NAME]  Check only; log; select an endpoint
   logs                Show or follow proxy logs
-    [--follow|-f] [--lines N]        Follow; last 60 lines by default
+    [--follow|-f] [--lines N]               Follow; last 60 lines by default
   test                Test HTTP and SOCKS5 forwarding
-    [--url URL]                      Default: https://example.com/
+    [--url URL]                             Default: https://example.com/
   check               Validate configuration as JSON
 
   Use "ssh_proxy_cli <command> --help" for details and examples.
@@ -100,18 +100,18 @@ Usage:
 
 Commands:
   start               Start the proxy in the background
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   restart             Restart with the current configuration
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   stop                Stop the proxy and its SSH tunnel
   status              Show endpoint and health as JSON
 
   trust               Set up SSH login and host-key trust
-    [--log FILE] [ENDPOINT_NAME]     Append diagnostics; select an endpoint
+    [--check] [--log FILE] [ENDPOINT_NAME]  Check only; log; select an endpoint
   logs                Show or follow proxy logs
-    [--follow|-f] [--lines N]        Follow; last 60 lines by default
+    [--follow|-f] [--lines N]               Follow; last 60 lines by default
   test                Test HTTP and SOCKS5 forwarding
-    [--url URL]                      Default: https://example.com/
+    [--url URL]                             Default: https://example.com/
   check               Validate configuration as JSON
 
   Use "ssh_proxy_cli <command> --help" for details and examples.
@@ -146,18 +146,18 @@ Usage:
 
 Commands:
   start               Start the proxy in the background
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   restart             Restart with the current configuration
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   stop                Stop the proxy and its SSH tunnel
   status              Show endpoint and health as JSON
 
   trust               Set up SSH login and host-key trust
-    [--log FILE] [ENDPOINT_NAME]     Append diagnostics; select an endpoint
+    [--check] [--log FILE] [ENDPOINT_NAME]  Check only; log; select an endpoint
   logs                Show or follow proxy logs
-    [--follow|-f] [--lines N]        Follow; last 60 lines by default
+    [--follow|-f] [--lines N]               Follow; last 60 lines by default
   test                Test HTTP and SOCKS5 forwarding
-    [--url URL]                      Default: https://example.com/
+    [--url URL]                             Default: https://example.com/
   check               Validate configuration as JSON
 
   Use "ssh_proxy_cli <command> --help" for details and examples.
@@ -192,18 +192,18 @@ Usage:
 
 Commands:
   start               Start the proxy in the background
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   restart             Restart with the current configuration
-    [--foreground] [--wait SECONDS]  Foreground; wait defaults to 20s
+    [--foreground] [--wait SECONDS]         Foreground; wait defaults to 20s
   stop                Stop the proxy and its SSH tunnel
   status              Show endpoint and health as JSON
 
   trust               Set up SSH login and host-key trust
-    [--log FILE] [ENDPOINT_NAME]     Append diagnostics; select an endpoint
+    [--check] [--log FILE] [ENDPOINT_NAME]  Check only; log; select an endpoint
   logs                Show or follow proxy logs
-    [--follow|-f] [--lines N]        Follow; last 60 lines by default
+    [--follow|-f] [--lines N]               Follow; last 60 lines by default
   test                Test HTTP and SOCKS5 forwarding
-    [--url URL]                      Default: https://example.com/
+    [--url URL]                             Default: https://example.com/
   check               Validate configuration as JSON
 
   Use "ssh_proxy_cli <command> --help" for details and examples.

@@ -103,7 +103,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	for _, tc := range []struct{ name, options, summary string }{
 		{"start", "[--foreground] [--wait SECONDS]", "wait defaults to 20s"},
 		{"restart", "[--foreground] [--wait SECONDS]", "wait defaults to 20s"},
-		{"trust", "[--log FILE] [ENDPOINT_NAME]", "Append diagnostics"},
+		{"trust", "[--check] [--log FILE] [ENDPOINT_NAME]", "Check only"},
 		{"logs", "[--follow|-f] [--lines N]", "last 60 lines by default"},
 		{"test", "[--url URL]", "https://example.com/"},
 	} {
