@@ -25,7 +25,8 @@ if (-not $Proxy) { $Proxy = $running }
 # For the backend processes launched by the app
 Set-ProxyEnvironment $Proxy
 
-# Launch the desktop app with its own proxy setting
+# Launch the desktop app with its own proxy setting. -WindowStyle Hidden is
+# intentional for the Codex Store app; Claude.ps1 uses Normal.
 Start-Process -FilePath $AppPath -WindowStyle Hidden -ArgumentList @(
     "--proxy-server=$Proxy",
     "--proxy-bypass-list=localhost;127.0.0.1;[::1]",
