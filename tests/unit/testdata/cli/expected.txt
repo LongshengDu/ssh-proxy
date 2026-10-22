@@ -966,3 +966,28 @@ exit 1
 --- stdout
 --- stderr
 Error: unexpected service runner arguments
+=== ssh_proxy_cli logs -lines 0
+exit 1
+--- stdout
+--- stderr
+Error: lines must be in 1..10000
+=== ssh_proxy_cli start -foreground -wait 0
+exit 1
+--- stdout
+--- stderr
+Error: invalid start arguments
+=== ssh_proxy_cli start --wait=0
+exit 1
+--- stdout
+--- stderr
+Error: invalid start arguments
+=== ssh_proxy_cli logs -f --lines=0
+exit 1
+--- stdout
+--- stderr
+Error: lines must be in 1..10000
+=== ssh_proxy_cli -config other.toml status
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "-config"; use --help

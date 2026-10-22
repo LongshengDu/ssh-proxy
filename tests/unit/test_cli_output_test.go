@@ -38,6 +38,9 @@ var cliOutputCases = [][]string{
 	{"service", "bogus"}, {"service", "status", "extra"},
 	{"service", "install", "--user", "other"}, {"service", "install", "extra"},
 	{"_run", "extra"}, {"_service", "extra"},
+	// Go flag syntax also accepts one dash and = for long options.
+	{"logs", "-lines", "0"}, {"start", "-foreground", "-wait", "0"}, {"start", "--wait=0"}, {"logs", "-f", "--lines=0"},
+	{"-config", "other.toml", "status"},
 }
 
 // runCLI mirrors src/cmd/ssh_proxy_cli/main.go with captured standard streams.
