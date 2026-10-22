@@ -41,7 +41,12 @@ func NativeLoginLaunch(t *testing.T, id, executable, config string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("powershell.exe")
+	// Run the registered command line exactly as Windows does at sign-in.
+	args, err := windows.DecomposeCommandLine(command)
+	if err != nil || len(args) == 0 {
+		t.Fatal("invalid login command", command, err)
+	}
+	cmd := exec.Command(args[0])
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: command, HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)

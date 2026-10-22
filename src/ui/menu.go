@@ -10,6 +10,7 @@ import (
 const (
 	ToggleProxy = 1 + iota
 	ToggleStartup
+	ToggleAutoStart
 	OpenLog
 	OpenConfig
 	OpenSSHConfig
@@ -22,11 +23,8 @@ const (
 	ScriptBase
 )
 
-// Tray-only phases: before the first status poll, and when polling fails.
-const (
-	phaseChecking control.Phase = "checking"
-	phaseError    control.Phase = "error"
-)
+// phaseChecking is the tray-only phase before the first status read.
+const phaseChecking control.Phase = "checking"
 
 type Item struct {
 	ID                           int
@@ -34,8 +32,18 @@ type Item struct {
 	Checked, Disabled, Separator bool
 }
 
+// MenuState is everything the menu shows. Known is false when a setting
+// cannot be read, which disables its checkbox.
+type MenuState struct {
+	Status                    control.Status
+	Startup, StartupKnown     bool // Launch App at Login.
+	AutoStart, AutoStartKnown bool // app.start_proxy_on_launch in config.toml.
+	Busy                      bool
+}
+
 // Menu is a snapshot of backend state, never a separate tray-owned proxy state.
-func Menu(st control.Status, startup, startupKnown, busy bool, scripts ...Script) []Item {
+func Menu(s MenuState, scripts ...Script) []Item {
+	st, busy := s.Status, s.Busy
 	if st.Phase == "" {
 		st.Phase = phaseChecking
 	}
@@ -66,7 +74,7 @@ func Menu(st control.Status, startup, startupKnown, busy bool, scripts ...Script
 		{ID: SOCKSLabel, Label: "SOCKS5: " + value(st.SOCKS), Disabled: true},
 		{ID: HTTPLabel, Label: "HTTP: " + value(st.HTTP), Disabled: true},
 		{Separator: true},
-		{ID: ToggleProxy, Label: toggle, Disabled: busy || st.Phase == phaseChecking || st.Phase == phaseError},
+		{ID: ToggleProxy, Label: toggle, Disabled: busy || st.Phase == phaseChecking},
 		{Separator: true},
 	}
 	for i, script := range scripts {
@@ -76,7 +84,8 @@ func Menu(st control.Status, startup, startupKnown, busy bool, scripts ...Script
 		items = append(items, Item{Separator: true})
 	}
 	return append(items, []Item{
-		{ID: ToggleStartup, Label: "Launch App at Login", Checked: startup, Disabled: busy || !startupKnown},
+		{ID: ToggleStartup, Label: "Launch App at Login", Checked: s.Startup, Disabled: busy || !s.StartupKnown},
+		{ID: ToggleAutoStart, Label: "Start Proxy When App Launches", Checked: s.AutoStart, Disabled: busy || !s.AutoStartKnown},
 		{Separator: true},
 		{ID: OpenSSHConfig, Label: "Open SSH Config"},
 		{ID: OpenConfig, Label: "Open App Config"},

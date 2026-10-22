@@ -90,6 +90,18 @@ func RunProcess() bool {
 				PID                      int
 			}{os.Args[1:], term.IsTerminal(int(os.Stdin.Fd())), term.IsTerminal(int(os.Stdout.Fd())), os.Getpid()})
 			file.Close()
+			// The silent check passes after an interactive setup exited 0, unless
+			// SSH_PROXY_TEST_BATCH is "never" (password-only login) or "always".
+			trusted := os.Getenv("SSH_PROXY_TEST_RECORD") + ".trusted"
+			if os.Args[1] == "trust" && slices.Contains(os.Args, "--batch") {
+				_, err := os.Stat(trusted)
+				switch mode := os.Getenv("SSH_PROXY_TEST_BATCH"); {
+				case mode == "always", mode != "never" && err == nil:
+					os.Exit(0)
+				}
+				fmt.Fprintln(os.Stderr, "fixture: Permission denied (publickey)")
+				os.Exit(255)
+			}
 			if os.Args[1] == "trust" {
 				if gate := os.Getenv("SSH_PROXY_TEST_GATE"); gate != "" {
 					deadline := time.Now().Add(90 * time.Second)
@@ -101,6 +113,9 @@ func RunProcess() bool {
 					}
 				}
 				code, _ := strconv.Atoi(os.Getenv("SSH_PROXY_TEST_TRUST_EXIT"))
+				if code == 0 {
+					os.WriteFile(trusted, nil, 0600)
+				}
 				os.Exit(code)
 			}
 		}

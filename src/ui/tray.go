@@ -48,7 +48,7 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 	view := &menuView{tray: tray, items: map[int]*systray.MenuItem{}, shown: map[int]Item{}}
 	menu := systray.NewMenu()
 	actions := make(chan int, 1)
-	for _, item := range Menu(control.Status{Phase: phaseChecking}, false, false, false, scripts...) {
+	for _, item := range Menu(MenuState{Status: control.Status{Phase: phaseChecking}}, scripts...) {
 		if item.Separator {
 			menu.AddSeparator()
 			continue
@@ -63,7 +63,7 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 			default:
 			}
 		}
-		if item.ID == ToggleStartup {
+		if item.ID == ToggleStartup || item.ID == ToggleAutoStart {
 			view.items[item.ID] = menu.AddCheckbox(item.Label, item.Checked, click)
 		} else {
 			view.items[item.ID] = menu.Add(item.Label, click)
@@ -102,8 +102,16 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 			err error
 		}
 		completed := make(chan result, 1)
-		controller.CheckConfig(ctx)
-		controller.Refresh(ctx)
+		start := func(id int, job func() error) {
+			worker.Add(1)
+			go func() {
+				defer worker.Done()
+				completed <- result{id, job()}
+			}()
+		}
+		if job := controller.Launch(ctx); job != nil {
+			start(ToggleProxy, job)
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -120,11 +128,7 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 					return
 				}
 				if job := controller.Handle(ctx, id); job != nil {
-					worker.Add(1)
-					go func() {
-						defer worker.Done()
-						completed <- result{id, job()}
-					}()
+					start(id, job)
 				}
 			}
 			controller.Refresh(ctx)
@@ -216,6 +220,10 @@ func (b cliBackend) Check(ctx context.Context) (config.ConfigCheck, error) {
 	}
 	return result, err
 }
+func (b cliBackend) CheckLogin(ctx context.Context) error {
+	_, err := commandBackend(ctx, b.paths, b.exe, "trust", "--batch")
+	return err
+}
 func (b cliBackend) Trust(ctx context.Context) error {
 	return RunTrustTerminal(ctx, b.exe, b.paths.Config, b.paths.Log)
 }
@@ -226,6 +234,11 @@ func (b cliBackend) Start(ctx context.Context) error {
 func (b cliBackend) Stop(ctx context.Context) error {
 	_, err := commandBackend(ctx, b.paths, b.exe, "stop")
 	return err
+}
+
+func (b cliBackend) AutoStart() (bool, error) { return config.StartProxyOnLaunch(b.paths.Config) }
+func (b cliBackend) SetAutoStart(enabled bool) error {
+	return config.SetStartProxyOnLaunch(b.paths.Config, enabled)
 }
 
 func commandBackend(parent context.Context, p config.Paths, backend string, args ...string) ([]byte, error) {

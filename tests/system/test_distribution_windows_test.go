@@ -100,7 +100,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		if running {
 			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
 		}
-		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app (proxy keeps running)"}
+		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app (proxy keeps running)"}
 		if len(items) != len(want) {
 			t.Fatalf("menu has %d items: %+v", len(items), items)
 		}
@@ -128,6 +128,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 		if byLabel["Launch App at Login"].Checked != wantStartup {
 			t.Fatal("startup checkbox out of sync")
 		}
+		if byLabel["Start Proxy When App Launches"].Checked {
+			t.Fatal("the public default must not start the proxy at app launch")
+		}
 	}
 	menuState(false, false)
 	t.Cleanup(func() {
@@ -152,8 +155,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 	}
 	command, _, err := key.GetStringValue("SSHProxy-" + p.ID)
 	key.Close()
-	if err != nil || len(command) > 260 || !strings.Contains(command, "-WindowStyle Hidden") || !strings.Contains(command, "$sshProxy.Executable --config $sshProxy.Config") {
-		t.Fatalf("invalid tray login command: %v: %s", err, command)
+	// The default config needs no argument; Windows lists the app itself, not PowerShell.
+	if want := windows.ComposeCommandLine([]string{filepath.Join(dir, "ssh_proxy_app.exe")}); err != nil || command != want {
+		t.Fatalf("invalid tray login command: %v: %s; want %s", err, command, want)
 	}
 	time.Sleep(2300 * time.Millisecond)
 	menuState(true, false)

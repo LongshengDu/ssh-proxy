@@ -81,7 +81,7 @@ The complete public settings are in [config.toml](src/packaging/defaults/config.
 
 Managed tunnels use native `ssh -F <file> -N -D <address> <alias>` with enforced command-line policy: batch authentication, strict host-key checking, no TTY/agent forwarding, no SSH backgrounding or connection multiplexing, and failure on forwarding errors. Shared connect/keepalive settings come from TOML. `ssh -G` supplies effective host/user/port and checks `DynamicForward`: a single matching forward is reused; conflicting/multiple dynamic forwards and `ClearAllForwardings yes` are rejected. The application does not replace OpenSSH's trust files.
 
-`trust [ENDPOINT_NAME]` enables interactive authentication and host confirmation, disables forwarding, and runs remote `exit`. Without a name it tries aliases until the first success. It does not install keys or save credentials. SSH owns the terminal handles and password hiding; `-n` prevents forwarding terminal input to the remote `exit` command. Optional `--log FILE` appends CLI setup messages and native SSH `-E` diagnostics to an existing log without piping interactive input/output.
+`trust [ENDPOINT_NAME]` enables interactive authentication and host confirmation, disables forwarding, and runs remote `exit`. Without a name it tries aliases until the first success. It does not install keys or save credentials. SSH owns the terminal handles and password hiding; `-n` prevents forwarding terminal input to the remote `exit` command. Optional `--log FILE` appends CLI setup messages and native SSH `-E` diagnostics to an existing log without piping interactive input/output. `trust --batch` is the tray's silent check: the tunnel's noninteractive policy (batch authentication, strict host keys, no input) with remote `exit`, in the same endpoint order; it never prompts or accepts a new host key and fails when setup is needed.
 
 ## Supervisor, control and logs
 
@@ -119,11 +119,13 @@ Each tray or proxy run creates one continuous file under `logs/`: `tray_<id>_...
 
 There is no `--json` switch or plain `help`/`version` command. Help returns before reading configuration or accessing services. `src/cli/help.go` shares flag/default definitions with runtime parsing and renders aligned, plain-text help within 80 columns.
 
-The tray has no network supervisor of its own. `src/ui/controller.go` holds its state: it reads status about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, configs, logs/location and Exit.
+The tray has no network supervisor of its own. `src/ui/controller.go` holds its state: it reads status about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, launch auto-start, configs, logs/location and Exit.
 
 At launch, `check` identifies invalid configuration. Missing/invalid SSH configuration opens for editing once per tray run. Other failures use a native error dialog and the current tray log; repeated identical polling errors are suppressed until recovery. File actions use OS associations.
 
-Every tray Start runs `trust --log <tray-log>` in a real terminal and starts the proxy only after exit 0. Windows creates a console process with native handles; macOS controls Terminal through AppleScript and a temporary exit-status file. The setup window closes after completion; failure or early closure produces an error and prevents startup. macOS may need Automation permission. Closing the tray preserves an already-running proxy.
+Every tray Start validates the configuration with `check` (opening a failing SSH file once) and then runs the hidden `trust --batch`. When that succeeds, it starts the proxy without opening a terminal. Only when it fails does the tray run interactive `trust --log <tray-log>` in a real terminal; after exit 0 it repeats `trust --batch`, because a password login alone cannot run the background proxy, and starts only when that passes. Windows creates a console process with native handles; macOS controls Terminal through AppleScript and a temporary exit-status file, which may need Automation permission. The setup window closes after completion. A cancelled or failed setup, or a failed recheck, leaves the proxy stopped with the reason in an error dialog and the tray log; nothing retries until the user chooses Start again. Closing the tray preserves an already-running proxy.
+
+**Start Proxy When App Launches** stores `app.start_proxy_on_launch` in `config.toml` (default `false`). The tray changes only that line, adding an `[app]` table when missing, keeps comments and line endings, replaces the file atomically and refuses read-only or unparsable files. At launch, with the setting on, a stopped proxy goes through the same flow as Start; a running proxy is reused, and invalid configuration only opens its file and reports the reason. Status polls never repeat setup. The CLI and OS services ignore the setting and never open an editor or terminal.
 
 The app locates the adjacent CLI, including from inside its macOS bundle. Its `--config PATH` and `--backend PATH` flags support alternate configurations and development binaries; `--smoke-test` briefly creates the native tray then exits. These are app flags, not CLI commands.
 
@@ -131,14 +133,14 @@ The app owns **Launch App at Login**, which opens only the tray:
 
 | OS | Registration |
 | --- | --- |
-| Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `SSHProxy-<id>`; a hidden PowerShell launcher reads stored executable/config paths |
+| Windows | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `SSHProxy-<id>`: the app path (quoted when needed), plus `--config PATH` for a non-default config. Only a command over the 260-character Run limit falls back to a hidden PowerShell launcher that reads stored executable/config paths |
 | macOS | `~/Library/LaunchAgents/com.sshproxy.login.<id>.plist` with `RunAtLoad` |
 
 The checkbox currently checks registration existence, not external OS disablement. Keep this limitation visible in the user guide. The CLI has no tray/login-startup management commands.
 
-At tray startup, `scripts/` is scanned in filename order for `.ps1` on Windows or `.sh` on macOS. Entries are enabled only when the proxy is `running` and no action is pending. Script output joins the tray log; failure uses the normal error dialog. Scripts are noninteractive, and restarting the tray refreshes the list.
+At tray startup, `scripts/` is scanned in filename order for `.ps1` on Windows or `.sh` on macOS; names starting with `_` are shared helpers, not menu entries. Entries are enabled only when the proxy is `running` and no action is pending. Script output joins the tray log; failure uses the normal error dialog. Scripts are noninteractive, and restarting the tray refreshes the list.
 
-Bundled Codex/Claude launchers start or reuse the CLI, verify readiness, set HTTP proxy environment variables and Electron proxy arguments, clear ALL_PROXY and disable QUIC. Windows scripts accept `-AppPath`/`-Proxy`; macOS scripts accept `CODEX_APP` or `CLAUDE_APP` and `PROXY_URL`, and keep desktop output in `logs/codex_*.txt` or `logs/claude_*.txt`. They do not install apps, stop existing apps or modify TOML. Linux users configure their clients directly; the Bash launchers are macOS-only.
+Bundled Codex/Claude launchers share `scripts/_proxy.ps1` or `_proxy.sh`: they start or reuse the CLI, verify readiness, take the proxy URL from the `http` field of `status`, set HTTP proxy environment variables and Electron proxy arguments, clear ALL_PROXY and disable QUIC. Windows scripts accept `-AppPath`/`-Proxy`; macOS scripts accept `CODEX_APP` or `CLAUDE_APP` and `PROXY_URL`; the proxy option overrides the running proxy's address, and keep desktop output in `logs/codex_*.txt` or `logs/claude_*.txt`. They do not install apps, stop existing apps or modify TOML. Linux users configure their clients directly; the Bash launchers are macOS-only.
 
 ## Optional OS services
 

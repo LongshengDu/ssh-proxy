@@ -276,9 +276,17 @@ func Run(args []string) error {
 			if f.NArg() == 1 && e != f.Arg(0) {
 				continue
 			}
-			fmt.Fprintf(output, "SSH login for %s. Verify any host fingerprint before accepting.\n", e)
-			cmd := config.SSHCommand(c, e, true)
-			cmd.Stdin = os.Stdin
+			mode := config.SSHTrust
+			if options.batch {
+				mode = config.SSHCheck
+				fmt.Fprintf(output, "Checking unattended SSH login for %s.\n", e)
+			} else {
+				fmt.Fprintf(output, "SSH login for %s. Verify any host fingerprint before accepting.\n", e)
+			}
+			cmd := config.SSHCommand(c, e, mode)
+			if !options.batch {
+				cmd.Stdin = os.Stdin
+			}
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			// Keep all interactive handles on the terminal. Native OpenSSH can

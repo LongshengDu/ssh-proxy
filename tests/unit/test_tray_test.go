@@ -24,7 +24,7 @@ func TestConfigOpensOnce(t *testing.T) {
 
 func TestPlatformScriptsAndReadiness(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"Codex.ps1", "Codex.sh", "Two words.PS1", "notes.txt"} {
+	for _, name := range []string{"Codex.ps1", "Codex.sh", "Two words.PS1", "notes.txt", "_proxy.ps1", "_proxy.sh"} {
 		if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -43,7 +43,7 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 		}
 		for _, phase := range []control.Phase{"stopped", "connecting", "degraded", "running"} {
 			for _, busy := range []bool{false, true} {
-				items := ui.Menu(control.Status{Phase: phase}, false, true, busy, scripts...)
+				items := ui.Menu(ui.MenuState{Status: control.Status{Phase: phase}, StartupKnown: true, AutoStartKnown: true, Busy: busy}, scripts...)
 				index := slices.IndexFunc(items, func(item ui.Item) bool { return item.ID == ui.ScriptBase })
 				if index < 1 || !items[index-1].Separator || items[index].Label != "Run: Codex" {
 					t.Fatal(items)
@@ -65,7 +65,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 				st.PID = 123
 				control = "Stop proxy"
 			}
-			items := ui.Menu(st, startup, true, false)
+			items := ui.Menu(ui.MenuState{Status: st, Startup: startup, StartupKnown: true, AutoStart: !startup, AutoStartKnown: true})
 			separators := 0
 			for _, item := range items {
 				if item.Separator {
@@ -79,6 +79,10 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 					}
 				case ui.ToggleStartup:
 					if item.Checked != startup || item.Disabled {
+						t.Fatal(phase, item)
+					}
+				case ui.ToggleAutoStart:
+					if item.Checked == startup || item.Disabled {
 						t.Fatal(phase, item)
 					}
 				case ui.SSHLabel:
@@ -100,17 +104,20 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 			}
 		}
 	}
-	for _, item := range ui.Menu(control.Status{Phase: "running", PID: 123}, false, false, true) {
-		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup) && !item.Disabled {
+	for _, item := range ui.Menu(ui.MenuState{Status: control.Status{Phase: "running", PID: 123}, StartupKnown: true, AutoStartKnown: true, Busy: true}) {
+		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup || item.ID == ui.ToggleAutoStart) && !item.Disabled {
 			t.Fatal("mutation enabled during action", item)
 		}
 		if (item.ID == ui.OpenConfig || item.ID == ui.Quit) && item.Disabled {
 			t.Fatal("recovery action unavailable", item)
 		}
 	}
-	for _, item := range ui.Menu(control.Status{Phase: "error"}, false, true, false) {
+	for _, item := range ui.Menu(ui.MenuState{Status: control.Status{Phase: "checking"}, StartupKnown: true}) {
 		if item.ID == ui.ToggleProxy && !item.Disabled {
 			t.Fatal("unknown backend status permits toggle")
+		}
+		if item.ID == ui.ToggleAutoStart && !item.Disabled {
+			t.Fatal("unreadable auto-start setting permits toggle")
 		}
 	}
 }

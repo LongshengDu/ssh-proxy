@@ -33,3 +33,8 @@ max_log_files = 10
 # 单个日志文件的大小上限（MB，1..1024）；达到上限时删除较早的一半内容并标注。
 # Size limit per log file in MB (1..1024); at the limit the older half is removed and marked.
 max_size_mb = 10
+
+# 仅 Windows/macOS 托盘使用：托盘启动时自动启动代理，流程与菜单 Start proxy 相同，需要时会打开 SSH 设置。
+# Windows/macOS tray only: start the proxy when the app launches, using the same setup flow as Start proxy.
+[app]
+start_proxy_on_launch = false

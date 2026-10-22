@@ -32,7 +32,8 @@ func DiscoverScripts(directory, goos string) ([]Script, error) {
 	}
 	var scripts []Script
 	for _, file := range files {
-		if !file.IsDir() && strings.EqualFold(filepath.Ext(file.Name()), extension) {
+		// A leading underscore marks a shared helper, such as _proxy.ps1, not a menu entry.
+		if !file.IsDir() && !strings.HasPrefix(file.Name(), "_") && strings.EqualFold(filepath.Ext(file.Name()), extension) {
 			scripts = append(scripts, Script{strings.TrimSuffix(file.Name(), filepath.Ext(file.Name())), filepath.Join(directory, file.Name())})
 		}
 	}

@@ -10,7 +10,7 @@
 - **完整解压到可写的固定目录：** 保留应用、CLI、配置和 `scripts/` 在一起；macOS 不要只移动 `.app`。Windows/macOS 从 `ssh_proxy_app` 打开托盘；Linux 使用 CLI。
 - **先准备 SSH：** 本机需要 OpenSSH，服务器需允许 TCP 转发。后台连接需要免交互的密钥认证；有口令的私钥先加载到 `ssh-agent`。首次连接需核对服务器指纹。详细步骤见 [ssh_config](ssh_config)。
 - **代理就绪后再使用：** 等菜单显示 `running`，再设置客户端代理。默认 HTTP/HTTPS 为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`；程序不会自动修改系统代理。用启动脚本打开 Codex/Claude 前，先完全退出已运行的桌面应用。
-- **退出应用不等于停止代理：** 要断开连接，请选择 **Stop proxy**。**Launch App at Login** 只启动托盘，不自动连接；自动连接需另行设置系统服务。
+- **退出应用不等于停止代理：** 要断开连接，请选择 **Stop proxy**。**Launch App at Login** 只启动托盘；要在托盘启动时自动连接，再勾选 **Start Proxy When App Launches**，无需托盘时可安装系统服务。
 - **出错时查看日志：** 应用会显示错误并打开本次日志；也可选择 **Open Current Log**。所有运行日志位于解压目录的 `logs/`。
 
 SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 和 SOCKS5 代理。Windows、macOS 可使用托盘/菜单栏应用；Windows、macOS、Linux 都可使用命令行。服务器只需允许 SSH TCP 转发，无需安装 HTTP 代理。
@@ -55,13 +55,15 @@ Host my-proxy
 
 保存文件后，右键图标选择 **Start proxy**。
 
-每次菜单启动都会先打开 SSH 设置终端：Windows 使用原生控制台，macOS 使用 Terminal，可能需允许 Automation（自动化）权限。已信任且可登录时自动完成，否则按提示处理。成功后终端关闭并启动代理；失败会显示原因并打开本次应用日志。密码登录成功后，仍需配置密钥认证才能在后台连接。
+每次菜单启动都会先在后台静默检查：主机已信任且免交互登录可用时，直接启动代理，不打开任何窗口。只有检查失败时才打开 SSH 设置终端（Windows 使用原生控制台，macOS 使用 Terminal，可能需允许 Automation（自动化）权限），按提示核对指纹并登录。终端关闭后会再静默检查一次，通过后才启动代理；仅密码登录成功不够，需配置密钥或 agent。失败或取消会显示原因并打开本次应用日志，代理保持停止，可修正后再次点击 **Start proxy**。
 
 等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理；关闭设置终端或选择 **Exit app** 不会停止已启动的后台代理。
 
 菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置、日志和目录使用系统默认应用打开。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。**Exit app** 只退出托盘。
 
-**Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看，启动器可能显示为 Windows PowerShell；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
+**Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看（安装路径过长时可能显示为 Windows PowerShell）；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
+
+**Start Proxy When App Launches** 让托盘每次启动时自动启动代理，流程与 **Start proxy** 相同：需要时打开配置文件或 SSH 设置终端；代理已在运行时直接沿用。设置保存在 `config.toml` 的 `[app] start_proxy_on_launch`，托盘只修改这一行，保留其他内容和注释。与 **Launch App at Login** 同时勾选即可在登录后自动连接；系统服务不受此设置影响。
 
 ### 3. 使用代理
 
@@ -150,6 +152,7 @@ unset ALL_PROXY all_proxy
 | `health.failover_on_probe_failure` | `false`；检查失败显示 `degraded`，默认保留仍存活的 SSH |
 | `logging.max_log_files` | `10`，至少为 1；托盘与代理各自保留此数量的最新日志 |
 | `logging.max_size_mb` | `10`，范围 1..1024；单个日志达到上限时删除较早的一半内容 |
+| `app.start_proxy_on_launch` | `false`；仅 Windows/macOS 托盘，托盘启动时自动启动代理，可在菜单切换 |
 
 每次托盘/代理运行各写一个连续日志，错误追加到同一文件；文件达到 `max_size_mb` 时删除较早的一半并在开头标注。启动时各自清理旧日志，包含当前文件默认最多保留 10 个托盘日志和 10 个代理日志，位于 CLI 旁的 `logs/`。
 
@@ -166,7 +169,7 @@ SSH 退出会触发重连和备用主机尝试；切换会断开现有连接，�
 
 ### 6. 启动脚本与自定义
 
-自定义无需交互的启动脚本放在 `scripts/`：Windows 用 `.ps1`，macOS 用 `.sh`。重启托盘后出现 **Run: 文件名**，仅在代理为 `running` 时可用；输出写入托盘日志，失败会提示。
+自定义无需交互的启动脚本放在 `scripts/`：Windows 用 `.ps1`，macOS 用 `.sh`。重启托盘后出现 **Run: 文件名**，仅在代理为 `running` 时可用；输出写入托盘日志，失败会提示。以 `_` 开头的文件（如 `_proxy.ps1`）是共用辅助脚本，不会出现在菜单中。
 
 除了托盘菜单，也可在解压目录手动运行脚本。先安装桌面应用、完成 SSH 设置，并**完全退出已运行的桌面应用**：
 
@@ -182,7 +185,7 @@ bash ./scripts/Codex.sh
 bash ./scripts/Claude.sh
 ```
 
-脚本启动或复用旁边的 CLI 代理，检查状态，再带着代理参数和环境变量启动桌面应用，默认使用 `http://127.0.0.1:8181`。可关闭启动终端；退出桌面应用不会停止代理。代理运行时也可点击托盘中的 **Run: Codex** / **Run: Claude**。
+脚本启动或复用旁边的 CLI 代理，检查状态，再带着代理参数和环境变量启动桌面应用，默认使用当前代理的 HTTP 地址（`status` 中的 `http`）。可关闭启动终端；退出桌面应用不会停止代理。代理运行时也可点击托盘中的 **Run: Codex** / **Run: Claude**。
 
 Windows 自动查找 Codex Store 包及 Claude 应用包或常见用户安装目录；macOS 在 `/Applications`、`~/Applications` 查找。可自定义路径和代理地址：
 
@@ -196,7 +199,7 @@ CODEX_APP='/Applications/Codex.app' PROXY_URL=http://127.0.0.1:18181 bash ./scri
 CLAUDE_APP='/Applications/Claude.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Claude.sh
 ```
 
-路径指向桌面应用，不是 Code CLI。代理覆盖值不会修改 TOML，必须与实际 HTTP 端口一致。macOS 桌面输出保存在 `logs/codex_*.txt` / `logs/claude_*.txt`。脚本需留在原来的 `scripts/` 目录。
+路径指向桌面应用，不是 Code CLI。通常无需指定代理地址；覆盖值不会修改 TOML，仅用于其他监听地址。macOS 桌面输出保存在 `logs/codex_*.txt` / `logs/claude_*.txt`。脚本需留在原来的 `scripts/` 目录。
 
 ### 7. 可选系统服务
 
@@ -234,7 +237,7 @@ Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问�
 - **Extract the whole ZIP into a writable, permanent folder:** Keep the app, CLI, configuration and `scripts/` together; do not move the macOS `.app` alone. Open `ssh_proxy_app` on Windows/macOS; use the CLI on Linux.
 - **Prepare SSH first:** Local OpenSSH and server-side TCP forwarding are required. Background connections need noninteractive key authentication; load passphrase-protected keys into `ssh-agent`. Verify the server fingerprint on first connection. See [ssh_config](ssh_config) for setup instructions.
 - **Wait for readiness:** Wait for `running` in the menu before configuring clients. Defaults are `http://127.0.0.1:8181` for HTTP/HTTPS and `socks5h://127.0.0.1:1081` for SOCKS5. System proxy settings are not changed automatically. Fully quit existing Codex/Claude desktop instances before using their launchers.
-- **Exiting the app does not stop the proxy:** Choose **Stop proxy** to disconnect. **Launch App at Login** opens only the tray; automatic connections require separate OS service setup.
+- **Exiting the app does not stop the proxy:** Choose **Stop proxy** to disconnect. **Launch App at Login** opens only the tray; to connect when the tray starts, also check **Start Proxy When App Launches**, or install an OS service to run without the tray.
 - **Read the log when something fails:** The app shows the error and opens the current run log; you can also choose **Open Current Log**. Run logs are under `logs/` in the extracted folder.
 
 SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. Windows and macOS have a tray/menu-bar app; Windows, macOS and Linux all have a CLI. The server only needs SSH TCP forwarding enabled, with no HTTP proxy installation.
@@ -279,13 +282,15 @@ Add concrete `Host` aliases in preferred order; the proxy tries the next one aft
 
 Save the file, then right-click the icon and choose **Start proxy**.
 
-Each menu start first opens an SSH setup terminal: a native console on Windows, Terminal on macOS, which may require Automation permission. Trusted hosts with working authentication finish automatically; otherwise follow the prompts. Success closes the terminal and starts the proxy. Failure shows the reason and opens this app run's log. Successful password login still requires key setup for background operation.
+Each menu start first checks silently: with a trusted host and working noninteractive login, the proxy starts without opening any window. Only when that check fails does an SSH setup terminal open (a native console on Windows, Terminal on macOS, which may require Automation permission); verify the fingerprint and log in as prompted. After the terminal closes, the silent check runs again and the proxy starts only if it passes; a password login alone is not enough, so set up keys or an agent. Failure or cancellation shows the reason and opens this app run's log; the proxy stays stopped until you correct the problem and choose **Start proxy** again.
 
 Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. Closing the setup terminal or choosing **Exit app** leaves an already-started background proxy running.
 
 The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs, logs and the folder open in default applications. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs. **Exit app** closes only the tray.
 
-**Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup; the launcher may appear as Windows PowerShell. On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
+**Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup (a very long installation path may make it appear as Windows PowerShell). On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
+
+**Start Proxy When App Launches** starts the proxy whenever the tray starts, using the same flow as **Start proxy**: it opens the config file or an SSH setup terminal when needed and reuses a proxy that is already running. The setting is `[app] start_proxy_on_launch` in `config.toml`; the tray changes only that line and keeps everything else, including comments. Check it together with **Launch App at Login** to connect automatically after sign-in. OS services ignore this setting.
 
 ### 3. Use the proxy
 
@@ -374,6 +379,7 @@ See [config.toml](config.toml) for all settings; run `restart` after saving chan
 | `health.failover_on_probe_failure` | `false`; failed checks report `degraded` and preserve a live SSH session by default |
 | `logging.max_log_files` | `10`, minimum 1; separate retention limits for tray and proxy logs |
 | `logging.max_size_mb` | `10`, range 1..1024; at the limit a log's older half is removed |
+| `app.start_proxy_on_launch` | `false`; Windows/macOS tray only: start the proxy when the tray starts; toggled from the menu |
 
 Each tray/proxy run writes one continuous log; errors append to it. When a file reaches `max_size_mb`, its older half is removed and the cut is marked at the top. At startup each cleans up its oldest files, keeping at most 10 tray logs and 10 proxy logs by default, including current files, in `logs/` beside the CLI.
 
@@ -390,7 +396,7 @@ SSH exits trigger reconnection and attempts at backup hosts. Switching closes ex
 
 ### 6. Launcher scripts and customization
 
-Add noninteractive launchers to `scripts/`: `.ps1` on Windows, `.sh` on macOS. Restart the tray to discover them as **Run: filename**, enabled only in the `running` state. Output joins the tray log; failures show an error.
+Add noninteractive launchers to `scripts/`: `.ps1` on Windows, `.sh` on macOS. Restart the tray to discover them as **Run: filename**, enabled only in the `running` state. Output joins the tray log; failures show an error. Files starting with `_`, such as `_proxy.ps1`, are shared helpers and do not appear in the menu.
 
 You can also run launchers manually from the extracted folder. Install the desktop app, complete SSH setup and **fully quit any running instance** first:
 
@@ -406,7 +412,7 @@ bash ./scripts/Codex.sh
 bash ./scripts/Claude.sh
 ```
 
-Scripts start or reuse the adjacent CLI proxy, check its state, then launch the desktop app with proxy arguments and environment variables, using `http://127.0.0.1:8181` by default. You may close the launch terminal; exiting the desktop app leaves the proxy running. The tray's **Run: Codex** / **Run: Claude** entries are also available while the proxy is running.
+Scripts start or reuse the adjacent CLI proxy, check its state, then launch the desktop app with proxy arguments and environment variables, using the running proxy's HTTP address (`http` in `status`) by default. You may close the launch terminal; exiting the desktop app leaves the proxy running. The tray's **Run: Codex** / **Run: Claude** entries are also available while the proxy is running.
 
 Windows discovers the Codex Store package and the Claude app package or common per-user installations; macOS searches `/Applications` and `~/Applications`. Override paths or proxy addresses when needed:
 
@@ -420,7 +426,7 @@ CODEX_APP='/Applications/Codex.app' PROXY_URL=http://127.0.0.1:18181 bash ./scri
 CLAUDE_APP='/Applications/Claude.app' PROXY_URL=http://127.0.0.1:18181 bash ./scripts/Claude.sh
 ```
 
-Paths select desktop apps, not Code CLIs. Proxy overrides do not edit TOML and must match the actual HTTP port. macOS desktop output goes to `logs/codex_*.txt` / `logs/claude_*.txt`. Keep launchers in their original `scripts/` folder.
+Paths select desktop apps, not Code CLIs. A proxy override is normally unnecessary; it does not edit TOML and is only for a different listener. macOS desktop output goes to `logs/codex_*.txt` / `logs/claude_*.txt`. Keep launchers in their original `scripts/` folder.
 
 ### 7. Optional OS service
 

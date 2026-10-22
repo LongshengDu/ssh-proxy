@@ -61,6 +61,9 @@ type Config struct {
 		MaxLogFiles int `toml:"max_log_files"`
 		MaxSizeMB   int `toml:"max_size_mb"`
 	} `toml:"logging"`
+	App struct {
+		StartProxyOnLaunch bool `toml:"start_proxy_on_launch"` // Read by the Windows/macOS tray only.
+	} `toml:"app"`
 	Path     string `toml:"-"`
 	resolved map[string]sshSettings
 }
@@ -394,10 +397,23 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 // Destination is the user@host:port that OpenSSH resolved for an alias.
 func (c *Config) Destination(alias string) string { return c.resolved[alias].destination }
 
+// SSHMode selects what SSHCommand runs.
+type SSHMode int
+
+const (
+	// SSHTunnel runs the noninteractive SOCKS tunnel.
+	SSHTunnel SSHMode = iota
+	// SSHTrust logs in interactively, may confirm a new host key, then runs exit.
+	SSHTrust
+	// SSHCheck logs in like the tunnel: no prompts and only already-trusted
+	// host keys. It then runs exit, proving unattended login works.
+	SSHCheck
+)
+
 // SSHCommand uses -F and the alias. SSH-relative paths resolve from its config directory.
-func SSHCommand(c *Config, alias string, trust bool) *exec.Cmd {
-	args := c.sshBaseArgs(trust)
-	if trust {
+func SSHCommand(c *Config, alias string, mode SSHMode) *exec.Cmd {
+	args := c.sshBaseArgs(mode == SSHTrust)
+	if mode != SSHTunnel {
 		// The remote command needs no input. -n avoids a pending console read
 		// keeping Windows SSH alive after a fast 'exit'; local SSH prompts use TTY.
 		args = append(args, "-n", "-o", "ClearAllForwardings=yes", alias, "exit")

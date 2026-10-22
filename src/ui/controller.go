@@ -5,6 +5,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 
@@ -17,9 +18,12 @@ import (
 type Backend interface {
 	Status() control.Status
 	Check(ctx context.Context) (config.ConfigCheck, error)
-	Trust(ctx context.Context) error // Interactive setup in a real terminal.
+	CheckLogin(ctx context.Context) error // Silent, strict login check; never prompts.
+	Trust(ctx context.Context) error      // Interactive setup in a real terminal.
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
+	AutoStart() (bool, error) // app.start_proxy_on_launch.
+	SetAutoStart(enabled bool) error
 }
 
 // Desktop holds the tray's OS integrations.
@@ -49,11 +53,13 @@ type Controller struct {
 	location string
 	scripts  []Script
 
-	st         control.Status
-	startup    bool
-	startupErr error
-	busy       bool
-	lastError  string
+	st           control.Status
+	startup      bool
+	startupErr   error
+	autoStart    bool
+	autoStartErr error
+	busy         bool
+	lastError    string
 
 	mu      sync.Mutex // Guards prompts, which jobs also use.
 	prompts SetupPrompts
@@ -70,12 +76,35 @@ func (c *Controller) report(err error) {
 }
 
 func (c *Controller) render() {
-	c.view.Render(Menu(c.st, c.startup, c.startupErr == nil, c.busy, c.scripts...), "SSH Proxy — "+string(c.st.Phase))
+	state := MenuState{Status: c.st, Startup: c.startup, StartupKnown: c.startupErr == nil,
+		AutoStart: c.autoStart, AutoStartKnown: c.autoStartErr == nil, Busy: c.busy}
+	c.view.Render(Menu(state, c.scripts...), "SSH Proxy — "+string(c.st.Phase))
 }
 
 // CheckConfig validates through the CLI, including native ssh -G, and opens a
 // failing SSH configuration once per tray run. It reports whether it is valid.
 func (c *Controller) CheckConfig(ctx context.Context) bool {
+	err := c.checkConfig(ctx)
+	if err != nil && ctx.Err() == nil {
+		c.report(err)
+	}
+	return err == nil
+}
+
+// Launch runs once when the tray starts. It checks the configuration and, when
+// app.start_proxy_on_launch is set and no proxy runs yet, returns the same
+// start job as the Start item. Invalid configuration never starts setup.
+func (c *Controller) Launch(ctx context.Context) func() error {
+	valid := c.CheckConfig(ctx)
+	c.Refresh(ctx)
+	if !valid || !c.autoStart || c.st.PID != 0 {
+		return nil
+	}
+	c.logger.Print("Starting the proxy at app launch (app.start_proxy_on_launch)")
+	return c.Handle(ctx, ToggleProxy)
+}
+
+func (c *Controller) checkConfig(ctx context.Context) error {
 	result, err := c.backend.Check(ctx)
 	if err == nil && !result.Valid {
 		err = errors.New(result.Error)
@@ -87,10 +116,7 @@ func (c *Controller) CheckConfig(ctx context.Context) bool {
 			err = errors.Join(err, c.desktop.OpenEditable(path))
 		}
 	}
-	if err != nil && ctx.Err() == nil {
-		c.report(err)
-	}
-	return err == nil
+	return err
 }
 
 // Refresh reads status and login registration, reports each new problem once
@@ -99,6 +125,8 @@ func (c *Controller) Refresh(ctx context.Context) {
 	previous := c.st
 	c.st = c.backend.Status()
 	c.startup, c.startupErr = c.desktop.StartupEnabled()
+	// Invalid TOML is reported by CheckConfig; here it only disables the item.
+	c.autoStart, c.autoStartErr = c.backend.AutoStart()
 	issue := c.startupErr
 	if c.st.LastError != "" {
 		issue = errors.Join(issue, errors.New(c.st.LastError))
@@ -130,7 +158,7 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 		return nil
 	}
 	var job func() error
-	active, startup := c.st.PID != 0, c.startup
+	active, startup, autoStart := c.st.PID != 0, c.startup, c.autoStart
 	switch {
 	case id >= ScriptBase && id-ScriptBase < len(c.scripts):
 		script := c.scripts[id-ScriptBase]
@@ -138,6 +166,8 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 		job = func() error { return c.desktop.RunScript(ctx, script) }
 	case id == ToggleStartup:
 		job = func() error { return c.desktop.SetStartup(!startup) }
+	case id == ToggleAutoStart:
+		job = func() error { return c.backend.SetAutoStart(!autoStart) }
 	case id == ToggleProxy && active:
 		job = func() error { return c.backend.Stop(ctx) }
 	case id == ToggleProxy:
@@ -155,16 +185,29 @@ func (c *Controller) Finish(ctx context.Context, id int, err error) {
 	c.busy = false
 	if err != nil && ctx.Err() == nil {
 		c.report(err)
-		if id == ToggleProxy {
-			c.CheckConfig(ctx)
-		}
 	}
 }
 
+// startProxy is shared by the Start item and launch auto-start. It validates
+// the configuration (opening a failing file once), checks unattended login
+// silently, and opens interactive SSH setup only when that check fails. A
+// successful setup is checked again: a password login alone cannot run the
+// background proxy. Any failure leaves the proxy stopped; nothing retries.
 func (c *Controller) startProxy(ctx context.Context) error {
-	c.logger.Print("Running SSH trust before proxy start")
-	if err := c.backend.Trust(ctx); err != nil {
+	if err := c.checkConfig(ctx); err != nil {
 		return err
+	}
+	if err := c.backend.CheckLogin(ctx); err != nil {
+		c.logger.Printf("Unattended SSH login check failed; opening SSH setup terminal: %v", err)
+		if err := c.backend.Trust(ctx); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := c.backend.CheckLogin(ctx); err != nil {
+			return fmt.Errorf("SSH setup finished, but unattended login still fails; set up key or ssh-agent authentication (see ssh_config): %w", err)
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return err

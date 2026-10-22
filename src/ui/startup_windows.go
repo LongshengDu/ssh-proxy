@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"path/filepath"
+	"strings"
 	"syscall"
 
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -10,9 +13,19 @@ const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 
 func startupValue(id string) string       { return "SSHProxy-" + id }
 func startupSettingsKey(id string) string { return `Software\SSHProxy\` + id }
-func startupCommand(id string) string {
-	// Run values are limited to 260 characters. Store potentially long paths as
-	// registry data and pass them as arguments, never interpolate them as code.
+
+// startupCommand starts the app directly, so Windows lists it by name. The
+// default config beside the program needs no argument.
+func startupCommand(id, exe, config string) string {
+	args := []string{exe}
+	if !strings.EqualFold(filepath.Clean(config), filepath.Join(filepath.Dir(exe), "config.toml")) {
+		args = append(args, "--config", config)
+	}
+	if command := windows.ComposeCommandLine(args); len(command) <= 260 {
+		return command
+	}
+	// Run values are limited to 260 characters. Store long paths as registry
+	// data and pass them as arguments, never interpolate them as code.
 	script := "$sshProxy=Get-ItemProperty -LiteralPath 'HKCU:\\" + startupSettingsKey(id) + "'; & $sshProxy.Executable --config $sshProxy.Config"
 	return `powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command ` + syscall.EscapeArg(script)
 }
@@ -33,7 +46,7 @@ func enableStartup(id, exe, config string) error {
 		return err
 	}
 	defer key.Close()
-	return key.SetStringValue(startupValue(id), startupCommand(id))
+	return key.SetStringValue(startupValue(id), startupCommand(id, exe, config))
 }
 func disableStartup(id string) error {
 	key, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)

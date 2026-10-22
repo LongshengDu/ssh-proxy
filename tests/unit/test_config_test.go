@@ -63,7 +63,7 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := config.SSHCommand(cfg, cfg.Endpoints[0], false)
+	cmd := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHTunnel)
 	if cmd.Dir != filepath.Dir(sshPath) {
 		t.Fatal("wrong SSH working directory:", cmd.Dir)
 	}
@@ -78,12 +78,12 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 			t.Errorf("missing effective SSH setting %q", want)
 		}
 	}
-	second := testutil.EffectiveSSH(t, config.SSHCommand(cfg, cfg.Endpoints[1], false))
+	second := testutil.EffectiveSSH(t, config.SSHCommand(cfg, cfg.Endpoints[1], config.SSHTunnel))
 	if !strings.Contains(second, "user fallback\n") {
 		t.Fatal("Host fallback ignored")
 	}
 
-	trust := config.SSHCommand(cfg, cfg.Endpoints[0], true)
+	trust := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHTrust)
 	if trust.Dir != filepath.Dir(sshPath) {
 		t.Fatal("trust uses different working directory")
 	}
@@ -92,6 +92,20 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 	if !strings.Contains(trustSettings, "clearallforwardings yes\n") || strings.Contains(trustSettings, "dynamicforward ") ||
 		!strings.Contains(trustSettings, "batchmode no\n") || !strings.Contains(trustSettings, "stdinnull yes\n") {
 		t.Fatal("trust must be interactive without opening listeners")
+	}
+	check := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHCheck)
+	if check.Args[len(check.Args)-1] != "exit" {
+		t.Fatal("login check must run the remote exit command", check.Args)
+	}
+	check.Args = check.Args[:len(check.Args)-1]
+	checkSettings := testutil.EffectiveSSH(t, check)
+	for _, want := range []string{"clearallforwardings yes", "batchmode yes", "stricthostkeychecking true", "stdinnull yes"} {
+		if !strings.Contains(checkSettings, want+"\n") {
+			t.Fatalf("silent login check must be noninteractive and strict: missing %q", want)
+		}
+	}
+	if strings.Contains(checkSettings, "dynamicforward ") {
+		t.Fatal("silent login check must not open listeners")
 	}
 }
 
@@ -111,7 +125,7 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 	}
 	check := func(c *config.Config, trust bool, settings []string) {
 		t.Helper()
-		cmd := config.SSHCommand(c, c.Endpoints[0], trust)
+		cmd := config.SSHCommand(c, c.Endpoints[0], sshMode(trust))
 		if trust {
 			cmd.Args = cmd.Args[:len(cmd.Args)-1]
 		}
@@ -172,14 +186,14 @@ func TestNativeDefaultHostTrust(t *testing.T) {
 		t.Fatal(err)
 	}
 	native := testutil.EffectiveSSH(t, exec.Command(cfg.SSH.Executable, "-F", sshPath, cfg.Endpoints[0]))
-	for _, trust := range []bool{false, true} {
-		cmd := config.SSHCommand(cfg, cfg.Endpoints[0], trust)
+	for _, mode := range []config.SSHMode{config.SSHTunnel, config.SSHTrust, config.SSHCheck} {
+		cmd := config.SSHCommand(cfg, cfg.Endpoints[0], mode)
 		for _, arg := range cmd.Args {
 			if strings.Contains(strings.ToLower(arg), "knownhostsfile") {
 				t.Fatal("application must not override native host trust", arg)
 			}
 		}
-		if trust {
+		if mode != config.SSHTunnel {
 			cmd.Args = cmd.Args[:len(cmd.Args)-1]
 		}
 		managed := testutil.EffectiveSSH(t, cmd)
@@ -232,7 +246,7 @@ func TestExistingDynamicForwardAndInvalidSSHConfig(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cmd := config.SSHCommand(cfg, cfg.Endpoints[0], false)
+			cmd := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHTunnel)
 			hasD := false
 			for _, arg := range cmd.Args {
 				if arg == "-D" {
@@ -285,4 +299,11 @@ func TestMissingSSHConfigAndSharedLogDirectory(t *testing.T) {
 	if err != nil || absent != alternate {
 		t.Fatal(absent, err)
 	}
+}
+
+func sshMode(trust bool) config.SSHMode {
+	if trust {
+		return config.SSHTrust
+	}
+	return config.SSHTunnel
 }

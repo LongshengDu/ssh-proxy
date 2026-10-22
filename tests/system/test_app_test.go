@@ -78,6 +78,9 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	testutil.WaitFor(t, func() bool { return status().Phase == "running" })
 	testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), "Proxy status: running") })
 	testutil.NativeTerminalsClosed(t, before)
+	if strings.Contains(testutil.ReadFile(log), "opening SSH setup terminal") {
+		t.Fatal("a working unattended login must start without a setup terminal")
+	}
 	testutil.ExpectMenu(t, pid, "Stop proxy", false, false)
 	st := status()
 	testutil.ExpectMenu(t, pid, "SSH: "+st.Destination+" ("+st.Endpoint+")", true, false)

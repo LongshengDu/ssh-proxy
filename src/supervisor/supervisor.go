@@ -31,7 +31,7 @@ type sshChild struct {
 }
 
 func startSSH(c *config.Config, alias string, logger *log.Logger) (*sshChild, error) {
-	cmd, parentPipe, err := platform.ManagedCommand(config.SSHCommand(c, alias, false))
+	cmd, parentPipe, err := platform.ManagedCommand(config.SSHCommand(c, alias, config.SSHTunnel))
 	if err != nil {
 		return nil, err
 	}

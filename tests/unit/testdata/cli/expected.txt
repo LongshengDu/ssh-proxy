@@ -321,6 +321,7 @@ Usage:
   ssh_proxy_cli trust [options] [ENDPOINT_NAME]
 
 Options:
+  --batch             Check unattended login only: no prompts or new host keys
   --log FILE          Append SSH diagnostics to FILE (used by the tray)
 
 Global options:
@@ -331,6 +332,7 @@ Global options:
 Notes:
   Without an endpoint, try SSH aliases in file order until one succeeds.
   Verify host fingerprints before accepting. Already working logins exit 0.
+  --batch fails instead of prompting; the tray runs it before each start.
 
 Examples:
   ssh_proxy_cli trust
@@ -464,6 +466,7 @@ Usage:
   ssh_proxy_cli trust [options] [ENDPOINT_NAME]
 
 Options:
+  --batch             Check unattended login only: no prompts or new host keys
   --log FILE          Append SSH diagnostics to FILE (used by the tray)
 
 Global options:
@@ -474,6 +477,7 @@ Global options:
 Notes:
   Without an endpoint, try SSH aliases in file order until one succeeds.
   Verify host fingerprints before accepting. Already working logins exit 0.
+  --batch fails instead of prompting; the tray runs it before each start.
 
 Examples:
   ssh_proxy_cli trust
@@ -983,6 +987,7 @@ Usage:
   ssh_proxy_cli trust [options] [ENDPOINT_NAME]
 
 Options:
+  --batch             Check unattended login only: no prompts or new host keys
   --log FILE          Append SSH diagnostics to FILE (used by the tray)
 
 Global options:
@@ -993,6 +998,7 @@ Global options:
 Notes:
   Without an endpoint, try SSH aliases in file order until one succeeds.
   Verify host fingerprints before accepting. Already working logins exit 0.
+  --batch fails instead of prompting; the tray runs it before each start.
 
 Examples:
   ssh_proxy_cli trust

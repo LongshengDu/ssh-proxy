@@ -3,7 +3,9 @@
 # Fully quit Claude first. CLAUDE_APP selects a desktop app, never the Code CLI.
 set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-proxy="${PROXY_URL:-http://127.0.0.1:8181}"
+# PROXY_URL overrides the running proxy's HTTP address.
+proxy="${PROXY_URL:-}"
+. "$root/scripts/_proxy.sh"
 app="${CLAUDE_APP:-}"
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -25,15 +27,9 @@ if [[ -z "$app" || ! -x "$app" ]]; then
 fi
 
 # start is idempotent; neither the proxy nor the desktop app needs this terminal.
-"$root/ssh_proxy_cli" start
-status="$("$root/ssh_proxy_cli" status)"
-if ! printf '%s\n' "$status" | grep -Eq '"phase"[[:space:]]*:[[:space:]]*"(running|degraded)"'; then
-    printf 'Proxy is not ready. Check its log and retry.\n%s\n' "$status" >&2
-    exit 1
-fi
-export HTTP_PROXY="$proxy" HTTPS_PROXY="$proxy" NO_PROXY='localhost,127.0.0.1,::1'
-export http_proxy="$proxy" https_proxy="$proxy" no_proxy="$NO_PROXY"
-unset ALL_PROXY all_proxy
+running="$(start_ssh_proxy "$root")"
+proxy="${proxy:-$running}"
+set_proxy_environment "$proxy"
 mkdir -p "$root/logs"
 log="$root/logs/claude_$(date -u +%Y%m%d_%H%M%S)_$$.txt"
 nohup "$app" "--proxy-server=$proxy" \
