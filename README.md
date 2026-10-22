@@ -59,6 +59,7 @@ scripts/
   build.py                Toolchain bootstrap, build, resources and ZIP packaging
   run_unit_tests.py        Unit tests and static checks
   run_sys_tests.py         Tests against already-built native programs
+  visible.py               Run a command in a visible window and record its result
 tests/
   unit/                   Flat unit tests
   system/                 Flat CLI/native app system tests
@@ -204,7 +205,7 @@ python scripts/run_sys_tests.py --cli-only
 # Choose --app-only for tray changes, or omit the selection to run all supported tests.
 ```
 
-Run builds/tests in a visible native terminal and retain output/completion status under `build/test-results/`. On Windows use a normal visible PowerShell window and leave it open for review. The builder does not run tests or vet. Unit validation verifies modules, runs vet once, then executes `tests/unit/`.
+Run builds/tests in a visible native terminal and retain output/completion status under `build/test-results/`. On Windows use a normal visible PowerShell window and leave it open for review; `python scripts/visible.py --name NAME -- COMMAND` does this and records `output.txt` and `completion.json`. The builder does not run tests or vet. Unit validation verifies modules, runs vet once, then executes `tests/unit/`.
 
 System tests use the existing build, compile with the `systemtest` tag, and stage public defaults with the built programs. They use isolated config identities, ephemeral keys, loopback SSH/HTTP servers and native OpenSSH. They cover CLI configuration/help/reports, tunnel lifecycle, health/failover, HTTP/HTTPS/streaming/WebSockets, logging and crash cleanup; app tests cover actual menus, scripts, setup terminals, file opening, error dialogs, login registration and single-instance behavior. They do not install real proxy services or alter user SSH trust/keys.
 
