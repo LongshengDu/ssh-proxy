@@ -39,7 +39,7 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 		if err != nil || len(scripts) != want || scripts[0].Name != "Codex" {
 			t.Fatal(goos, scripts, err)
 		}
-		for _, phase := range []string{"stopped", "connecting", "degraded", "running"} {
+		for _, phase := range []proxy.Phase{"stopped", "connecting", "degraded", "running"} {
 			for _, busy := range []bool{false, true} {
 				items := ui.Menu(proxy.Status{Phase: phase}, false, true, busy, scripts...)
 				if !items[6].Separator || items[7].ID != ui.ScriptBase || items[7].Label != "Run: Codex" {
@@ -54,7 +54,7 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 }
 
 func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
-	for _, phase := range []string{"stopped", "connecting", "running", "degraded", "unresponsive"} {
+	for _, phase := range []proxy.Phase{"stopped", "connecting", "running", "degraded", "unresponsive"} {
 		for _, startup := range []bool{false, true} {
 			st := proxy.Status{Phase: phase, Destination: "tester@example.com:2222", Endpoint: "primary", SOCKS: "127.0.0.1:1081", HTTP: "127.0.0.1:8181"}
 			control := "Start proxy"

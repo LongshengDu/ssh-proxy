@@ -9,10 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 
+	"ssh_proxy/src/proxy"
 	"ssh_proxy/tests/helpers"
 )
 
@@ -61,5 +63,68 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	data, err = os.ReadFile(log)
 	if err != nil || !strings.Contains(string(data), "SSH login for target") || !strings.Contains(string(data), "fixture SSH diagnostic") {
 		t.Fatalf("setup diagnostics were not logged: %s (%v)", data, err)
+	}
+}
+
+// Terminals, IDEs and CI agents may run commands in a kill-on-close job. A
+// background start must leave that job so closing the host keeps the proxy.
+func TestCLIStartLeavesCallerJob(t *testing.T) {
+	dir := testutil.IsolatedBuild(t)
+	testutil.LocalSSH(t, dir)
+	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
+	job, err := windows.CreateJobObject(nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			windows.CloseHandle(job)
+		}
+	}()
+	info := windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION{}
+	info.BasicLimitInformation.LimitFlags = windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | windows.JOB_OBJECT_LIMIT_BREAKAWAY_OK
+	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		t.Fatal(err)
+	}
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{testutil.CLIPath(dir), "start", "--wait", "15"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	startup := windows.StartupInfo{}
+	startup.Cb = uint32(unsafe.Sizeof(startup))
+	var process windows.ProcessInformation
+	// Join the job before the CLI runs, so its supervisor starts inside it.
+	if err := windows.CreateProcess(nil, line, nil, nil, false, windows.CREATE_SUSPENDED|windows.CREATE_NO_WINDOW, nil, nil, &startup, &process); err != nil {
+		t.Fatal(err)
+	}
+	defer windows.CloseHandle(process.Process)
+	if err := windows.AssignProcessToJobObject(job, process.Process); err != nil {
+		windows.TerminateProcess(process.Process, 1)
+		windows.CloseHandle(process.Thread)
+		t.Fatal(err)
+	}
+	if _, err := windows.ResumeThread(process.Thread); err != nil {
+		t.Fatal(err)
+	}
+	windows.CloseHandle(process.Thread)
+	state, err := windows.WaitForSingleObject(process.Process, 30000)
+	if err != nil || state != windows.WAIT_OBJECT_0 {
+		t.Fatalf("start did not finish: %d: %v", state, err)
+	}
+	var code uint32
+	if err := windows.GetExitCodeProcess(process.Process, &code); err != nil || code != 0 {
+		t.Fatalf("start failed: %d: %v", code, err)
+	}
+	before := testutil.StatusCLI(t, dir)
+	if before.Phase != "running" {
+		t.Fatalf("not ready: %+v", before)
+	}
+	windows.CloseHandle(job) // Kills every process still in the job.
+	closed = true
+	time.Sleep(time.Second)
+	after := testutil.StatusCLI(t, dir)
+	if after.Phase != "running" || after.PID != before.PID || !proxy.ProcessAlive(before.SSHPID) {
+		t.Fatalf("closing the caller's job stopped the proxy: before %+v, after %+v", before, after)
 	}
 }

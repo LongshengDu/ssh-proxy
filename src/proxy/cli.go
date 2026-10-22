@@ -147,10 +147,13 @@ func Run(args []string) error {
 		if f.NArg() != 0 || *wait < 1 || *wait > 3600 {
 			return fmt.Errorf("invalid start arguments")
 		}
-		if !*foreground {
+		// Validate once before touching a service or a running instance; _run validates again.
+		if !*foreground || args[0] == "restart" {
 			if _, err = LoadConfig(p.Config); err != nil {
 				return err
 			}
+		}
+		if !*foreground {
 			handled, e := serviceAction(p, args[0], time.Duration(*wait)*time.Second)
 			if e != nil {
 				return e
@@ -160,9 +163,6 @@ func Run(args []string) error {
 			}
 		}
 		if args[0] == "restart" {
-			if _, err = LoadConfig(p.Config); err != nil {
-				return err
-			}
 			if *foreground {
 				if _, err = serviceAction(p, "stop", 0); err != nil {
 					return err

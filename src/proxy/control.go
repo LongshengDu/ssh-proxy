@@ -22,9 +22,24 @@ type StateFile struct {
 	Config  string `json:"config"`
 	Log     string `json:"log,omitempty"`
 }
+
+// Phase is the proxy state in status JSON, read by the tray and launcher scripts.
+type Phase string
+
+const (
+	PhaseStarting     Phase = "starting"
+	PhaseConnecting   Phase = "connecting"
+	PhaseRunning      Phase = "running"
+	PhaseDegraded     Phase = "degraded"
+	PhaseReconnecting Phase = "reconnecting"
+	PhaseStopping     Phase = "stopping"
+	PhaseStopped      Phase = "stopped"
+	PhaseUnresponsive Phase = "unresponsive"
+)
+
 type Status struct {
 	Service     bool      `json:"service"`
-	Phase       string    `json:"phase"`
+	Phase       Phase     `json:"phase"`
 	PID         int       `json:"pid,omitempty"`
 	SSHPID      int       `json:"ssh_pid,omitempty"`
 	Config      string    `json:"config"`
@@ -126,9 +141,9 @@ func QueryStatus(p Paths) Status {
 	if err == nil {
 		return st
 	}
-	st = Status{Phase: "stopped", Config: p.Config, Log: latestLog(p.Logs, p.ID)}
+	st = Status{Phase: PhaseStopped, Config: p.Config, Log: latestLog(p.Logs, p.ID)}
 	if state, e := readState(p); e == nil && ProcessAlive(state.PID) {
-		st.Phase = "unresponsive"
+		st.Phase = PhaseUnresponsive
 		st.PID = state.PID
 		st.LastError = err.Error()
 		if state.Log != "" {

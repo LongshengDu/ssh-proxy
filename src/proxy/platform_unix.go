@@ -32,8 +32,14 @@ func LockInstance(id string) (func(), error) {
 	}
 	return func() { lock.Close() }, nil
 }
-func HideChild(cmd *exec.Cmd)   {}
-func DetachChild(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
+func HideChild(cmd *exec.Cmd) {}
+
+// StartDetached starts a background process in its own session.
+func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+	cmd := newCmd()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	return cmd, cmd.Start()
+}
 func ContainChild(cmd *exec.Cmd) (func(), error) {
 	return func() { cmd.Process.Signal(syscall.SIGTERM) }, nil
 }

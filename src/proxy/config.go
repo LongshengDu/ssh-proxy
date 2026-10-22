@@ -38,7 +38,6 @@ type Config struct {
 		RetryDelay          int    `toml:"retry_delay_seconds"`
 	} `toml:"ssh"`
 	Health struct {
-		Target                 string   `toml:"target"`
 		Targets                []string `toml:"targets"`
 		FailoverOnProbeFailure bool     `toml:"failover_on_probe_failure"`
 		Interval               int      `toml:"interval_seconds"`
@@ -47,8 +46,7 @@ type Config struct {
 	} `toml:"health"`
 	Logging struct {
 		MaxLogFiles int `toml:"max_log_files"`
-		MaxSizeMB   int `toml:"max_size_mb"` // Legacy setting; runs no longer rotate.
-		Backups     int `toml:"backups"`     // Legacy setting; ignored.
+		MaxSizeMB   int `toml:"max_size_mb"`
 	} `toml:"logging"`
 	Path     string `toml:"-"`
 	resolved map[string]sshSettings
@@ -158,7 +156,7 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 		}
 	}()
 	c := &Config{Path: path, resolved: map[string]sshSettings{}}
-	c.Logging.MaxLogFiles = defaultMaxLogFiles
+	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = defaultMaxLogFiles, defaultMaxLogMB
 	// Defaults also apply to existing installations whose TOML predates these
 	// fields. Shared tunnel policy never needs to be repeated in host entries.
 	c.SSH.ConnectTimeout, c.SSH.ConnectionAttempts = 10, 1
@@ -172,6 +170,9 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 	}
 	if c.Logging.MaxLogFiles < 1 {
 		return nil, fmt.Errorf("logging.max_log_files must be at least 1")
+	}
+	if c.Logging.MaxSizeMB < 1 || c.Logging.MaxSizeMB > maxLogMB {
+		return nil, fmt.Errorf("logging.max_size_mb must be in 1..%d", maxLogMB)
 	}
 	ip := net.ParseIP(c.Proxy.Bind)
 	if ip == nil || !ip.IsLoopback() {
@@ -187,9 +188,6 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 		if value < 1 || value > 3600 {
 			return nil, fmt.Errorf("%s must be in 1..3600", name)
 		}
-	}
-	if c.Health.Target != "" {
-		c.Health.Targets = append(c.Health.Targets, c.Health.Target)
 	}
 	if len(c.Health.Targets) == 0 {
 		return nil, fmt.Errorf("health.targets needs at least one host:port")
@@ -233,6 +231,8 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 	return c, nil
 }
 
+var validAlias = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
 // SSHAliases only enumerates explicit Host declarations in the selected file.
 // Includes/Match still supply settings through native ssh -G/-F; wildcard and
 // conditional rules do not declare connection candidates. No SSH values are
@@ -249,7 +249,6 @@ func SSHAliases(path string) ([]string, error) {
 	}
 	var aliases []string
 	seen := map[string]bool{}
-	valid := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 	for _, host := range cfg.Hosts {
 		if strings.HasPrefix(strings.TrimSpace(host.String()), "Match ") {
 			continue
@@ -259,7 +258,7 @@ func SSHAliases(path string) ([]string, error) {
 			if strings.ContainsAny(alias, "*?!") || !host.Matches(alias) {
 				continue
 			}
-			if !valid.MatchString(alias) {
+			if !validAlias.MatchString(alias) {
 				return nil, fmt.Errorf("invalid SSH alias %q in %s; use letters, digits, dots, underscores or hyphens", alias, path)
 			}
 			key := strings.ToLower(alias)

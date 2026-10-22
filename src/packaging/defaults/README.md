@@ -6,7 +6,7 @@
 
 ### 使用前必读
 
-- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。移动前取消 **Launch App at Login**，并卸载已注册的系统服务；移动后按需重新启用或安装。
+- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。移动前取消 **Launch App at Login**，并卸载已注册的系统服务；移动后按需重新启用或安装。升级后如 `check` 报告 unknown config setting，请删除旧设置 `health.target`（改用 `health.targets`）和 `logging.backups`。
 - **完整解压到可写的固定目录：** 保留应用、CLI、配置和 `scripts/` 在一起；macOS 不要只移动 `.app`。Windows/macOS 从 `ssh_proxy_app` 打开托盘；Linux 使用 CLI。
 - **先准备 SSH：** 本机需要 OpenSSH，服务器需允许 TCP 转发。后台连接需要免交互的密钥认证；有口令的私钥先加载到 `ssh-agent`。首次连接需核对服务器指纹。详细步骤见 [ssh_config](ssh_config)。
 - **代理就绪后再使用：** 等菜单显示 `running`，再设置客户端代理。默认 HTTP/HTTPS 为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`；程序不会自动修改系统代理。用启动脚本打开 Codex/Claude 前，先完全退出已运行的桌面应用。
@@ -149,8 +149,9 @@ unset ALL_PROXY all_proxy
 | `health.targets` | `example.com:443`、`www.microsoft.com:443`；至少一个可经隧道连接才算就绪 |
 | `health.failover_on_probe_failure` | `false`；检查失败显示 `degraded`，默认保留仍存活的 SSH |
 | `logging.max_log_files` | `10`，至少为 1；托盘与代理各自保留此数量的最新日志 |
+| `logging.max_size_mb` | `10`，范围 1..1024；单个日志达到上限时删除较早的一半内容 |
 
-每次托盘/代理运行各写一个连续日志，错误追加到同一文件。启动时各自清理旧日志，包含当前文件默认最多保留 10 个托盘日志和 10 个代理日志，位于 CLI 旁的 `logs/`。
+每次托盘/代理运行各写一个连续日志，错误追加到同一文件；文件达到 `max_size_mb` 时删除较早的一半并在开头标注。启动时各自清理旧日志，包含当前文件默认最多保留 10 个托盘日志和 10 个代理日志，位于 CLI 旁的 `logs/`。
 
 | 问题 | 处理方法 |
 | --- | --- |
@@ -229,7 +230,7 @@ Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问�
 
 ### Read before use
 
-- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before moving, disable **Launch App at Login** and uninstall any registered OS service; re-enable or reinstall from the new location afterward.
+- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before moving, disable **Launch App at Login** and uninstall any registered OS service; re-enable or reinstall from the new location afterward. If `check` reports an unknown config setting after upgrading, remove the old `health.target` (use `health.targets`) and `logging.backups` settings.
 - **Extract the whole ZIP into a writable, permanent folder:** Keep the app, CLI, configuration and `scripts/` together; do not move the macOS `.app` alone. Open `ssh_proxy_app` on Windows/macOS; use the CLI on Linux.
 - **Prepare SSH first:** Local OpenSSH and server-side TCP forwarding are required. Background connections need noninteractive key authentication; load passphrase-protected keys into `ssh-agent`. Verify the server fingerprint on first connection. See [ssh_config](ssh_config) for setup instructions.
 - **Wait for readiness:** Wait for `running` in the menu before configuring clients. Defaults are `http://127.0.0.1:8181` for HTTP/HTTPS and `socks5h://127.0.0.1:1081` for SOCKS5. System proxy settings are not changed automatically. Fully quit existing Codex/Claude desktop instances before using their launchers.
@@ -372,8 +373,9 @@ See [config.toml](config.toml) for all settings; run `restart` after saving chan
 | `health.targets` | `example.com:443`, `www.microsoft.com:443`; at least one must be reachable through SSH for readiness |
 | `health.failover_on_probe_failure` | `false`; failed checks report `degraded` and preserve a live SSH session by default |
 | `logging.max_log_files` | `10`, minimum 1; separate retention limits for tray and proxy logs |
+| `logging.max_size_mb` | `10`, range 1..1024; at the limit a log's older half is removed |
 
-Each tray/proxy run writes one continuous log; errors append to it. At startup each cleans up its oldest files, keeping at most 10 tray logs and 10 proxy logs by default, including current files, in `logs/` beside the CLI.
+Each tray/proxy run writes one continuous log; errors append to it. When a file reaches `max_size_mb`, its older half is removed and the cut is marked at the top. At startup each cleans up its oldest files, keeping at most 10 tray logs and 10 proxy logs by default, including current files, in `logs/` beside the CLI.
 
 | Problem | Action |
 | --- | --- |

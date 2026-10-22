@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -26,7 +27,21 @@ func HideChild(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW | windows.CREATE_NEW_PROCESS_GROUP}
 }
 
-func DetachChild(cmd *exec.Cmd) { HideChild(cmd) }
+// StartDetached starts a hidden background process outside the caller's job,
+// so closing a terminal or IDE that owns a kill-on-close job does not stop it.
+// A job that forbids breakaway rejects the flag; then start inside that job.
+func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
+	cmd := newCmd()
+	HideChild(cmd)
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_BREAKAWAY_FROM_JOB
+	err := cmd.Start()
+	if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		cmd = newCmd()
+		HideChild(cmd)
+		err = cmd.Start()
+	}
+	return cmd, err
+}
 func managedSSHCommand(c *Config, alias string) (*exec.Cmd, io.Closer, error) {
 	return SSHCommand(c, alias, false), nil, nil
 }

@@ -68,8 +68,13 @@ func TestProxyRunLogs(t *testing.T) {
 			}
 		}
 	}
-	if out, err := call("start", "--wait", "3"); err == nil || !strings.Contains(string(out), "SOCKS port is unavailable") {
+	// An early supervisor exit must be reported at once, not after the whole wait.
+	began := time.Now()
+	if out, err := call("start", "--wait", "25"); err == nil || !strings.Contains(string(out), "SOCKS port is unavailable") {
 		t.Fatalf("expected startup failure: %v: %s", err, out)
+	}
+	if elapsed := time.Since(began); elapsed > 10*time.Second {
+		t.Fatalf("startup failure took %v; the exited supervisor was not detected", elapsed)
 	}
 	files(2)
 	first := testutil.StatusCLI(t, dir).Log

@@ -29,7 +29,7 @@ var icon []byte
 
 // run delegates the icon, native menu and event loop entirely
 // to gogpu/systray. One worker serializes CLI actions and backend state refresh.
-func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *os.File) error {
+func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *proxy.RunLog) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	unlock, err := proxy.LockInstance(p.ID + "-tray")
@@ -47,7 +47,7 @@ func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *
 	items := map[int]*systray.MenuItem{}
 	shown := map[int]Item{}
 	actions := make(chan int, 1)
-	for _, item := range Menu(proxy.Status{Phase: "checking"}, false, false, false, scripts...) {
+	for _, item := range Menu(proxy.Status{Phase: phaseChecking}, false, false, false, scripts...) {
 		if item.Separator {
 			menu.AddSeparator()
 			continue
@@ -104,7 +104,7 @@ func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *
 			defer timer.Stop()
 			smokeTimer = timer.C
 		}
-		st := proxy.Status{Phase: "checking"}
+		st := proxy.Status{Phase: phaseChecking}
 		setup := SetupPrompts{}
 		var startup bool
 		var startupErr error
@@ -133,7 +133,7 @@ func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *
 				}
 				shown[item.ID] = item
 			}
-			if next := "SSH Proxy — " + st.Phase; next != tooltip {
+			if next := "SSH Proxy — " + string(st.Phase); next != tooltip {
 				tray.SetTooltip(next)
 				tooltip = next
 			}
@@ -166,7 +166,7 @@ func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *
 				err = json.Unmarshal(out, &st)
 			}
 			if err != nil {
-				st = proxy.Status{Phase: "error", LastError: err.Error()}
+				st = proxy.Status{Phase: phaseError, LastError: err.Error()}
 			}
 			startup, startupErr = StartupEnabled(p.ID)
 			issue := errors.Join(err, startupErr)
@@ -214,7 +214,7 @@ func run(p proxy.Paths, backend string, smoke bool, logger *log.Logger, writer *
 					}
 					continue
 				}
-				if busy || (a >= ScriptBase && st.Phase != "running") {
+				if busy || (a >= ScriptBase && st.Phase != proxy.PhaseRunning) {
 					continue
 				}
 				busy = true

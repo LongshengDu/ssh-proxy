@@ -266,7 +266,7 @@ func waitServiceReady(p Paths, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		if st, err := controlCall(p, "GET", "/status"); err == nil {
-			if st.Phase == "running" || st.Phase == "degraded" {
+			if st.Phase == PhaseRunning || st.Phase == PhaseDegraded {
 				return nil
 			}
 		}

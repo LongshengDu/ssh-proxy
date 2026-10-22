@@ -73,6 +73,76 @@ func TestRunLogRetention(t *testing.T) {
 	}
 }
 
+func TestRunLogSizeLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "logs", "run.txt")
+	logger, writer, err := proxy.NewLog(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer.SetLimit(1)
+	// Child output and native ssh -E append through their own handles.
+	other, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := strings.Repeat("x", 1000)
+	for i := 0; i < 3000; i++ {
+		logger.Printf("%05d %s", i, payload)
+	}
+	if _, err := other.WriteString("child output\n"); err != nil {
+		t.Fatal(err)
+	}
+	other.Close()
+	logger.Print("last line")
+	writer.Close()
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) > 1<<20 {
+		t.Fatalf("log exceeds its limit: %d bytes: %v", len(data), err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if !strings.HasPrefix(lines[0], "--- Earlier lines removed") {
+		t.Fatalf("missing truncation marker: %.80q", lines[0])
+	}
+	for _, line := range lines[1:] {
+		if !strings.HasSuffix(line, payload) && !strings.HasSuffix(line, "last line") && line != "child output" {
+			t.Fatalf("partial line kept after truncation: %.80q", line)
+		}
+	}
+	text := string(data)
+	if !strings.Contains(text, "02999 ") || !strings.Contains(text, "\nchild output\n") || !strings.HasSuffix(text, "last line\n") || strings.Contains(text, " 00000 x") {
+		t.Fatal("truncation must keep the newest lines and drop the oldest")
+	}
+}
+
+func TestLogSizeAndRemovedLegacyConfig(t *testing.T) {
+	for _, tc := range []struct{ name, from, to, want string }{
+		{"size-zero", "max_size_mb = 10", "max_size_mb = 0", "logging.max_size_mb"},
+		{"size-too-large", "max_size_mb = 10", "max_size_mb = 1025", "logging.max_size_mb"},
+		{"size-valid", "max_size_mb = 10", "max_size_mb = 5", ""},
+		{"legacy-backups", "max_size_mb = 10", "max_size_mb = 10\nbackups = 3", "unknown config setting"},
+		{"legacy-health-target", "failures_before_failover = 3", "failures_before_failover = 3\ntarget = \"example.com:443\"", "unknown config setting"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
+			template := string(testutil.ConfigTemplate(t))
+			if !strings.Contains(template, tc.from) {
+				t.Fatal("default config changed:", tc.from)
+			}
+			if err := os.WriteFile(path, []byte(strings.Replace(template, tc.from, tc.to, 1)), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := proxy.LoadConfig(path)
+			if tc.want == "" {
+				if err != nil || cfg.Logging.MaxSizeMB != 5 {
+					t.Fatal("size limit not loaded", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("want error %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestLogRetentionConfig(t *testing.T) {
 	for _, limit := range []int{-1, 0, 1, 10} {
 		t.Run(fmt.Sprint(limit), func(t *testing.T) {

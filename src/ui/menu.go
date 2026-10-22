@@ -22,6 +22,12 @@ const (
 	ScriptBase
 )
 
+// Tray-only phases: before the first status poll, and when polling fails.
+const (
+	phaseChecking proxy.Phase = "checking"
+	phaseError    proxy.Phase = "error"
+)
+
 type Item struct {
 	ID                           int
 	Label                        string
@@ -31,10 +37,10 @@ type Item struct {
 // Menu is a snapshot of backend state, never a separate tray-owned proxy state.
 func Menu(st proxy.Status, startup, startupKnown, busy bool, scripts ...Script) []Item {
 	if st.Phase == "" {
-		st.Phase = "checking"
+		st.Phase = phaseChecking
 	}
-	label := "○ " + strings.ToUpper(st.Phase[:1]) + st.Phase[1:]
-	if st.Phase == "running" {
+	label := "○ " + strings.ToUpper(string(st.Phase[:1])) + string(st.Phase[1:])
+	if st.Phase == proxy.PhaseRunning {
 		label = "● Running"
 	}
 	if busy {
@@ -60,11 +66,11 @@ func Menu(st proxy.Status, startup, startupKnown, busy bool, scripts ...Script) 
 		{ID: SOCKSLabel, Label: "SOCKS5: " + value(st.SOCKS), Disabled: true},
 		{ID: HTTPLabel, Label: "HTTP: " + value(st.HTTP), Disabled: true},
 		{Separator: true},
-		{ID: ToggleProxy, Label: control, Disabled: busy || st.Phase == "checking" || st.Phase == "error"},
+		{ID: ToggleProxy, Label: control, Disabled: busy || st.Phase == phaseChecking || st.Phase == phaseError},
 		{Separator: true},
 	}
 	for i, script := range scripts {
-		items = append(items, Item{ID: ScriptBase + i, Label: "Run: " + script.Name, Disabled: busy || st.Phase != "running"})
+		items = append(items, Item{ID: ScriptBase + i, Label: "Run: " + script.Name, Disabled: busy || st.Phase != proxy.PhaseRunning})
 	}
 	if len(scripts) != 0 {
 		items = append(items, Item{Separator: true})

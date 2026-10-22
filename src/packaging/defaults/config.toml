@@ -30,3 +30,6 @@ failures_before_failover = 3
 # 每类分别保留的最新日志数量，包含当前日志。
 # Keep this many recent files per kind (tray / proxy), including the current run.
 max_log_files = 10
+# 单个日志文件的大小上限（MB，1..1024）；达到上限时删除较早的一半内容并标注。
+# Size limit per log file in MB (1..1024); at the limit the older half is removed and marked.
+max_size_mb = 10
