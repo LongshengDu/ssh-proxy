@@ -34,6 +34,7 @@ The tray invokes the CLI for validation, trust and lifecycle, and reads status i
 | Tray/menu | `gogpu/systray`; native dialogs and file openers |
 | Process ownership | Windows mutex/Job Object; Unix `gofrs/flock`, sessions and guardian process |
 | Test SSH server | `gliderlabs/ssh` and `x/crypto/ssh`, used only by tests |
+| Build/check tools | `staticcheck` and `go-winres`, pinned as `go.mod` tools and run with `go tool` |
 
 Keep protocol and OS behavior in existing libraries. Application builds use `CGO_ENABLED=0`; do not add cgo, WSL workflows, another SSH stack or a custom tray framework.
 
@@ -68,7 +69,7 @@ build/                    Ignored builds, private settings, reports and caches
 .build-tools/             Ignored downloaded Go toolchain
 ```
 
-All compiled application Go code belongs under `src/`. Imports flow one way: `config`, `logs`, `platform` and `bridge` at the bottom, then `control` and `supervisor`, then `service`, then `cli`; the tray (`ui`) uses only `config`, `control`, `platform` and `logs`. The packages build into just two programs, `ssh_proxy_cli` and `ssh_proxy_app`; services and internal helper modes (`_run`, `_ssh`, `_service`) reuse the CLI executable. Test files use `test_*_test.go` names in the two flat suites; reusable helpers belong in `tests/helpers/`. Do not add tests of the build/test scripts themselves. Keep real hosts, usernames, keys and logs out of public defaults. Read [AGENTS.md](AGENTS.md) before working.
+All compiled application Go code belongs under `src/`. Imports flow one way: `config`, `logs`, `platform` and `bridge` at the bottom, then `control` and `supervisor`, then `service`, then `cli`; the tray (`ui`) uses only `config`, `control`, `platform` and `logs`. The packages build into just two programs, `ssh_proxy_cli` and `ssh_proxy_app`; services and internal helper modes (`_run`, `_ssh`, `_service`) reuse the CLI executable. Contribution rules and the development workflow are in [AGENTS.md](AGENTS.md).
 
 ## Configuration and SSH contracts
 
@@ -224,9 +225,9 @@ Each system run writes `output.txt`, `events.jsonl` and `summary.json` under `bu
 
 ## Maintaining assets and documentation
 
-Keep the developer guide here and the Chinese-first/English user guide in `src/packaging/defaults/README.md`. Update both language sections for user-visible changes. Keep CLI flag descriptions/defaults in `src/cli/help.go` synchronized with behavior; `tests/unit/testdata/cli/expected.txt` records the exact help and error output and retain structured JSON contracts for the tray. Do not add chat history, changing verification dates or a second version value to the READMEs.
+This file is the developer guide; the Chinese-first/English user guide is `src/packaging/defaults/README.md`. `tests/unit/testdata/cli/expected.txt` records the CLI's exact help and error output.
 
-`src/ui/icon.svg` is the canonical artwork; keep a matching PNG and macOS ICNS. Preserve `icon.bak.svg`. The tray embeds the PNG; the Windows builder embeds it into the executable through pure-Go `go-winres` (pinned as a go.mod tool and run with `go tool go-winres`) using `src/packaging/windows-icon.json`. Apply resources before hashes/signing. Optional asset regeneration tools:
+`src/ui/icon.svg` is the canonical artwork, with a matching PNG and macOS ICNS. The tray embeds the PNG; the Windows builder embeds it into the executable through pure-Go `go-winres` (pinned as a go.mod tool and run with `go tool go-winres`) using `src/packaging/windows-icon.json`. Apply resources before hashes/signing. Optional asset regeneration tools:
 
 ```sh
 uv run --with resvg-py==0.5.0 python -c "from pathlib import Path; import resvg_py; p=Path('src/ui/icon.svg'); p.with_suffix('.png').write_bytes(resvg_py.svg_to_bytes(svg_path=str(p), skip_system_fonts=True))"
