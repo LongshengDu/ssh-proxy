@@ -56,7 +56,7 @@ func Run(args []string) (runErr error) {
 		if runErr != nil {
 			logger.Printf("Error: %v", runErr)
 		}
-		logger.Print("Tray exited; proxy unchanged")
+		logger.Print("Tray exited; app shutdown complete")
 	}()
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, nil)))
 	logger.Printf("Tray started; pid=%d; backend=%s; config=%s", os.Getpid(), abs, p.Config)

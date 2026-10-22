@@ -20,18 +20,19 @@ func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"tray"}, "unknown command"},
-		{[]string{"tray", "--hidden"}, "unknown command"},
-		{[]string{"login"}, "unknown command"},
-		{[]string{"startup"}, "unknown command"},
-		{[]string{"startup", "enable"}, "unknown command"},
-		{[]string{"startup", "disable"}, "unknown command"},
-		{[]string{"startup", "status"}, "unknown command"},
-		{[]string{"help"}, "unknown command"},
-		{[]string{"version"}, "unknown command"},
-		{[]string{"service", "start"}, "use start directly"},
-		{[]string{"service", "stop"}, "use stop directly"},
-		{[]string{"service", "restart"}, "use restart directly"},
+		{[]string{"tray"}, `unknown command "tray"`},
+		{[]string{"tray", "--hidden"}, `unknown command "tray"`},
+		{[]string{"login"}, `unknown command "login"`},
+		{[]string{"startup"}, `unknown command "startup"`},
+		{[]string{"startup", "enable"}, `unknown command "startup"`},
+		{[]string{"startup", "disable"}, `unknown command "startup"`},
+		{[]string{"startup", "status"}, `unknown command "startup"`},
+		{[]string{"help"}, `unknown command "help"`},
+		{[]string{"version"}, `unknown command "version"`},
+		{[]string{"completion"}, `unknown command "completion"`},
+		{[]string{"service", "start"}, `unknown command "start" for "ssh_proxy_cli service"`},
+		{[]string{"service", "stop"}, `unknown command "stop" for "ssh_proxy_cli service"`},
+		{[]string{"service", "restart"}, `unknown command "restart" for "ssh_proxy_cli service"`},
 	} {
 		t.Run(strings.Join(tc.args, "-"), func(t *testing.T) {
 			err := cli.Run(append(tc.args, "--config", configPath))

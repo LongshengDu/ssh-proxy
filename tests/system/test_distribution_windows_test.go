@@ -100,7 +100,11 @@ func TestTrayWindowsMenu(t *testing.T) {
 		if running {
 			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
 		}
-		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app (proxy keeps running)"}
+		exit := "Exit app"
+		if running {
+			exit = "Keep proxy running and exit"
+		}
+		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Stop proxy and exit", exit}
 		if len(items) != len(want) {
 			t.Fatalf("menu has %d items: %+v", len(items), items)
 		}
@@ -119,6 +123,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 		}
 		if byLabel[toggle].Checked {
 			t.Fatal("proxy action has a checkbox")
+		}
+		if byLabel["Stop proxy and exit"].Disabled == running || byLabel[exit].Disabled {
+			t.Fatal("exit choices do not match the proxy state")
 		}
 		for _, label := range []string{"Run: Claude", "Run: Codex"} {
 			if byLabel[label].Disabled == running {

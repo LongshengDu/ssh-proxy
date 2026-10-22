@@ -22,7 +22,7 @@ Both listeners run locally. The server needs SSH access with TCP forwarding enab
 
 The two listeners require distinct ports and numeric loopback addresses. A shared HTTP/SOCKS port would need a protocol-dispatching listener; this implementation has no mixed-port mode. It provides TCP proxying, not a VPN or system-wide traffic interception.
 
-The tray invokes the CLI for validation, trust and lifecycle, and reads status in-process from the running supervisor's authenticated loopback API, the same API the CLI uses. Closing the tray does not stop the supervisor or its SSH child.
+The tray invokes the CLI for validation, trust and lifecycle, and reads status in-process from the running supervisor's authenticated loopback API, the same API the CLI uses. The supervisor runs independently of the tray; the tray stops it only when the user chooses a stop action.
 
 | Responsibility | Implementation |
 | --- | --- |
@@ -33,6 +33,7 @@ The tray invokes the CLI for validation, trust and lifecycle, and reads status i
 | OS services | `kardianos/service`; Windows SCM, macOS launchd, Linux user systemd |
 | Tray/menu | `gogpu/systray`; native dialogs and file openers |
 | Process ownership | Windows mutex/Job Object; Unix `gofrs/flock`, sessions and guardian process |
+| Command line | `spf13/cobra`: commands, flags, help and parse errors |
 | Test SSH server | `gliderlabs/ssh` and `x/crypto/ssh`, used only by tests |
 | Build/check tools | `staticcheck` and `go-winres`, pinned as `go.mod` tools and run with `go tool` |
 
@@ -44,7 +45,7 @@ Keep protocol and OS behavior in existing libraries. Application builds use `CGO
 src/
   cmd/ssh_proxy_cli/       CLI entry point, all platforms
   cmd/ssh_proxy_app/       Tray entry point, Windows/macOS
-  cli/                    Commands, flags, reports and aligned help (help.go)
+  cli/                    Commands and reports; cobra parses the command tree and prints help
   config/                 TOML validation, paths/identity, SSH aliases, ssh -G and command arguments
   bridge/                 HTTP-to-SOCKS integration, connection tracking and health probes
   supervisor/             SSH lifecycle, readiness, health, failover and the background run
@@ -118,13 +119,17 @@ Each tray or proxy run creates one continuous file under `logs/`: `tray_<id>_...
 | Other public commands | Text output; operational errors go to stderr with a nonzero exit |
 | Help/version | `-h` / `--help`, including command-specific help; `-v` / `--version` |
 
-There is no `--json` switch or plain `help`/`version` command. Help returns before reading configuration or accessing services. `src/cli/help.go` shares flag/default definitions with runtime parsing and renders aligned, plain-text help within 80 columns.
+There is no `--json` switch or plain `help`/`version` command. `spf13/cobra` parses the command tree in `src/cli/cli.go`, which defines the flags, defaults and help; cobra prints the help (within 80 columns) and the parse errors. Long options take two dashes. `-c/--config` is accepted before or after the command; an empty path is an error. Unknown commands, including `service start/stop/restart`, are rejected. Help and version return before reading configuration or accessing services.
+
+The root help lists each command with its local flags and groups the service subcommands separately, pointing to `service --help`. A small usage-template customization derives those lines from Cobra's command/flag definitions. Help and completion subcommands are disabled; command-specific help uses `--help`. Keep command behavior and JSON reports stable when changing the parser; help and parse-error wording follow Cobra and are recorded in `tests/unit/testdata/cli/expected.txt`.
 
 The tray has no network supervisor of its own. `src/ui/controller.go` holds its state: it reads status about every two seconds, serializes user actions and updates native menu items only when their values change. This avoids menu flicker. The menu shows status/endpoint/ports, Start/Stop, scripts, login startup, launch auto-start, configs, logs/location and Exit.
 
+With no supervisor PID, **Exit app** closes immediately and **Stop proxy and exit** is disabled. An active supervisor (including connecting/reconnecting) offers **Stop proxy and exit** or **Keep proxy running and exit**. Stop-and-exit uses the ordinary CLI stop operation and waits for success before closing; failure keeps the app open with the existing error/log flow. Exit actions are disabled while that stop is pending. The menu keeps a fixed structure and updates labels/enabled state in place.
+
 At launch, `check` identifies invalid configuration. Missing/invalid SSH configuration opens for editing once per tray run. Other failures use a native error dialog and the current tray log; repeated identical polling errors are suppressed until recovery. File actions use OS associations.
 
-Every tray Start validates the configuration with `check` (opening a failing SSH file once) and then runs `trust --check` without a window. When that succeeds, it starts the proxy without opening a terminal. Only when it fails does the tray run interactive `trust --log <tray-log>` in a real terminal; after exit 0 it repeats `trust --check`, because a password login alone cannot run the background proxy, and starts only when that passes. Windows creates a console process with native handles; macOS controls Terminal through AppleScript and a temporary exit-status file, which may need Automation permission. The setup window closes after completion. A cancelled or failed setup, or a failed recheck, leaves the proxy stopped with the reason in an error dialog and the tray log; nothing retries until the user chooses Start again. Closing the tray preserves an already-running proxy.
+Every tray Start validates the configuration with `check` (opening a failing SSH file once) and then runs `trust --check` without a window. When that succeeds, it starts the proxy without opening a terminal. Only when it fails does the tray run interactive `trust --log <tray-log>` in a real terminal; after exit 0 it repeats `trust --check`, because a password login alone cannot run the background proxy, and starts only when that passes. Windows creates a console process with native handles; macOS controls Terminal through AppleScript and a temporary exit-status file, which may need Automation permission. The setup window closes after completion. A cancelled or failed setup, or a failed recheck, leaves the proxy stopped with the reason in an error dialog and the tray log; nothing retries until the user chooses Start again.
 
 **Start Proxy When App Launches** stores `app.start_proxy_on_launch` in `config.toml` (default `false`). The tray changes only that line, adding an `[app]` table when missing, keeps comments and line endings, replaces the file atomically and refuses read-only or unparsable files. At launch, with the setting on, a stopped proxy goes through the same flow as Start; a running proxy is reused, and invalid configuration only opens its file and reports the reason. Status polls never repeat setup. The CLI and OS services ignore the setting and never open an editor or terminal.
 

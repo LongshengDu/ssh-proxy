@@ -1,8 +1,6 @@
 package tests
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,7 +19,7 @@ var cliOutputCases = [][]string{
 	{"start", "--help"}, {"restart", "-h"}, {"stop", "--help"}, {"status", "--help"},
 	{"trust", "--help"}, {"logs", "--help"}, {"test", "--help"}, {"check", "--help"},
 	{"start", "--wait", "0", "--help"},
-	// Help wins over invalid options and arguments; unknown topics are errors.
+	// Record help combined with invalid options/arguments, using Cobra's parsing rules.
 	{"start", "--wait", "invalid", "--help"}, {"trust", "--log", "--help"}, {"logs", "--bogus", "-h"},
 	{"bogus", "--help"}, {"service", "bogus", "--help"}, {"_run", "--help"}, {"stop", "extra", "--help"},
 	{"service"}, {"service", "-h"}, {"service", "--help"},
@@ -31,6 +29,7 @@ var cliOutputCases = [][]string{
 	// Invalid invocations rejected before any configuration, service or process access.
 	{"bogus"}, {"help"}, {"version"}, {"help", "start"},
 	{"-v", "extra"}, {"--config"}, {"--config="}, {"-c="},
+	{"check", "--config"}, {"--config=", "check"}, {"-c=", "check"}, {"check", "-c", ""}, {"service", "status", "--config="},
 	{"start", "--wait", "0"}, {"start", "--wait", "3601"}, {"restart", "--wait", "x"},
 	{"start", "extra"}, {"start", "--bogus"}, {"--foreground", "--wait", "0"},
 	{"stop", "extra"}, {"status", "--json"}, {"check", "extra"},
@@ -41,7 +40,7 @@ var cliOutputCases = [][]string{
 	{"service", "bogus"}, {"service", "status", "extra"},
 	{"service", "install", "--user", "other"}, {"service", "install", "extra"},
 	{"_run", "extra"}, {"_service", "extra"},
-	// Go flag syntax also accepts one dash and = for long options.
+	// Long options take two dashes, with a space or = before the value; one dash is rejected.
 	{"logs", "-lines", "0"}, {"start", "-foreground", "-wait", "0"}, {"start", "--wait=0"}, {"logs", "-f", "--lines=0"},
 	{"-config", "other.toml", "status"},
 }
@@ -62,7 +61,7 @@ func runCLI(t *testing.T, args []string) (stdout, stderr string, code int) {
 	os.Stdout, os.Stderr = outFile, errFile
 	func() {
 		defer func() { os.Stdout, os.Stderr = savedOut, savedErr }()
-		if err := cli.Run(args); err != nil && !errors.Is(err, flag.ErrHelp) {
+		if err := cli.Run(args); err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			code = 1
 		}

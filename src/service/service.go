@@ -127,25 +127,13 @@ func controlService(svc kardianos.Service, state kardianos.Status, action string
 	return kardianos.Control(svc, action)
 }
 
-// Manage runs one service subcommand. The CLI has already handled help and
-// parsed install's options; args holds the subcommand and its remaining arguments.
-func Manage(p config.Paths, args []string) error {
-	switch args[0] {
-	case "install", "uninstall", "status", "enable", "disable":
-	case "start", "stop", "restart":
-		return fmt.Errorf("use %s directly; service %s is not a command", args[0], args[0])
-	default:
-		return fmt.Errorf("unknown service command %q", args[0])
-	}
-	if args[0] == "install" && len(args) != 1 {
-		return fmt.Errorf("unexpected install arguments")
-	} else if len(args) != 1 {
-		return fmt.Errorf("unexpected service arguments")
-	}
+// Manage runs one service subcommand: install, uninstall, status, enable or
+// disable. The CLI parser rejects other names and extra arguments.
+func Manage(p config.Paths, action string) error {
 	if present, err := servicePresent(p.ID); err != nil {
 		return err
-	} else if !present && args[0] != "install" {
-		if len(args) == 1 && (args[0] == "status" || args[0] == "uninstall") {
+	} else if !present && action != "install" {
+		if action == "status" || action == "uninstall" {
 			return serviceReport(serviceName(p.ID), false, "not_installed", false)
 		}
 		return fmt.Errorf("service is not installed")
@@ -154,7 +142,7 @@ func Manage(p config.Paths, args []string) error {
 	if err != nil {
 		return err
 	}
-	if args[0] == "install" {
+	if action == "install" {
 		if _, err = config.LoadConfig(p.Config); err != nil {
 			return err
 		}
@@ -197,7 +185,7 @@ func Manage(p config.Paths, args []string) error {
 		return serviceReport(cfg.Name, true, "stopped", true)
 	}
 	state, err := svc.Status()
-	if errors.Is(err, kardianos.ErrNotInstalled) && (args[0] == "status" || args[0] == "uninstall") {
+	if errors.Is(err, kardianos.ErrNotInstalled) && (action == "status" || action == "uninstall") {
 		return serviceReport(cfg.Name, false, "not_installed", false)
 	}
 	if err != nil {
@@ -207,7 +195,7 @@ func Manage(p config.Paths, args []string) error {
 	if state == kardianos.StatusRunning {
 		label = "running"
 	}
-	switch args[0] {
+	switch action {
 	case "status":
 		enabled, e := ServiceAutoStart(cfg.Name, "status")
 		if e != nil {
@@ -225,13 +213,13 @@ func Manage(p config.Paths, args []string) error {
 		}
 		return serviceReport(cfg.Name, false, "not_installed", false)
 	case "enable", "disable":
-		enabled, e := ServiceAutoStart(cfg.Name, args[0])
+		enabled, e := ServiceAutoStart(cfg.Name, action)
 		if e != nil {
 			return e
 		}
 		return serviceReport(cfg.Name, true, label, enabled)
 	default:
-		return fmt.Errorf("unknown service command %q", args[0])
+		return fmt.Errorf("unknown service command %q", action)
 	}
 }
 

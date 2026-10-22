@@ -85,6 +85,18 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 					if item.Checked == startup || item.Disabled {
 						t.Fatal(phase, item)
 					}
+				case ui.StopAndQuit:
+					if item.Disabled != (st.PID == 0) {
+						t.Fatal("stop-and-exit must require a proxy process", phase, item)
+					}
+				case ui.Quit:
+					want := "Exit app"
+					if st.PID != 0 {
+						want = "Keep proxy running and exit"
+					}
+					if item.Label != want || item.Disabled {
+						t.Fatal("exit choice does not match proxy state", phase, item)
+					}
 				case ui.SSHLabel:
 					if !strings.Contains(item.Label, st.Destination) || !item.Disabled {
 						t.Fatal(item)
@@ -105,7 +117,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 		}
 	}
 	for _, item := range ui.Menu(ui.MenuState{Status: control.Status{Phase: "running", PID: 123}, StartupKnown: true, AutoStartKnown: true, Busy: true}) {
-		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup || item.ID == ui.ToggleAutoStart) && !item.Disabled {
+		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup || item.ID == ui.ToggleAutoStart || item.ID == ui.StopAndQuit) && !item.Disabled {
 			t.Fatal("mutation enabled during action", item)
 		}
 		if (item.ID == ui.OpenConfig || item.ID == ui.Quit) && item.Disabled {

@@ -121,9 +121,13 @@ func run(p config.Paths, backend string, smoke bool, logger *log.Logger, writer 
 				return
 			case <-ticker.C:
 			case r := <-completed:
-				controller.Finish(ctx, r.id, r.err)
+				if controller.Finish(ctx, r.id, r.err) {
+					tray.Remove()
+					return
+				}
 			case id := <-actions:
-				if id == Quit {
+				if id == Quit && controller.action != StopAndQuit {
+					logger.Print("Exiting app; leaving proxy unchanged")
 					tray.Remove()
 					return
 				}

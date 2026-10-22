@@ -28,13 +28,13 @@ func TestServiceCommands(t *testing.T) {
 		}
 	}
 	for _, action := range []string{"start", "stop", "restart"} {
-		if out, err := testutil.CallCLI(dir, "service", action); err == nil || !strings.Contains(string(out), "use "+action+" directly") {
+		if out, err := testutil.CallCLI(dir, "service", action); err == nil || !strings.Contains(string(out), `unknown command "`+action+`" for "ssh_proxy_cli service"`) {
 			t.Fatalf("duplicate service control %s: %v %s", action, err, out)
 		}
 	}
 	for _, args := range [][]string{{"--user", "other"}, {"--user=other"}} {
 		out, err := testutil.CallCLI(dir, append([]string{"service", "install"}, args...)...)
-		if err == nil || !strings.Contains(string(out), "flag provided but not defined: -user") {
+		if err == nil || !strings.Contains(string(out), "unknown flag: --user") {
 			t.Fatalf("account selection must be rejected before installation: %v %s", err, out)
 		}
 	}

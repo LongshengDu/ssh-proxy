@@ -16,6 +16,7 @@ const (
 	OpenSSHConfig
 	OpenLocation
 	Quit
+	StopAndQuit
 	StatusLabel
 	SSHLabel
 	SOCKSLabel
@@ -39,6 +40,7 @@ type MenuState struct {
 	Startup, StartupKnown     bool // Launch App at Login.
 	AutoStart, AutoStartKnown bool // app.start_proxy_on_launch in config.toml.
 	Busy                      bool
+	Exiting                   bool // Waiting for Stop proxy and exit to finish.
 }
 
 // Menu is a snapshot of backend state, never a separate tray-owned proxy state.
@@ -83,7 +85,7 @@ func Menu(s MenuState, scripts ...Script) []Item {
 	if len(scripts) != 0 {
 		items = append(items, Item{Separator: true})
 	}
-	return append(items, []Item{
+	items = append(items, []Item{
 		{ID: ToggleStartup, Label: "Launch App at Login", Checked: s.Startup, Disabled: busy || !s.StartupKnown},
 		{ID: ToggleAutoStart, Label: "Start Proxy When App Launches", Checked: s.AutoStart, Disabled: busy || !s.AutoStartKnown},
 		{Separator: true},
@@ -93,6 +95,11 @@ func Menu(s MenuState, scripts ...Script) []Item {
 		{ID: OpenLog, Label: "Open Current Log"},
 		{ID: OpenLocation, Label: "Open Installed Location"},
 		{Separator: true},
-		{ID: Quit, Label: "Exit app (proxy keeps running)"},
+		{ID: StopAndQuit, Label: "Stop proxy and exit", Disabled: busy || st.PID == 0},
 	}...)
+	exitLabel := "Exit app"
+	if st.PID != 0 {
+		exitLabel = "Keep proxy running and exit"
+	}
+	return append(items, Item{ID: Quit, Label: exitLabel, Disabled: s.Exiting})
 }

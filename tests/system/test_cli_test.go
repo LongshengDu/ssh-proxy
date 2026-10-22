@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -51,91 +50,58 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		return string(out)
 	}
 	help := runHelp("--help")
-	for _, args := range [][]string{nil, {"-h"}} {
-		if runHelp(args...) != help {
-			t.Fatal("root help aliases disagree", args)
-		}
+	if runHelp("-h") != help {
+		t.Fatal("root help aliases disagree")
 	}
-	for _, option := range []string{"-c, --config", "-h, --help", "-v, --version", "Service commands (current user):", "  Permissions:", "Windows password", "without sudo", "service --help"} {
+	if out, err := testutil.CallCLI(dir); err != nil || string(out) != help {
+		t.Fatalf("no arguments must print the overview: %v %s", err, out)
+	}
+	for _, option := range []string{"-c, --config PATH", "-h, --help", "-v, --version", "Commands:", "Flags:", "Service commands (current user):", `Use "ssh_proxy_cli service --help" for service details.`} {
 		if !strings.Contains(help, option) {
 			t.Fatal("help missing", option)
 		}
 	}
-	if strings.Contains(help, "--user") {
-		t.Fatal("help must not advertise an account selection option")
-	}
-	if strings.Contains(help, "Examples:") || strings.Contains(help, "\n  help ") {
-		t.Fatal("overview must point to command help for details and examples")
-	}
-	if !strings.Contains(help, "Usage:") || !strings.Contains(help, "Commands:") || !strings.Contains(help, "Global options:") {
-		t.Fatal("missing standard help sections")
-	}
-	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "trust", "service"} {
-		if !strings.Contains(help, "  "+name+" ") {
-			t.Fatal("command absent from help", name)
-		}
-	}
-	// Catch the original defect without hard-coding a particular column number.
-	row := regexp.MustCompile(`^  \S.*? {2,}(\S.*)$`)
-	column, rows := -1, 0
-	for _, line := range strings.Split(help, "\n") {
-		if match := row.FindStringSubmatchIndex(line); match != nil {
-			if column >= 0 && match[2] != column {
-				t.Fatalf("description columns differ: %d vs %d: %q", column, match[2], line)
-			}
-			column, rows = match[2], rows+1
-		}
-	}
-	if rows != 16 {
-		t.Fatal("missing aligned command/option rows", rows)
+	if strings.Contains(help, "--user") || strings.Contains(help, "_run") || strings.Contains(help, "_service") {
+		t.Fatal("help must not advertise account selection or internal commands")
 	}
 	position := -1
-	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check"} {
-		next := strings.Index(help, "\n  "+name+" ")
+	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check", "service install", "service uninstall", "service status", "service enable", "service disable"} {
+		next := strings.Index(help, "\n  "+name)
 		if next <= position {
-			t.Fatal("incorrect overview command order", name)
+			t.Fatal("command absent or out of order in help", name)
 		}
 		position = next
 	}
-	if !strings.Contains(help, "\n\n  trust ") {
-		t.Fatal("missing separation between lifecycle and setup/diagnostic commands")
-	}
-	for _, tc := range []struct{ name, options, summary string }{
-		{"start", "[--foreground] [--wait SECONDS]", "wait defaults to 20s"},
-		{"restart", "[--foreground] [--wait SECONDS]", "wait defaults to 20s"},
-		{"trust", "[--check] [--log FILE] [ENDPOINT_NAME]", "Check only"},
-		{"logs", "[--follow|-f] [--lines N]", "last 60 lines by default"},
-		{"test", "[--url URL]", "https://example.com/"},
+	for _, usage := range []string{
+		"start [--foreground] [--wait=SECONDS]", "restart [--foreground] [--wait=SECONDS]",
+		"trust [ENDPOINT] [--check] [--log=FILE]", "logs [--follow] [--lines=N]", "test [--url=URL]",
 	} {
-		lines := strings.Split(help[strings.Index(help, "\n  "+tc.name+" ")+1:], "\n")
-		if len(lines) < 2 || !strings.HasPrefix(lines[1], "    "+tc.options+"  ") || !strings.Contains(lines[1], tc.summary) {
-			t.Fatal("missing indented option summary", tc.name)
+		if !strings.Contains(help, "\n  "+usage+"\n      ") {
+			t.Fatal("overview must show command flags above its description", usage)
+		}
+	}
+	for _, tc := range []struct{ command, want string }{
+		{"start", "--wait SECONDS"}, {"start", "(default 20)"}, {"restart", "--foreground"},
+		{"logs", "-f, --follow"}, {"logs", "(default 60)"}, {"test", `(default "https://example.com/")`},
+		{"trust", "--log FILE"}, {"trust", "--check"}, {"trust", "[ENDPOINT]"},
+		{"service", "elevated terminal"}, {"service", "without sudo"},
+		{"service install", "run trust"}, {"service install", "elevated terminal"}, {"service install", "without sudo"},
+	} {
+		page := runHelp(append(strings.Fields(tc.command), "--help")...)
+		if !strings.Contains(strings.Join(strings.Fields(page), " "), tc.want) { // Ignore help wrapping.
+			t.Fatalf("%s help missing %q: %s", tc.command, tc.want, page)
 		}
 	}
 	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "trust", "service", "service install", "service uninstall", "service status", "service enable", "service disable"} {
 		command := strings.Fields(name)
-		page := runHelp(append(append([]string{}, command...), "--help")...)
-		if runHelp(append(command, "-h")...) != page {
+		if runHelp(append(command, "-h")...) != runHelp(append(command, "--help")...) {
 			t.Fatalf("command help flags disagree: %s", name)
 		}
-		if strings.Contains(name, "service") && (!strings.Contains(page, "require elevation") || !strings.Contains(page, "without sudo")) {
-			t.Fatal("service help missing permissions", name)
-		}
 	}
-	for _, tc := range []struct{ name, option, value string }{
-		{"start", "--wait SECONDS", "default: 20"}, {"restart", "--foreground", "default: 20"},
-		{"logs", "-f, --follow", "default: 60"}, {"test", "--url URL", "default: https://example.com/"},
-		{"trust", "--log FILE", "[ENDPOINT_NAME]"},
-	} {
-		page := runHelp(tc.name, "--help")
-		if !strings.Contains(page, tc.option) || !strings.Contains(page, tc.value) {
-			t.Fatalf("missing command option/default: %s: %s", tc.name, page)
-		}
+	if runHelp("service") != runHelp("service", "--help") {
+		t.Fatal("service without a subcommand must show service help")
 	}
-	if runHelp("service") != runHelp("service", "--help") || runHelp("start", "--wait", "invalid", "--help") != runHelp("start", "--help") {
-		t.Fatal("help must take priority over command execution and validation")
-	}
-	for _, args := range [][]string{{"help"}, {"help", "start"}, {"help", "service", "install"}, {"version"}, {"tray"}, {"login"}, {"startup", "enable"}, {"startup", "disable"}, {"startup", "status"}, {"invalid"}} {
+	for _, args := range [][]string{{"help"}, {"help", "start"}, {"help", "service", "install"}, {"version"}, {"tray"}, {"login"}, {"startup", "enable"}, {"startup", "disable"}, {"startup", "status"}, {"completion"}, {"invalid"}} {
 		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "unknown command") {
 			t.Fatalf("%v: %v %s", args, err, out)
 		}
@@ -148,10 +114,15 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	var check config.ConfigCheck
 	custom := filepath.Join(dir, "alternate config.toml")
 	testutil.WriteFile(t, custom, testutil.ReadFile(filepath.Join(dir, "config.toml")))
-	for _, args := range [][]string{{"-c", custom, "check"}, {"check", "-c", custom}, {"-c=" + custom, "check"}} {
+	for _, args := range [][]string{{"-c", custom, "check"}, {"check", "-c", custom}, {"--config=" + custom, "check"}, {"-c=" + custom, "check"}} {
 		out, err := testutil.CallCLI(dir, args...)
 		if err != nil || json.Unmarshal(out, &check) != nil || check.Config != custom {
 			t.Fatalf("short config alias: %v: %v %s", args, err, out)
+		}
+	}
+	for _, args := range [][]string{{"--config=", "check"}, {"-c=", "check"}, {"check", "-c", ""}} {
+		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "flag needs an argument: --config") {
+			t.Fatalf("empty config path must be rejected: %v: %v %s", args, err, out)
 		}
 	}
 	if err := json.Unmarshal(testutil.MustCLI(t, dir, "check"), &check); err != nil || check.Valid || check.EditFile != filepath.Join(dir, "ssh_config") {

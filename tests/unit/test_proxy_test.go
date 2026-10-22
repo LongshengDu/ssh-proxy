@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -21,7 +22,6 @@ import (
 	"time"
 
 	"ssh_proxy/src/bridge"
-	"ssh_proxy/src/cli"
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/logs"
@@ -330,20 +330,22 @@ func TestSSHJobCleanup(t *testing.T) {
 }
 
 func TestConfigFlagParsing(t *testing.T) {
-	for _, option := range []string{"-c", "--config"} {
-		for _, input := range [][]string{
-			{"start", option, "C:\\space path\\config.toml", "--foreground"},
-			{option + "=C:\\space path\\config.toml", "start", "--foreground"},
-		} {
-			path, args, err := cli.TakeConfig(input)
-			if err != nil || path != "C:\\space path\\config.toml" || strings.Join(args, " ") != "start --foreground" {
-				t.Fatal(path, args, err)
-			}
+	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
+	path := filepath.Join(t.TempDir(), "space path", "config.toml")
+	for _, args := range [][]string{
+		{"check", "-c", path}, {"-c", path, "check"}, {"check", "--config", path}, {"--config=" + path, "check"},
+		{"-c=" + path, "check"}, {"check", "-c=" + path},
+	} {
+		stdout, stderr, code := runCLI(t, args)
+		var result config.ConfigCheck
+		if code != 0 || json.Unmarshal([]byte(stdout), &result) != nil || result.Config != path {
+			t.Fatalf("%v: config not selected: %d %s %s", args, code, stdout, stderr)
 		}
-		for _, input := range [][]string{{option}, {option + "="}} {
-			if _, _, err := cli.TakeConfig(input); err == nil {
-				t.Fatal("missing config path accepted", input)
-			}
+	}
+	// A missing or explicitly empty path is an error, never the default configuration.
+	for _, args := range [][]string{{"check", "--config"}, {"check", "--config="}, {"-c=", "check"}, {"check", "-c", ""}} {
+		if _, stderr, code := runCLI(t, args); code == 0 || !strings.Contains(stderr, "--config") {
+			t.Fatalf("%v: missing config path accepted: %s", args, stderr)
 		}
 	}
 }

@@ -58,7 +58,7 @@ type Controller struct {
 	startupErr   error
 	autoStart    bool
 	autoStartErr error
-	busy         bool
+	action       int // Nonzero while a job is running.
 	lastError    string
 
 	mu      sync.Mutex // Guards prompts, which jobs also use.
@@ -77,7 +77,7 @@ func (c *Controller) report(err error) {
 
 func (c *Controller) render() {
 	state := MenuState{Status: c.st, Startup: c.startup, StartupKnown: c.startupErr == nil,
-		AutoStart: c.autoStart, AutoStartKnown: c.autoStartErr == nil, Busy: c.busy}
+		AutoStart: c.autoStart, AutoStartKnown: c.autoStartErr == nil, Busy: c.action != 0, Exiting: c.action == StopAndQuit}
 	c.view.Render(Menu(state, c.scripts...), "SSH Proxy — "+string(c.st.Phase))
 }
 
@@ -154,7 +154,7 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 		}
 		return nil
 	}
-	if c.busy || (id >= ScriptBase && c.st.Phase != control.PhaseRunning) {
+	if c.action != 0 || (id >= ScriptBase && c.st.Phase != control.PhaseRunning) {
 		return nil
 	}
 	var job func() error
@@ -168,6 +168,9 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 		job = func() error { return c.desktop.SetStartup(!startup) }
 	case id == ToggleAutoStart:
 		job = func() error { return c.backend.SetAutoStart(!autoStart) }
+	case id == StopAndQuit:
+		c.logger.Print("Stopping proxy before exiting app")
+		job = func() error { return c.backend.Stop(ctx) }
 	case id == ToggleProxy && active:
 		job = func() error { return c.backend.Stop(ctx) }
 	case id == ToggleProxy:
@@ -175,17 +178,18 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 	default:
 		return nil
 	}
-	c.busy = true
+	c.action = id
 	c.render()
 	return job
 }
 
-// Finish ends a job from Handle and reports its failure.
-func (c *Controller) Finish(ctx context.Context, id int, err error) {
-	c.busy = false
+// Finish reports a job's failure and requests exit only after a successful stop.
+func (c *Controller) Finish(ctx context.Context, id int, err error) bool {
+	c.action = 0
 	if err != nil && ctx.Err() == nil {
 		c.report(err)
 	}
+	return id == StopAndQuit && err == nil && ctx.Err() == nil
 }
 
 // startProxy is shared by the Start item and launch auto-start. It validates

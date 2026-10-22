@@ -13,6 +13,7 @@ import (
 
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
+	"ssh_proxy/src/platform"
 	"ssh_proxy/src/ui"
 	"ssh_proxy/tests/helpers"
 )
@@ -120,7 +121,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	call("start", "--wait", "15")
 	testutil.WaitFor(t, func() bool { return strings.Count(testutil.ReadFile(log), "Proxy status: running") >= 2 })
 	active := status()
-	testutil.NativeClick(t, pid, "Exit app (proxy keeps running)")
+	testutil.NativeClick(t, pid, "Keep proxy running and exit")
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}
@@ -128,9 +129,22 @@ func TestTrayNativeWorkflow(t *testing.T) {
 		t.Fatal("tray exit stopped proxy")
 	}
 	call("test", "--url", f.Origin.URL)
-	call("stop")
 	files, _ := filepath.Glob(filepath.Join(dir, "logs", "tray_*.txt"))
 	if len(files) != 1 || !strings.Contains(testutil.ReadFile(log), "Tray exited;") {
 		t.Fatal("app run log split or missing shutdown", files)
+	}
+	// The other exit choice must stop the same supervisor and SSH child first.
+	app = testutil.StartApp(t, dir, configPath, testutil.CLIPath(dir))
+	testutil.WaitFor(t, func() bool {
+		currentLog := testutil.TrayLog(dir)
+		return currentLog != log && strings.Contains(testutil.ReadFile(currentLog), "Proxy status: running")
+	})
+	testutil.NativeClick(t, app.Process.Pid, "Stop proxy and exit")
+	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(app.Process.Pid) })
+	if err := app.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if status().PID != 0 || platform.ProcessAlive(active.PID) || platform.ProcessAlive(active.SSHPID) {
+		t.Fatal("stop-and-exit left the proxy or SSH child running")
 	}
 }

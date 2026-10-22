@@ -11,6 +11,8 @@ require (
 	github.com/gogpu/systray v0.3.0
 	github.com/kardianos/service v1.3.0
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.9
 	github.com/trzsz/ssh_config v1.3.10
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.61.0
@@ -21,10 +23,11 @@ require (
 require (
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/buildkite/shellwords v1.0.1 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/go-webgpu/goffi v0.6.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/tc-hib/go-winres v0.3.3 // indirect

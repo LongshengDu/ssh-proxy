@@ -38,7 +38,7 @@ func TestTrayLoginLaunch(t *testing.T) {
 	})
 	testutil.NativeClick(t, app.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && enabled })
-	testutil.NativeClick(t, app.Process.Pid, "Exit app (proxy keeps running)")
+	testutil.NativeClick(t, app.Process.Pid, "Exit app")
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestTrayLoginLaunch(t *testing.T) {
 	if testutil.StatusCLI(t, dir).Phase != "stopped" {
 		t.Fatal("login launch started the proxy")
 	}
-	testutil.NativeClick(t, pid, "Exit app (proxy keeps running)")
+	testutil.NativeClick(t, pid, "Exit app")
 	testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Tray exited;") })
 }
 
@@ -171,7 +171,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
 				testutil.NativeTerminalsClosed(t, before)
 			}
-			testutil.NativeClick(t, pid, "Exit app (proxy keeps running)")
+			testutil.NativeClick(t, pid, "Exit app")
 			if err := app.Wait(); err != nil {
 				t.Fatal(err)
 			}
@@ -227,7 +227,7 @@ func TestTrayRecoveryErrors(t *testing.T) {
 						time.Sleep(300 * time.Millisecond)
 					}
 				}
-				testutil.NativeClick(t, pid, "Exit app (proxy keeps running)")
+				testutil.NativeClick(t, pid, "Exit app")
 			}
 			err := app.Wait()
 			if (err != nil) != (scenario == "missing CLI") {
@@ -259,7 +259,7 @@ func TestTraySingleInstance(t *testing.T) {
 	if !platform.ProcessAlive(first.Process.Pid) {
 		t.Fatal("duplicate instance stopped the existing app")
 	}
-	testutil.NativeClick(t, first.Process.Pid, "Exit app (proxy keeps running)")
+	testutil.NativeClick(t, first.Process.Pid, "Exit app")
 	if err := first.Wait(); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestTrayFirstHostKeySetup(t *testing.T) {
 	testutil.MustCLI(t, dir, "test", "--url", f.Origin.URL)
 	testutil.NativeClick(t, app.Process.Pid, "Stop proxy")
 	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "stopped" })
-	testutil.NativeClick(t, app.Process.Pid, "Exit app (proxy keeps running)")
+	testutil.NativeClick(t, app.Process.Pid, "Exit app")
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}

@@ -56,7 +56,9 @@ func (b *fakeBackend) Start(context.Context) error {
 }
 func (b *fakeBackend) Stop(context.Context) error {
 	b.calls = append(b.calls, "stop")
-	b.status = control.Status{Phase: control.PhaseStopped}
+	if b.stopErr == nil {
+		b.status = control.Status{Phase: control.PhaseStopped}
+	}
 	return b.stopErr
 }
 func (b *fakeBackend) AutoStart() (bool, error) { return b.autoStart, nil }
@@ -306,6 +308,32 @@ func TestTrayControllerBusyGateAndRecovery(t *testing.T) {
 	backend.calls = nil
 	if !run(ctx, c, ui.ToggleProxy) || !slices.Equal(backend.calls, []string{"stop"}) {
 		t.Fatal("running proxy not stopped", backend.calls)
+	}
+}
+
+func TestTrayControllerStopAndExit(t *testing.T) {
+	for _, stopErr := range []error{nil, errors.New("stop failed")} {
+		ctx := context.Background()
+		backend := &fakeBackend{status: control.Status{Phase: control.PhaseRunning, PID: 7}, stopErr: stopErr}
+		c, desktop, view := newController(backend)
+		c.Refresh(ctx)
+		job := c.Handle(ctx, ui.StopAndQuit)
+		if job == nil || !view.item(ui.Quit).Disabled || !view.item(ui.StopAndQuit).Disabled {
+			t.Fatal("exit must wait for stop to complete", view.items)
+		}
+		if c.Handle(ctx, ui.ToggleProxy) != nil || c.Handle(ctx, ui.StopAndQuit) != nil {
+			t.Fatal("another mutation was accepted while stopping")
+		}
+		if exit := c.Finish(ctx, ui.StopAndQuit, job()); exit != (stopErr == nil) {
+			t.Fatal("exit must happen only after a successful stop", exit, stopErr)
+		}
+		if !slices.Equal(backend.calls, []string{"stop"}) {
+			t.Fatal("exit must only stop the existing proxy", backend.calls)
+		}
+		c.Refresh(ctx)
+		if stopErr != nil && (!slices.Equal(desktop.messages, []string{"stop failed"}) || view.item(ui.Quit).Disabled || view.item(ui.StopAndQuit).Disabled) {
+			t.Fatal("failed stop must report the error and leave exit choices available", desktop.messages, view.items)
+		}
 	}
 }
 
