@@ -169,7 +169,7 @@ SSH 退出会触发重连和备用主机尝试；切换会断开现有连接，�
 
 ### 6. 启动脚本与自定义
 
-自定义无需交互的启动脚本放在 `scripts/`：Windows 用 `.ps1`，macOS 用 `.sh`。重启托盘后出现 **Run: 文件名**，仅在代理为 `running` 时可用；输出写入托盘日志，失败会提示。以 `_` 开头的文件（如 `_proxy.ps1`）是共用辅助脚本，不会出现在菜单中。
+自定义无需交互的启动脚本放在 `scripts/`：Windows 用 `.ps1`，macOS 用 `.sh`。重启托盘后出现 **Run: 文件名**，仅在代理为 `running` 时可用；输出写入托盘日志，失败会提示。
 
 除了托盘菜单，也可在解压目录手动运行脚本。先安装桌面应用、完成 SSH 设置，并**完全退出已运行的桌面应用**：
 
@@ -396,7 +396,7 @@ SSH exits trigger reconnection and attempts at backup hosts. Switching closes ex
 
 ### 6. Launcher scripts and customization
 
-Add noninteractive launchers to `scripts/`: `.ps1` on Windows, `.sh` on macOS. Restart the tray to discover them as **Run: filename**, enabled only in the `running` state. Output joins the tray log; failures show an error. Files starting with `_`, such as `_proxy.ps1`, are shared helpers and do not appear in the menu.
+Add noninteractive launchers to `scripts/`: `.ps1` on Windows, `.sh` on macOS. Restart the tray to discover them as **Run: filename**, enabled only in the `running` state. Output joins the tray log; failures show an error.
 
 You can also run launchers manually from the extracted folder. Install the desktop app, complete SSH setup and **fully quit any running instance** first:
 

@@ -5,7 +5,6 @@ set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 # PROXY_URL overrides the running proxy's HTTP address.
 proxy="${PROXY_URL:-}"
-. "$root/scripts/_proxy.sh"
 app="${CLAUDE_APP:-}"
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -27,9 +26,24 @@ if [[ -z "$app" || ! -x "$app" ]]; then
 fi
 
 # start is idempotent; neither the proxy nor the desktop app needs this terminal.
-running="$(start_ssh_proxy "$root")"
-proxy="${proxy:-$running}"
-set_proxy_environment "$proxy"
+"$root/ssh_proxy_cli" start
+status="$("$root/ssh_proxy_cli" status)"
+if ! printf '%s\n' "$status" | grep -Eq '"phase"[[:space:]]*:[[:space:]]*"(running|degraded)"'; then
+    printf 'Proxy is not ready. Check its log and retry.\n%s\n' "$status" >&2
+    exit 1
+fi
+if [[ -z "$proxy" ]]; then
+    # status prints indented JSON with one field per line.
+    http="$(printf '%s\n' "$status" | sed -nE 's/^[[:space:]]*"http"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p')"
+    if [[ -z "$http" ]]; then
+        printf 'Proxy status has no HTTP address.\n%s\n' "$status" >&2
+        exit 1
+    fi
+    proxy="http://$http"
+fi
+export HTTP_PROXY="$proxy" HTTPS_PROXY="$proxy" NO_PROXY='localhost,127.0.0.1,::1'
+export http_proxy="$proxy" https_proxy="$proxy" no_proxy="$NO_PROXY"
+unset ALL_PROXY all_proxy
 mkdir -p "$root/logs"
 log="$root/logs/claude_$(date -u +%Y%m%d_%H%M%S)_$$.txt"
 nohup "$app" "--proxy-server=$proxy" \

@@ -139,9 +139,9 @@ The app owns **Launch App at Login**, which opens only the tray:
 
 The checkbox currently checks registration existence, not external OS disablement. Keep this limitation visible in the user guide. The CLI has no tray/login-startup management commands.
 
-At tray startup, `scripts/` is scanned in filename order for `.ps1` on Windows or `.sh` on macOS; names starting with `_` are shared helpers, not menu entries. Entries are enabled only when the proxy is `running` and no action is pending. Script output joins the tray log; failure uses the normal error dialog. Scripts are noninteractive, and restarting the tray refreshes the list.
+At tray startup, `scripts/` is scanned in filename order for `.ps1` on Windows or `.sh` on macOS. Entries are enabled only when the proxy is `running` and no action is pending. Script output joins the tray log; failure uses the normal error dialog. Scripts are noninteractive, and restarting the tray refreshes the list.
 
-Bundled Codex/Claude launchers share `scripts/_proxy.ps1` or `_proxy.sh`: they start or reuse the CLI, verify readiness, take the proxy URL from the `http` field of `status`, set HTTP proxy environment variables and Electron proxy arguments, clear ALL_PROXY and disable QUIC. Windows scripts accept `-AppPath`/`-Proxy`; macOS scripts accept `CODEX_APP` or `CLAUDE_APP` and `PROXY_URL`; the proxy option overrides the running proxy's address, and keep desktop output in `logs/codex_*.txt` or `logs/claude_*.txt`. They do not install apps, stop existing apps or modify TOML. Linux users configure their clients directly; the Bash launchers are macOS-only.
+Bundled Codex/Claude launchers start or reuse the CLI, verify readiness, take the proxy URL from the `http` field of `status`, set HTTP proxy environment variables and Electron proxy arguments, clear ALL_PROXY and disable QUIC. Windows scripts accept `-AppPath`/`-Proxy`; macOS scripts accept `CODEX_APP` or `CLAUDE_APP` and `PROXY_URL`; the proxy option overrides the running proxy's address, and keep desktop output in `logs/codex_*.txt` or `logs/claude_*.txt`. They do not install apps, stop existing apps or modify TOML. Linux users configure their clients directly; the Bash launchers are macOS-only.
 
 ## Optional OS services
 

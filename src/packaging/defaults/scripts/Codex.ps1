@@ -6,7 +6,6 @@ param(
     [string]$AppPath = ''
 )
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '_proxy.ps1')
 
 # Locate the Microsoft Store app, or accept an explicit desktop executable.
 if (-not $AppPath) {
@@ -19,15 +18,25 @@ if (-not (Test-Path -LiteralPath $AppPath -PathType Leaf)) {
 }
 
 # Reuse the bundled CLI; it keeps running after this launcher exits.
-$running = Start-SshProxy
-if (-not $Proxy) { $Proxy = $running }
+$cli = Join-Path (Split-Path -Parent $PSScriptRoot) 'ssh_proxy_cli.exe'
+& $cli start
+if ($LASTEXITCODE -ne 0) { throw 'Proxy startup failed. Check config.toml, ssh_config and logs/.' }
+$statusText = & $cli status
+if ($LASTEXITCODE -ne 0) { throw 'Could not read proxy status.' }
+$status = $statusText | ConvertFrom-Json
+if ($status.phase -notin @('running', 'degraded')) {
+    throw "Proxy is not ready ($($status.phase)): $($status.last_error). Check the proxy log and retry."
+}
+if (-not $Proxy) { $Proxy = "http://$($status.http)" }
 
 # For the backend processes launched by the app
-Set-ProxyEnvironment $Proxy
+$env:HTTP_PROXY = $Proxy
+$env:HTTPS_PROXY = $Proxy
+$env:NO_PROXY = "localhost,127.0.0.1,::1"
+Remove-Item Env:ALL_PROXY -ErrorAction SilentlyContinue
 
-# Launch the desktop app with its own proxy setting. -WindowStyle Hidden is
-# intentional for the Codex Store app; Claude.ps1 uses Normal.
-Start-Process -FilePath $AppPath -WindowStyle Hidden -ArgumentList @(
+# Launch the desktop app with its own proxy setting
+Start-Process -FilePath $AppPath -WindowStyle Normal -ArgumentList @(
     "--proxy-server=$Proxy",
     "--proxy-bypass-list=localhost;127.0.0.1;[::1]",
     "--disable-quic"

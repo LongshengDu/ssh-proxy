@@ -24,7 +24,7 @@ func TestConfigOpensOnce(t *testing.T) {
 
 func TestPlatformScriptsAndReadiness(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"Codex.ps1", "Codex.sh", "Two words.PS1", "notes.txt", "_proxy.ps1", "_proxy.sh"} {
+	for _, name := range []string{"Codex.ps1", "Codex.sh", "Two words.PS1", "notes.txt"} {
 		if err := os.WriteFile(filepath.Join(dir, name), nil, 0600); err != nil {
 			t.Fatal(err)
 		}
