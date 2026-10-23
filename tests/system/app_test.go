@@ -27,7 +27,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	servers := filepath.Join(dir, "ssh_config")
 	sshText := testutil.ReadFile(servers)
 	// Ordered fallback is exercised by CLI tests. This UI workflow starts with
-	// healthy endpoints so transient connection-error dialogs cannot mask later assertions.
+	// healthy endpoints.
 	sshText = sshText[strings.Index(sshText, "Host primary\n"):]
 	testutil.WriteFile(t, servers, "# Add your hosts\n")
 	p, err := config.PathsForExecutable(testutil.CLIPath(dir))
@@ -86,11 +86,13 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	testutil.ExpectMenu(t, pid, "SOCKS5: "+st.SOCKS, true, false)
 	testutil.ExpectMenu(t, pid, "HTTP: "+st.HTTP, true, false)
 	call("test", "--url", f.Origin.URL)
+	// Health failures while the proxy retries go to the tooltip and log, never a dialog.
 	f.Blocked.Store(true)
-	testutil.ExpectDialog(t, pid, "all forwarding probes failed")
+	testutil.WaitFor(t, func() bool {
+		return strings.Contains(testutil.ReadFile(log), "Proxy error: all forwarding probes failed")
+	})
+	testutil.ExpectNoDialog(t, pid)
 	f.Blocked.Store(false)
-	testutil.NativeDismiss(t, pid)
-	testutil.NativeOpened(t, log)
 	testutil.WaitFor(t, func() bool { return status().Phase == "running" })
 	testutil.NativeClick(t, pid, "Run: Fixture")
 	testutil.WaitFor(t, func() bool { return strings.TrimSpace(testutil.ReadFile(record)) == "ok" })

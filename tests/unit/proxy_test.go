@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,8 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,9 +32,12 @@ import (
 	"ssh_proxy/tests/helpers"
 )
 
+// A state file left by a hard stop may name a live, unrelated PID. Nothing holds
+// the lock, so stop has nothing to stop and never kills by PID. Windows reuses
+// PIDs quickly, so its status trusts the lock; Unix status keeps the PID check.
 func TestStaleStateDoesNotAuthorizeKillingLiveProcess(t *testing.T) {
 	dir := t.TempDir()
-	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json"), Logs: dir}
+	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json"), Logs: dir, ID: fmt.Sprintf("stale%011x", os.Getpid())}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not a proxy", http.StatusUnauthorized) }))
 	defer server.Close()
 	state, err := control.NewState(p, strings.TrimPrefix(server.URL, "http://"))
@@ -41,11 +47,64 @@ func TestStaleStateDoesNotAuthorizeKillingLiveProcess(t *testing.T) {
 	if err := control.WriteState(p, state); err != nil {
 		t.Fatal(err)
 	}
-	if st := control.QueryStatus(p); st.Phase != control.PhaseUnresponsive || st.PID != os.Getpid() {
+	st := control.QueryStatus(p)
+	if runtime.GOOS == "windows" {
+		if st.Phase != control.PhaseStopped || !st.UncleanExit || st.PID != 0 {
+			t.Fatalf("reused PID must not look alive: %+v", st)
+		}
+	} else if st.Phase != control.PhaseUnresponsive || st.PID != os.Getpid() {
 		t.Fatalf("wrong stale status: %+v", st)
 	}
-	if err := supervisor.StopBackground(p); err == nil || !strings.Contains(err.Error(), "no process was killed") {
-		t.Fatal("stale PID accepted", err)
+	if err := supervisor.StopBackground(p); err != nil {
+		t.Fatal("stop without a supervisor must succeed:", err)
+	}
+	if _, err := os.Stat(p.State); err != nil {
+		t.Fatal("only the lock holder may remove state", err)
+	}
+}
+
+// A supervisor that holds the lock but has not published its control API yet
+// is still starting: stop waits for the API and stops it, never reporting a
+// stopped proxy that then starts.
+func TestStopWaitsForStartingSupervisor(t *testing.T) {
+	dir := t.TempDir()
+	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json"), Logs: dir, ID: fmt.Sprintf("start%011x", os.Getpid())}
+	unlock, err := platform.LockInstance(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var release sync.Once
+	defer release.Do(unlock)
+	var handler http.Handler
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
+	defer server.Close()
+	state, err := control.NewState(p, strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler = control.ControlHandler(state.Token, func() control.Status {
+		return control.Status{Phase: control.PhaseConnecting, PID: state.PID, Config: p.Config}
+	}, func() { release.Do(unlock) })
+	done := make(chan error, 1)
+	go func() { done <- supervisor.StopBackground(p) }()
+	select {
+	case err := <-done:
+		t.Fatal("stop returned while the supervisor was starting:", err)
+	case <-time.After(700 * time.Millisecond):
+	}
+	if err := control.WriteState(p, state); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("stop did not finish after the control API appeared")
+	}
+	if running, err := platform.InstanceRunning(p.ID); err != nil || running {
+		t.Fatal("supervisor lock still held", running, err)
 	}
 }
 
@@ -217,19 +276,29 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 	for _, tc := range []struct{ name, from, to string }{
 		{"nonloopback", `bind = "127.0.0.1"`, `bind = "0.0.0.0"`},
 		{"sameports", `http_port = 8181`, `http_port = 1081`},
-		{"unknown", `http_port = 8181`, `http_prt = 8181`},
+		{"missing-setting", `http_port = 8181`, `http_prt = 8181`},
 		{"badtimeout", `timeout_seconds = 8`, `timeout_seconds = 0`},
 		{"bad-ssh-timeout", `connect_timeout_seconds = 10`, `connect_timeout_seconds = 0`},
 		{"bad-ssh-attempts", `connection_attempts = 1`, `connection_attempts = 0`},
 		{"bad-ssh-keepalive", `server_alive_interval_seconds = 15`, `server_alive_interval_seconds = 0`},
 		{"bad-ssh-count", `server_alive_count_max = 3`, `server_alive_count_max = 0`},
-		{"obsolete-trust-path", `[ssh]`, "[ssh]\nknown_hosts_file = \"known_hosts\""},
-		{"obsolete-alias-list", `[proxy]`, "endpoints = [\"unused\"]\n[proxy]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			os.WriteFile(path, []byte(strings.Replace(string(template), tc.from, tc.to, 1)), 0600)
 			if _, err := config.LoadConfig(path); err == nil {
 				t.Fatal("invalid config accepted")
+			}
+		})
+	}
+	// Settings the program no longer uses are ignored.
+	for _, tc := range []struct{ name, from, to string }{
+		{"obsolete-trust-path", `[ssh]`, "[ssh]\nknown_hosts_file = \"known_hosts\""},
+		{"obsolete-alias-list", `[proxy]`, "endpoints = [\"unused\"]\n[proxy]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			os.WriteFile(path, []byte(strings.Replace(string(template), tc.from, tc.to, 1)), 0600)
+			if _, err := config.LoadConfig(path); err != nil {
+				t.Fatal("unused setting rejected:", err)
 			}
 		})
 	}

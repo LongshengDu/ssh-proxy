@@ -110,6 +110,8 @@ var (
 	badSSHConfig   = config.ConfigCheck{Valid: false, EditFile: "ssh_config", Error: "unsupported option"}
 	noSSHServer    = config.ConfigCheck{Valid: false, Incomplete: true, EditFile: "ssh_config", Error: "no SSH server in ssh_config yet"}
 	errLoginFailed = errors.New("Permission denied (publickey)")
+	errHostKey     = errors.New("No ED25519 host key is known for proxy.example.\r\nHost key verification failed.")
+	errOffline     = errors.New("ssh: Could not resolve hostname proxy.example: No such host is known.")
 )
 
 func newController(backend *fakeBackend, scripts ...ui.Script) (*ui.Controller, *fakeDesktop, *fakeView) {
@@ -140,22 +142,32 @@ func startProxy(t *testing.T, backend *fakeBackend) (*fakeDesktop, []string) {
 	return desktop, backend.calls
 }
 
-func TestTrayControllerReportsEachProblemOnce(t *testing.T) {
+// The proxy retries on its own, so its reconnect and health errors appear in
+// the tooltip, never as dialogs; a tray problem is reported once.
+func TestTrayControllerShowsProxyErrorsWithoutDialogs(t *testing.T) {
 	ctx := context.Background()
 	backend := &fakeBackend{status: control.Status{Phase: control.PhaseDegraded, PID: 7, LastError: "probe failed"}}
 	c, desktop, view := newController(backend)
 	for range 3 {
 		c.Refresh(ctx)
 	}
-	backend.status.LastError = "SSH exited"
+	if view.tooltip != "SSH Proxy — degraded: probe failed" {
+		t.Fatalf("tooltip %q", view.tooltip)
+	}
+	backend.status = control.Status{Phase: control.PhaseReconnecting, PID: 7, LastError: "SSH exited\n" + strings.Repeat("detail ", 40)}
 	c.Refresh(ctx)
+	if !strings.HasPrefix(view.tooltip, "SSH Proxy — reconnecting: SSH exited detail") || len([]rune(view.tooltip)) > 120 {
+		t.Fatalf("long error not shortened to one line: %q", view.tooltip)
+	}
 	backend.status = control.Status{Phase: control.PhaseRunning, PID: 7}
 	c.Refresh(ctx)
 	backend.status.LastError = "probe failed"
 	c.Refresh(ctx)
-	if want := []string{"probe failed", "SSH exited", "probe failed"}; !slices.Equal(desktop.messages, want) {
-		t.Fatalf("got %q, want %q", desktop.messages, want)
+	if len(desktop.messages) != 0 || len(desktop.opened) != 0 {
+		t.Fatalf("proxy errors opened dialogs or logs: %q %q", desktop.messages, desktop.opened)
 	}
+	backend.status.LastError = ""
+	c.Refresh(ctx)
 	if view.tooltip != "SSH Proxy — running" || view.item(ui.ToggleProxy).Label != "Stop proxy" {
 		t.Fatalf("menu not rendered from status: %q %+v", view.tooltip, view.items)
 	}
@@ -208,9 +220,20 @@ func TestTrayControllerSilentLoginStartsWithoutTerminal(t *testing.T) {
 }
 
 func TestTrayControllerInteractiveSetupThenRecheck(t *testing.T) {
-	_, calls := startProxy(t, &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, logins: []error{errLoginFailed, nil}})
-	if want := []string{"check", "login", "trust", "login", "start"}; !slices.Equal(calls, want) {
-		t.Fatalf("got %q, want %q", calls, want)
+	for _, failure := range []error{errLoginFailed, errHostKey} {
+		_, calls := startProxy(t, &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, logins: []error{failure, nil}})
+		if want := []string{"check", "login", "trust", "login", "start"}; !slices.Equal(calls, want) {
+			t.Fatalf("%v: got %q, want %q", failure, calls, want)
+		}
+	}
+}
+
+// Offline, VPN down or an unrecognized failure is not a login problem: setup
+// could not help, so the proxy starts and keeps retrying until it connects.
+func TestTrayControllerOfflineLoginStartsWithoutSetup(t *testing.T) {
+	desktop, calls := startProxy(t, &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, logins: []error{errOffline}})
+	if want := []string{"check", "login", "start"}; !slices.Equal(calls, want) || len(desktop.messages) != 0 {
+		t.Fatalf("got %q %q, want %q without messages", calls, desktop.messages, want)
 	}
 }
 
@@ -285,6 +308,8 @@ func TestTrayControllerLaunchAutoStart(t *testing.T) {
 		{"invalid config", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig, autoStart: true}, []string{"check"}, 1},
 		{"needs setup", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true, logins: []error{errLoginFailed, nil}},
 			[]string{"check", "check", "login", "trust", "login", "start"}, 0},
+		{"offline at login", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true, logins: []error{errOffline}},
+			[]string{"check", "check", "login", "start"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := tc.backend

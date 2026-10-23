@@ -60,11 +60,11 @@ func TestEnsureConfigCopiesMissingFiles(t *testing.T) {
 	}
 }
 
-// After an update, config.toml keeps the user's values, gains new settings and
-// drops ones the template no longer has; an up-to-date file is left as written.
+// After an update, config.toml keeps every entry it had, unused or invalid ones
+// included, and gains new settings; an up-to-date file is left as written.
 func TestEnsureConfigUpgradesSettings(t *testing.T) {
 	dir, configPath := templateInstall(t)
-	old := "# my comment\n[proxy]\nbind = \"127.0.0.1\"\nhttp_port = 9999\nobsolete = true\n\n[retired]\nvalue = 1\n"
+	old := "# my comment\n[proxy]\nbind = \"127.0.0.1\"\nhttp_port = 9999\nhttp_prt = 9876\nobsolete = true\n\n[ssh]\nretry_delay_seconds = \"soon\"\n\n[logging]\n\n[retired]\nvalue = 1\n"
 	writeText(t, configPath, old)
 	if err := config.EnsureConfig(configPath); err != nil {
 		t.Fatal(err)
@@ -77,8 +77,11 @@ func TestEnsureConfigUpgradesSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxy, _ := got["proxy"].(map[string]any)
-	if proxy["http_port"] != int64(9999) || proxy["obsolete"] != nil || got["retired"] != nil {
-		t.Fatalf("user value lost or old setting kept: %v", got)
+	ssh, _ := got["ssh"].(map[string]any)
+	retired, _ := got["retired"].(map[string]any)
+	if proxy["http_port"] != int64(9999) || proxy["http_prt"] != int64(9876) || proxy["obsolete"] != true ||
+		ssh["retry_delay_seconds"] != "soon" || retired["value"] != int64(1) {
+		t.Fatalf("an existing entry was changed or removed: %v", got)
 	}
 	for table, settings := range template {
 		values, _ := got[table].(map[string]any)
@@ -88,11 +91,8 @@ func TestEnsureConfigUpgradesSettings(t *testing.T) {
 			}
 		}
 	}
-	if _, err := config.LoadConfig(configPath); err != nil && strings.Contains(err.Error(), "unknown config setting") {
-		t.Fatal("upgraded config still has unknown settings", err)
-	}
 	// Up to date: not rewritten, so comments stay.
-	current := strings.Replace(string(testutil.ConfigTemplate(t)), "http_port = 8181", "http_port = 9999", 1)
+	current := strings.Replace(string(testutil.ConfigTemplate(t)), "http_port = 8181", "http_port = 9999", 1) + "\n[retired]\nvalue = 1\n"
 	writeText(t, configPath, "# keep me\n"+current)
 	if err := config.EnsureConfig(configPath); err != nil {
 		t.Fatal(err)
@@ -104,6 +104,31 @@ func TestEnsureConfigUpgradesSettings(t *testing.T) {
 	writeText(t, configPath, "proxy = [")
 	if err := config.EnsureConfig(configPath); err != nil || readText(configPath) != "proxy = [" {
 		t.Fatal("invalid TOML must be left untouched", err)
+	}
+}
+
+// The tray and CLI autostart may upgrade the same config.toml at the same moment.
+func TestEnsureConfigConcurrentUpgrades(t *testing.T) {
+	dir, configPath := templateInstall(t)
+	writeText(t, configPath, "[proxy]\nhttp_port = 9999\n")
+	errs := make(chan error, 8)
+	for range cap(errs) {
+		go func() { errs <- config.EnsureConfig(configPath) }()
+	}
+	for range cap(errs) {
+		if err := <-errs; err != nil {
+			t.Fatal("concurrent upgrade failed:", err)
+		}
+	}
+	var got map[string]any
+	if _, err := toml.DecodeFile(configPath, &got); err != nil {
+		t.Fatal(err)
+	}
+	if proxy, _ := got["proxy"].(map[string]any); proxy["http_port"] != int64(9999) || proxy["socks_port"] == nil {
+		t.Fatalf("upgraded config: %v", got)
+	}
+	if leftovers, _ := filepath.Glob(filepath.Join(dir, "*.tmp")); len(leftovers) != 0 {
+		t.Fatal("temporary files left behind:", leftovers)
 	}
 }
 

@@ -18,7 +18,7 @@ SOCKS5 client ──────────────────────
                               native OpenSSH  ssh -N -D :1081 ─> SSH server ─> destination
 ```
 
-- **OpenSSH** owns encryption, authentication, host trust and the SOCKS server. The remote side only needs SSH TCP forwarding.
+- **OpenSSH** owns encryption, authentication, host trust and the SOCKS server. The tunnel only needs SSH TCP forwarding. `login` and `login --check` (which the tray runs before Start, and `autostart enable` runs too) run a command on the server, so the account needs a shell; key setup needs a POSIX shell.
 - **The Go bridge** forwards HTTP and HTTPS `CONNECT` through SOCKS with remote DNS. It does no TLS interception and has no direct-connection fallback.
 - **Out of scope:** UDP, VPN routing and mixed-port mode.
 
@@ -59,9 +59,9 @@ Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `b
 
 ### Configuration and SSH
 
-`config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Unknown TOML keys and invalid values are rejected. `LoadConfig` supplies connection-policy and logging defaults; readiness, retry and health settings are required. See the [template](src/packaging/defaults/support/config.toml.in).
+`config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Invalid values are rejected; settings the program doesn't use are ignored. Defaults live only in the template: `EnsureConfig` adds missing settings before any command loads the file, so `LoadConfig` has no built-in defaults. See the [template](src/packaging/defaults/support/config.toml.in).
 
-Packages ship only the templates `support/config.toml.in` and `support/ssh_config.in`, never the user's files, so unzipping a new version over an installation keeps the user's settings. Before any command that reads the configuration (`check`, `start`/`restart`, `login`, `test`, `autostart`, `_run`; the tray's launch `check` included), `config.EnsureConfig` runs silently (`src/config/templates.go`): it copies every `support/NAME.in` to `NAME` when `NAME` is missing, and merges an existing `config.toml` with the template, keeping the user's values, adding new settings and dropping ones the template no longer has. It rewrites the file only when its settings differ, and comments are then lost. Invalid TOML is left for validation to report. `status`, `stop` and `logs` never touch files. `support/` is part of every installation: a missing template stops the command with an error asking to extract the full release again. Tests that build an install folder add the templates with `testutil.Support`.
+Packages ship only the templates `support/config.toml.in` and `support/ssh_config.in`, never the user's files, so unzipping a new version over an installation keeps the user's settings. Before any command that reads the configuration (`check`, `start`/`restart`, `login`, `test`, `autostart`, `_run`; the tray's launch `check` included), `config.EnsureConfig` runs silently (`src/config/templates.go`): it copies every `support/NAME.in` to `NAME` when `NAME` is missing, and merges an existing `config.toml` with the template, adding new settings and keeping every existing entry, including unused or invalid ones (validation reports invalid values). It rewrites the file only when settings were added, and comments are then lost; a uniquely named temporary file lets the tray and CLI autostart upgrade at the same moment. Invalid TOML is left for validation to report. `status`, `stop` and `logs` never touch files. `support/` is part of every installation: a missing template stops the command with an error asking to extract the full release again. Tests that build an install folder add the templates with `testutil.Support`.
 
 Endpoints are the concrete `Host` aliases declared in the selected SSH config, in first-appearance order without duplicates. Wildcards, exclusions and `Match` add no targets. `Include` can supply settings, but its aliases are not enumerated as targets. Native `ssh -G` resolves effective settings, including `ProxyJump` and authentication; do not reimplement it.
 
@@ -77,14 +77,14 @@ All entry points use the same supervisor. Background `start` launches detached `
 
 `--wait` bounds the readiness wait, not the supervisor's lifetime. Control-API initialization gets up to 30 extra seconds. A successful `start` can report `connecting` or `reconnecting`; callers must inspect the phase.
 
-`state.json` contains the PID, config/log paths, an ephemeral loopback address and a random token. The only API routes are authenticated `GET /status` and `POST /stop`; requests bypass environment proxies. Only the instance-lock holder writes or deletes this file.
+`state.json` contains the PID, config/log paths, an ephemeral loopback address and a random token. The only API routes are authenticated `GET /status` and `POST /stop`; requests bypass environment proxies. Only the instance-lock holder writes or deletes this file. The lock, not a PID from a possibly stale file, says whether a supervisor runs: `stop` waits up to 30 seconds for a lock holder that has not published its API yet, and Windows `status` checks the lock because Windows reuses PIDs quickly. Unix `status` keeps the PID check, since probing the lock while polling could delay a starting supervisor.
 
 | Exit | State and diagnostics |
 | --- | --- |
 | Requested stop: `/stop`, Ctrl+C, SIGTERM | Remove state; report `stopped` without a failure |
 | Startup failure, server failure or recovered panic | Write an exit record containing time, reason and run log |
-| Fatal crash or hard kill | Leave state with a dead PID; report an unexpected stop |
-| Hung supervisor | Report `unresponsive`; recovery is manual |
+| Fatal crash or hard kill | Leave state; report an unexpected stop (on Unix, `unresponsive` if the PID was reused) |
+| Hung supervisor | Report `unresponsive`; `stop` fails after 30 seconds without killing; recovery is manual |
 
 The next successful start replaces old diagnostics. Parents reuse a child's log and exit record; only failures before the child owns diagnostics allocate a parent-written failure log. Temporary bootstrap output stays in the runtime folder. Fatal panics go to the run log through `debug.SetCrashOutput`; recovered panics explicitly log `debug.Stack()`.
 
@@ -130,11 +130,11 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
 
 The app takes no arguments and locates the adjacent CLI, including from its macOS bundle. Its controller polls about every two seconds, serializes actions, and changes native menu items only when their values change. The status rows show SSH host:port, SOCKS5 and HTTP addresses.
 
-Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH server yet, as on first launch) only opens `ssh_config` at launch and on every Start, starting a missing file from `support/ssh_config.in`. It shows no error dialog or log; the template's first lines explain why it opened. Other invalid configs show the error dialog and open the failing file once per run. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
+Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH server yet, as on first launch) only opens `ssh_config` at launch and on every Start, starting a missing file from `support/ssh_config.in`. It shows no error dialog or log; the template's first lines explain why it opened. Other invalid configs show the error dialog and open the failing file once per run. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup opens only when OpenSSH reports `Permission denied` or `Host key verification failed`; any other failure, such as a network or VPN that is not up yet, starts the proxy, which keeps retrying. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
 
 **Start Proxy When App Launches** reuses that flow. Its `start_proxy_on_launch` setting lives in `app.json` beside the TOML, defaults to false when absent, and is rewritten as a whole file. CLI autostart ignores it. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keep-proxy-running exits only the tray.
 
-Normal errors show their reason and open the tray run log; repeated polling errors are suppressed. The tray alerts once when a supervisor observed alive becomes an unclean stopped run, opening that proxy's log. It does not alert for old failures or normal stops. Login-registration repair failures are logged without preventing app launch.
+Failed actions and invalid configs show their reason and open the tray run log. The supervisor's own errors while it retries (reconnecting, degraded) appear only in the tooltip and the tray log, never as dialogs. The tray alerts once when a supervisor observed alive becomes an unclean stopped run, opening that proxy's log. It does not alert for old failures or normal stops. Login-registration repair failures are logged without preventing app launch.
 
 Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the file manager. Scripts are discovered once at startup (`.ps1` on Windows, `.sh` on macOS), run non-interactively, and write output to the tray log. The bundled launchers use `status --proxy_http`, falling back to their default `SSH_PROXY_URL`; they discover desktop apps before using the script-local `CODEX_APP`/`CLAUDE_APP` fallback.
 
@@ -180,7 +180,7 @@ python scripts/build.py --release --os linux --arch arm64 --target-dir ./package
 
 ## Test and verify
 
-Follow [AGENTS.md](AGENTS.md). Run scripts from the repository root in a visible native terminal; use `python3` on macOS/Linux if needed. `visible.py` opens a PowerShell window on Windows and closes it after completion; elsewhere it uses the current terminal. It saves output and exit status under `build/test-results/<name>-<stamp>/`.
+Follow [AGENTS.md](AGENTS.md). Run scripts from the repository root in a visible native terminal; use `python3` on macOS/Linux if needed. `visible.py` opens a new terminal window titled with the run name (PowerShell on Windows, Terminal on macOS, the desktop's terminal emulator on Linux: `$TERMINAL`, then `x-terminal-emulator`, GNOME Terminal, Konsole and other common ones) and closes it after completion. Without a desktop display, or on macOS when the program running it may not control Terminal, it runs in the current terminal. The command keeps the caller's `PATH`, so an active virtual environment still applies. It saves output and exit status under `build/test-results/<name>-<stamp>/`, prints the last output lines on failure, and with `--no-wait` returns at once.
 
 ```sh
 python scripts/visible.py --name unit  -- python scripts/run_unit_tests.py

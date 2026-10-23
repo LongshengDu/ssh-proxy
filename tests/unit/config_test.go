@@ -143,7 +143,8 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 		"tcpkeepalive yes", "forwardagent no", "requesttty false"}
 	check(cfg, false, append(settings, "stricthostkeychecking true", "batchmode yes", "exitonforwardfailure yes"))
 	check(cfg, true, append(settings, "stricthostkeychecking ask", "batchmode no", "clearallforwardings yes"))
-	// Existing TOML files without the new fields retain the shared defaults.
+	// Existing TOML files without these fields get the template's defaults when
+	// a command prepares the configuration; LoadConfig has no defaults of its own.
 	for _, line := range strings.Split(configured, "\n") {
 		if strings.HasPrefix(line, "connect_timeout_seconds =") ||
 			strings.HasPrefix(line, "connection_attempts =") || strings.HasPrefix(line, "server_alive_") {
@@ -151,6 +152,12 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 		}
 	}
 	if err = os.WriteFile(path, []byte(configured), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = config.LoadConfig(path); err == nil {
+		t.Fatal("missing settings must not fall back to built-in defaults")
+	}
+	if err = config.EnsureConfig(path); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = config.LoadConfig(path)

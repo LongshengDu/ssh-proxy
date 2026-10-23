@@ -29,10 +29,11 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if out := string(testutil.MustCLI(t, dir, "logs")); !strings.HasPrefix(out, "No log file yet:") {
 		t.Fatal("missing-log notice must be text", out)
 	}
+	// A fresh install ships only the template; config.toml appears on first use.
 	configPath := filepath.Join(dir, "config.toml")
-	template := testutil.ReadFile(configPath)
-	if err := os.Remove(configPath); err != nil {
-		t.Fatal(err)
+	template := testutil.ReadFile(filepath.Join(dir, "support", "config.toml.in"))
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		t.Fatal("a fresh install must not contain config.toml", err)
 	}
 	runHelp := func(args ...string) string {
 		t.Helper()

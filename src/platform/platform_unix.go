@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -31,6 +32,25 @@ func LockInstance(id string) (func(), error) {
 	}
 	return func() { lock.Close() }, nil
 }
+
+// InstanceRunning probes the installation lock. Holding it even briefly could
+// make a starting supervisor exit, so only stop uses it, never status polling.
+func InstanceRunning(id string) (bool, error) {
+	unlock, err := LockInstance(id)
+	if errors.Is(err, ErrAlreadyRunning) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	unlock()
+	return false, nil
+}
+
+// SupervisorAlive classifies a supervisor whose control API does not answer.
+// Unix PIDs are not reused quickly, and status must not probe the lock.
+func SupervisorAlive(_ string, pid int) bool { return ProcessAlive(pid) }
+
 func HideChild(cmd *exec.Cmd) {}
 
 // ProtectLog uses an advisory shared lock; logging and ssh -E can still append.

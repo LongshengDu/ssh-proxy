@@ -13,8 +13,7 @@ import (
 )
 
 func LockInstance(id string) (func(), error) {
-	name, _ := windows.UTF16PtrFromString(`Global\ssh_proxy_` + id)
-	h, err := windows.CreateMutex(nil, false, name)
+	h, err := windows.CreateMutex(nil, false, lockName(id))
 	if err != nil {
 		if h != 0 {
 			windows.CloseHandle(h)
@@ -25,6 +24,34 @@ func LockInstance(id string) (func(), error) {
 		return nil, fmt.Errorf("configuration lock: %w", err)
 	}
 	return func() { windows.CloseHandle(h) }, nil
+}
+
+func lockName(id string) *uint16 {
+	name, _ := windows.UTF16PtrFromString(`Global\ssh_proxy_` + id)
+	return name
+}
+
+// InstanceRunning reports whether a supervisor holds the installation lock.
+// It only opens an existing mutex, so it never delays a starting supervisor.
+func InstanceRunning(id string) (bool, error) {
+	h, err := windows.OpenMutex(windows.SYNCHRONIZE, false, lockName(id))
+	if errors.Is(err, windows.ERROR_FILE_NOT_FOUND) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("configuration lock: %w", err)
+	}
+	windows.CloseHandle(h)
+	return true, nil
+}
+
+// SupervisorAlive classifies a supervisor whose control API does not answer.
+// Windows reuses PIDs quickly, so the lock decides; the PID is a fallback.
+func SupervisorAlive(id string, pid int) bool {
+	if running, err := InstanceRunning(id); err == nil {
+		return running
+	}
+	return ProcessAlive(pid)
 }
 
 // Windows already denies deletion while a Go log handle is open.

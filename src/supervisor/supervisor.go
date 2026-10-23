@@ -450,18 +450,32 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 }
 
 // StopBackground asks the running supervisor to stop and waits for its lock.
+// The lock, not a PID from a possibly stale state file, says whether one runs;
+// nothing is ever killed by PID.
 func StopBackground(p config.Paths) error {
-	if _, err := control.Call(p, "GET", "/status"); err != nil {
-		// A stale state file alone is not authority to kill an arbitrary PID.
-		if state, readErr := control.ReadState(p); readErr == nil && state.Exit == nil && platform.ProcessAlive(state.PID) {
-			return fmt.Errorf("control API unavailable for pid %d; no process was killed; inspect %s", state.PID, p.Log)
+	// A lock holder without a control API is still loading its configuration;
+	// it publishes the API within the same budget StartBackground allows.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := control.Call(p, "GET", "/status"); err == nil {
+			break
 		}
-		return nil
+		running, err := platform.InstanceRunning(p.ID)
+		if err != nil {
+			return fmt.Errorf("cannot tell whether the proxy is running: %w", err)
+		}
+		if !running {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("control API unavailable; no process was killed; inspect %s", p.Log)
+		}
+		time.Sleep(150 * time.Millisecond)
 	}
 	if _, err := control.Call(p, "POST", "/stop"); err != nil {
 		return err
 	}
-	deadline := time.Now().Add(15 * time.Second)
+	deadline = time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if unlock, err := platform.LockInstance(p.ID); err == nil {
 			unlock()

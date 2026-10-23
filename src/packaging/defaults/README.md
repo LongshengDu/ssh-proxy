@@ -14,7 +14,7 @@
 - **退出时选择是否保留代理：** **Exit app: Stop proxy** 停止代理并退出；**Exit app: Keep proxy running** 只退出托盘，代理继续运行。
 - **出错时看日志：** 应用会显示原因；日志在安装目录的 `logs/`。
 
-SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCKS5 代理。Windows 和 macOS 有托盘（菜单栏）应用；Windows、macOS、Linux 都可用命令行。服务器只需允许 SSH TCP 转发。
+SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCKS5 代理。Windows 和 macOS 有托盘（菜单栏）应用；Windows、macOS、Linux 都可用命令行。服务器需允许 SSH TCP 转发；登录设置和登录检查会在服务器上执行命令，所以账户需要能登录 shell。
 
 ### 1. 准备与安装
 
@@ -52,7 +52,7 @@ Host my-proxy
 - **代理在后台运行，需要免密码登录。** 保存后在托盘点 **Start proxy** 或运行 `login`：没有 SSH 密钥时自动创建，输入一次服务器密码即把公钥加到服务器，以后不再需要密码。服务器不允许密码登录时，把显示的公钥发给管理员。
 - 首次连接需向管理员核对服务器指纹。
 
-1. 选择 **Start proxy**。若登录已可免交互，代理直接启动；否则会打开 SSH 设置终端（macOS 使用“终端”，可能需允许“自动化”权限），它会在需要时创建密钥，请按提示核对指纹并输入一次服务器密码。终端关闭后会再检查一次，通过才启动。
+1. 选择 **Start proxy**。若登录已可免交互，代理直接启动；SSH 报告需要设置登录（密钥未被接受，或服务器指纹尚未确认）时，会打开 SSH 设置终端（macOS 使用“终端”，可能需允许“自动化”权限），它会在需要时创建密钥，请按提示核对指纹并输入一次服务器密码。终端关闭后会再检查一次，通过才启动。网络或 VPN 尚未连接时，代理直接启动并在后台重试，连通后自动连接。
 2. 菜单顶部显示 **running** 后即可使用。菜单还显示 SSH 主机和两个代理地址。
 3. **Stop proxy** 停止代理。
 
@@ -67,7 +67,7 @@ Host my-proxy
 | **Exit app: Keep proxy running** | 只退出托盘，代理继续运行 |
 | **Exit app** | 代理未运行时，直接退出托盘 |
 
-配置和日志均以文本打开。出错时会显示原因，关闭提示后打开本次托盘日志；设置失败需修正后再次选择 **Start proxy**。托盘观察到代理意外停止时，会提示并打开代理日志。
+配置和日志均以文本打开。操作失败或配置有误时会显示原因，关闭提示后打开本次托盘日志；设置失败需修正后再次选择 **Start proxy**。代理自动重连期间的错误不弹窗，显示在托盘图标的提示文字中。托盘观察到代理意外停止时，会提示并打开代理日志。
 
 登录启动可在 Windows“任务管理器 → 启动应用”或 macOS“系统设置 → 通用 → 登录项与扩展”查看。菜单勾选表示已注册，不反映这些系统设置中的额外禁用。
 
@@ -148,7 +148,7 @@ Windows 将下方 `./ssh_proxy_cli` 换成 `.\ssh_proxy_cli.exe`。
 - 无需管理员权限或 sudo；`enable` 不会立即启动代理，现在要用就运行 `start`。
 - 需要免交互的 SSH 登录；`enable` 检查失败只会警告，仍会保存设置。
 - 可与托盘同时使用，不会产生两个代理。
-- Windows 登录时会短暂出现命令行窗口。Linux 需要 systemd 用户会话；若用 ssh-agent，可执行 `systemctl --user import-environment SSH_AUTH_SOCK`。
+- Windows 登录时会短暂出现命令行窗口。Linux 需要 systemd 用户会话。代理在桌面会话之前启动，用不到之后才启动的 ssh-agent（`systemctl --user import-environment SSH_AUTH_SOCK` 只对本次登录有效）：请使用 `login` 创建的无口令密钥，或在 `~/.config/environment.d/` 中把 `SSH_AUTH_SOCK` 设为登录时已存在的 agent 套接字。
 - 在用户登录后运行，不在登录前启动；代理崩溃不会自动重启。用 `status` 查看原因，再运行 `start`。
 
 ### 6. 设置与日志
@@ -200,7 +200,7 @@ Windows 将下方 `./ssh_proxy_cli` 换成 `.\ssh_proxy_cli.exe`。
 - **Choose what happens when you exit:** **Exit app: Stop proxy** stops the proxy and quits; **Exit app: Keep proxy running** closes only the tray and leaves the proxy running.
 - **When something fails, read the log:** the app shows the reason; logs are in `logs/` in the install folder.
 
-SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. Windows and macOS have a tray (menu-bar) app; Windows, macOS and Linux all have a command line. The server only needs SSH TCP forwarding enabled.
+SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. Windows and macOS have a tray (menu-bar) app; Windows, macOS and Linux all have a command line. The server must allow SSH TCP forwarding; login setup and its check run a command on the server, so your account needs a normal shell.
 
 ### 1. Requirements and installation
 
@@ -238,7 +238,7 @@ Host my-proxy
 - **The proxy runs in the background, so it needs passwordless login.** After saving, click **Start proxy** in the tray or run `login`: it creates an SSH key if you have none, and after you enter your server password once it adds your public key to the server, so no password is needed after that. If the server doesn't allow password login, send the public key it prints to your administrator.
 - Verify the server fingerprint with your administrator on first connection.
 
-1. Choose **Start proxy**. If login already works without prompts, the proxy starts. Otherwise an SSH setup terminal opens (Terminal on macOS, which may ask for Automation permission); it creates a key if needed; verify the fingerprint and enter your server password once. When it closes, login is checked again and the proxy starts only if it passes.
+1. Choose **Start proxy**. If login already works without prompts, the proxy starts. If SSH reports that login needs setting up (your key isn't accepted, or the server fingerprint isn't confirmed yet), an SSH setup terminal opens (Terminal on macOS, which may ask for Automation permission); it creates a key if needed; verify the fingerprint and enter your server password once. When it closes, login is checked again and the proxy starts only if it passes. If the network or VPN isn't up yet, the proxy starts anyway and keeps retrying until it connects.
 2. Use the proxy once the menu shows **running**. The menu also shows the SSH host and both proxy addresses.
 3. **Stop proxy** stops it.
 
@@ -253,7 +253,7 @@ Host my-proxy
 | **Exit app: Keep proxy running** | Close only the tray |
 | **Exit app** | Close the tray when the proxy is stopped |
 
-Configs and logs open as text. Errors show the reason and open the tray run log after you dismiss the message. After a setup failure, fix the problem and choose **Start proxy** again. If the tray observes the proxy stopping unexpectedly, it alerts you and opens the proxy log.
+Configs and logs open as text. When an action fails or the configuration is wrong, the app shows the reason and opens the tray run log after you dismiss the message. After a setup failure, fix the problem and choose **Start proxy** again. While the proxy reconnects on its own, its errors appear in the tray icon's tooltip instead of a message. If the tray observes the proxy stopping unexpectedly, it alerts you and opens the proxy log.
 
 View login startup in Windows Task Manager → Startup apps or macOS System Settings → General → Login Items & Extensions. The menu checkmark means registered; it does not reflect additional disabling in those system settings.
 
@@ -334,7 +334,7 @@ On Windows, replace `./ssh_proxy_cli` below with `.\ssh_proxy_cli.exe`.
 - No administrator rights or sudo. `enable` doesn't start the proxy now; run `start` for that.
 - Login must work without prompts. If `enable`'s login check fails, it only warns and still saves the setting.
 - Works together with the tray without creating a second proxy.
-- Windows briefly shows a console window at login. Linux needs a systemd user session; with ssh-agent, run `systemctl --user import-environment SSH_AUTH_SOCK`.
+- Windows briefly shows a console window at login. Linux needs a systemd user session. The proxy starts before your desktop session, so it can't use an ssh-agent started later (`systemctl --user import-environment SSH_AUTH_SOCK` lasts only for the current login): use the passphrase-free key `login` creates, or set `SSH_AUTH_SOCK` in `~/.config/environment.d/` to an agent socket that exists at login.
 - Starts after user login, not before it. A crashed proxy is not restarted automatically; check `status` for the reason, then run `start`.
 
 ### 6. Settings and logs

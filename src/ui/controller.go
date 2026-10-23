@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"ssh_proxy/src/config"
@@ -87,7 +88,15 @@ var errSetupNeeded = errors.New("SSH setup not finished")
 func (c *Controller) render() {
 	state := MenuState{Status: c.st, Startup: c.startup, StartupKnown: c.startupErr == nil,
 		AutoStart: c.autoStart, AutoStartKnown: c.autoStartErr == nil, Busy: c.action != 0, Exiting: c.action == StopAndQuit}
-	c.view.Render(Menu(state, c.scripts...), "SSH Proxy — "+string(c.st.Phase))
+	tooltip := "SSH Proxy — " + string(c.st.Phase)
+	if c.st.LastError != "" {
+		tooltip += ": " + strings.ReplaceAll(c.st.LastError, "\n", " ")
+	}
+	// Windows notification-area tooltips hold at most 127 characters.
+	if runes := []rune(tooltip); len(runes) > 120 {
+		tooltip = string(runes[:119]) + "…"
+	}
+	c.view.Render(Menu(state, c.scripts...), tooltip)
 }
 
 // CheckConfig validates through the CLI, including native ssh -G, and opens a
@@ -146,21 +155,21 @@ func (c *Controller) Refresh(ctx context.Context) {
 	c.startup, c.startupErr = c.desktop.StartupEnabled()
 	// An unreadable app.json disables the item.
 	c.autoStart, c.autoStartErr = c.backend.AutoStart()
-	issue := c.startupErr
 	if c.st.UncleanExit {
 		if previous.PID != 0 && previous.Phase != control.PhaseStopped && c.action != StopAndQuit && c.action != ToggleProxy && ctx.Err() == nil {
 			c.logger.Print(c.st.LastError)
 			c.desktop.ShowProxyError(errors.New(c.st.LastError), c.st.Log)
 		}
-	} else if c.st.LastError != "" {
-		issue = errors.Join(issue, errors.New(c.st.LastError))
+	} else if c.st.LastError != "" && c.st.LastError != previous.LastError {
+		// The proxy retries on its own; its errors go to the tooltip and log, never a dialog.
+		c.logger.Printf("Proxy error: %s", c.st.LastError)
 	}
 	message := ""
-	if issue != nil {
-		message = issue.Error()
+	if c.startupErr != nil {
+		message = c.startupErr.Error()
 	}
 	if message != "" && message != c.lastError && ctx.Err() == nil {
-		c.report(issue)
+		c.report(c.startupErr)
 	}
 	c.lastError = message
 	if c.st.Phase != previous.Phase || c.st.PID != previous.PID || c.st.Endpoint != previous.Endpoint {
@@ -218,9 +227,11 @@ func (c *Controller) Finish(ctx context.Context, id int, err error) bool {
 
 // startProxy is shared by the Start item and launch auto-start. It validates
 // the configuration (opening a failing file once), checks unattended login
-// silently, and opens interactive SSH setup only when that check fails. A
+// silently, and opens interactive SSH setup only when OpenSSH reports an
+// authentication or host-key problem. Any other check failure, such as a
+// network or VPN that is not up yet, starts the proxy, which keeps retrying. A
 // successful setup is checked again: a password login alone cannot run the
-// background proxy. Any failure leaves the proxy stopped; nothing retries.
+// background proxy. A failed setup leaves the proxy stopped.
 func (c *Controller) startProxy(ctx context.Context) error {
 	if err := c.checkConfig(ctx); err != nil {
 		return err
@@ -232,6 +243,10 @@ func (c *Controller) startProxy(ctx context.Context) error {
 		// CLI autostart may have won while SSH login was being checked.
 		if st := c.backend.Status(); st.PID != 0 && st.Phase != control.PhaseStopped {
 			return nil
+		}
+		if !strings.Contains(err.Error(), "Permission denied") && !strings.Contains(err.Error(), "Host key verification failed") {
+			c.logger.Printf("Unattended SSH login check failed without an authentication problem; starting the proxy, which keeps retrying: %v", err)
+			return c.backend.Start(ctx)
 		}
 		c.logger.Printf("Unattended SSH login check failed; opening SSH setup terminal: %v", err)
 		if err := c.backend.Trust(ctx); err != nil {

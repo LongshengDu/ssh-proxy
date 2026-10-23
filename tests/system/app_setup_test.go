@@ -209,6 +209,8 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			}
 			app := testutil.StartApp(t, dir, args...)
 			pid := app.Process.Pid
+			// The tray creates its run log first thing; wait for it before using its path.
+			testutil.WaitFor(t, func() bool { return testutil.TrayLog(dir) != "" })
 			log := testutil.TrayLog(dir)
 			if strings.HasSuffix(scenario, "SSH") {
 				// Unfinished SSH setup only opens the SSH file (created from the

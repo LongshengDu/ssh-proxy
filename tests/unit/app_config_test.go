@@ -33,8 +33,9 @@ func TestAppSettingsFile(t *testing.T) {
 	}
 }
 
-// config.toml has no [app] table; the setting lives only in app.json.
-func TestConfigRejectsAppTable(t *testing.T) {
+// config.toml has no [app] table; the setting lives only in app.json. An old
+// [app] table in config.toml is an unused entry: kept and ignored.
+func TestConfigIgnoresAppTable(t *testing.T) {
 	path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
 	data, err := os.ReadFile(path)
 	if err != nil || strings.Contains(string(data), "[app]") {
@@ -43,7 +44,7 @@ func TestConfigRejectsAppTable(t *testing.T) {
 	if err = os.WriteFile(path, append(data, "\n[app]\nstart_proxy_on_launch = true\n"...), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if result := config.CheckConfig(path); result.Valid || !strings.Contains(result.Error, "app.start_proxy_on_launch") {
-		t.Fatal("config.toml must reject the app setting", result.Error)
+	if result := config.CheckConfig(path); !result.Valid {
+		t.Fatal("an unused [app] table must be ignored", result.Error)
 	}
 }

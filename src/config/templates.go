@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,8 +20,9 @@ import (
 // replacing an installation never overwrites the user's files:
 //   - each support/NAME.in is copied to NAME when NAME is missing;
 //   - an existing config.toml gains settings support/config.toml.in added and
-//     drops settings it no longer has. It is rewritten only then, and its
-//     comments are not kept. Invalid TOML is left for validation to report.
+//     keeps every entry it has, including ones the program no longer uses. It
+//     is rewritten only then, and its comments are not kept. Invalid TOML is
+//     left for validation to report.
 //
 // Every installation ships support/; a missing template is an error.
 func EnsureConfig(configPath string) error {
@@ -75,18 +77,23 @@ func upgradeConfig(path, template string) error {
 	if err := encoder.Encode(merged); err != nil {
 		return err
 	}
-	temp := path + ".tmp"
-	if err := os.WriteFile(temp, text.Bytes(), 0600); err != nil {
+	// A unique name lets the tray and CLI autostart upgrade at the same moment.
+	temp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	// Windows refuses to replace a file another process has open for a moment.
-	err := os.Rename(temp, path)
-	for delay := 20 * time.Millisecond; err != nil && delay <= 640*time.Millisecond; delay *= 2 {
-		time.Sleep(delay)
-		err = os.Rename(temp, path)
+	_, err = temp.Write(text.Bytes())
+	err = errors.Join(err, temp.Close())
+	if err == nil {
+		// Windows refuses to replace a file another process has open for a moment.
+		err = os.Rename(temp.Name(), path)
+		for delay := 20 * time.Millisecond; err != nil && delay <= 640*time.Millisecond; delay *= 2 {
+			time.Sleep(delay)
+			err = os.Rename(temp.Name(), path)
+		}
 	}
 	if err != nil {
-		os.Remove(temp)
+		os.Remove(temp.Name())
 	}
 	return err
 }
@@ -98,18 +105,21 @@ func templateError(template string, err error) error {
 	return err
 }
 
-// mergeSettings keeps the user's value for every setting the template has, adds
-// the template's value for missing ones, and drops settings the template lacks.
+// mergeSettings keeps every entry the user has, unused or even invalid ones
+// (validation reports those), and adds the template's settings that are missing.
 func mergeSettings(defaults, user map[string]any) map[string]any {
-	merged := map[string]any{}
+	merged := maps.Clone(user)
+	if merged == nil {
+		merged = map[string]any{}
+	}
 	for key, value := range defaults {
-		if table, ok := value.(map[string]any); ok {
-			own, _ := user[key].(map[string]any)
-			merged[key] = mergeSettings(table, own)
-		} else if own, ok := user[key]; ok {
-			merged[key] = own
-		} else {
+		own, present := user[key]
+		table, isTable := value.(map[string]any)
+		ownTable, ownIsTable := own.(map[string]any)
+		if !present {
 			merged[key] = value
+		} else if isTable && ownIsTable {
+			merged[key] = mergeSettings(table, ownTable)
 		}
 	}
 	return merged

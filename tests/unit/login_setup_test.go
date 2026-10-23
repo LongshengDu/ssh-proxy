@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,8 +12,9 @@ import (
 	"ssh_proxy/tests/helpers"
 )
 
-// trust uses an existing key, or creates one where OpenSSH looks without an
-// IdentityFile line; a key path the user configured is respected.
+// login uses an existing key, or creates one where OpenSSH looks without an
+// IdentityFile line; a key path the user configured is respected, even when
+// its name is one of OpenSSH's default names.
 func TestChooseIdentity(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -29,6 +31,8 @@ func TestChooseIdentity(t *testing.T) {
 		{"no keys, defaults", defaults, "", filepath.Join(ssh, "id_ed25519"), false},
 		{"existing default", defaults, filepath.Join(ssh, "id_rsa"), filepath.Join(ssh, "id_rsa"), true},
 		{"configured path", []string{filepath.Join(ssh, "work_key")}, "", filepath.Join(ssh, "work_key"), false},
+		{"configured default name elsewhere", []string{filepath.Join(ssh, "keys", "id_rsa")}, "", filepath.Join(ssh, "keys", "id_rsa"), false},
+		{"configured default path", []string{filepath.Join(ssh, "id_rsa")}, "", filepath.Join(ssh, "id_rsa"), false},
 		{"nothing listed", nil, "", filepath.Join(ssh, "id_ed25519"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -57,17 +61,40 @@ func TestAuthorizeKeyCommand(t *testing.T) {
 	if err != nil {
 		t.Skip("no POSIX shell to run the remote command")
 	}
-	home := t.TempDir()
-	for range 2 {
-		cmd := exec.Command(sh, "-c", command)
-		cmd.Env = append(os.Environ(), "HOME="+home)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatal(err, string(out))
+	// An existing file may not end with a newline; both keys must stay whole lines.
+	for _, existing := range []string{"", "ssh-rsa AAAAB3NzaC1yc2EOldKey"} {
+		home := t.TempDir()
+		file := filepath.Join(home, ".ssh", "authorized_keys")
+		if existing != "" {
+			if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
+				t.Fatal(err)
+			}
+			writeText(t, file, existing)
 		}
-	}
-	data, err := os.ReadFile(filepath.Join(home, ".ssh", "authorized_keys"))
-	if err != nil || strings.Count(string(data), key) != 1 {
-		t.Fatalf("key must be added exactly once: %v %q", err, data)
+		for range 2 {
+			cmd := exec.Command(sh, "-c", command)
+			cmd.Env = append(os.Environ(), "HOME="+home)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatal(err, string(out))
+			}
+		}
+		data, err := os.ReadFile(file)
+		if err != nil || strings.Count(string(data), key) != 1 {
+			t.Fatalf("key must be added exactly once: %v %q", err, data)
+		}
+		var lines []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+		want := []string{key + " ssh_proxy"}
+		if existing != "" {
+			want = append([]string{existing}, want...)
+		}
+		if !slices.Equal(lines, want) {
+			t.Fatalf("authorized_keys lines %q, want %q", lines, want)
+		}
 	}
 }
 

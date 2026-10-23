@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +25,7 @@ import (
 // Version is set by scripts/build.py from the repository's .version file.
 var Version = "dev"
 
-// Log limits shared by validation and by logging that starts before validation.
+// Log limits for logging that starts before validation, and the validated maximum.
 const (
 	DefaultMaxLogFiles = 10
 	DefaultMaxLogMB    = 10
@@ -207,17 +206,10 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 		}
 	}()
 	c := &Config{Path: path, resolved: map[string]sshSettings{}}
-	c.Logging.MaxLogFiles, c.Logging.MaxSizeMB = DefaultMaxLogFiles, DefaultMaxLogMB
-	// Defaults also apply to existing installations whose TOML predates these
-	// fields. Shared tunnel policy never needs to be repeated in host entries.
-	c.SSH.ConnectTimeout, c.SSH.ConnectionAttempts = 10, 1
-	c.SSH.ServerAliveInterval, c.SSH.ServerAliveCountMax = 15, 3
-	meta, err := toml.DecodeFile(path, c)
-	if err != nil {
+	// Defaults live only in support/config.toml.in: EnsureConfig adds missing
+	// settings before any command loads the file. Unused settings are ignored.
+	if _, err := toml.DecodeFile(path, c); err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
-	}
-	if unknown := meta.Undecoded(); len(unknown) > 0 {
-		return nil, fmt.Errorf("unknown config setting(s): %v", unknown)
 	}
 	if c.Logging.MaxLogFiles < 1 {
 		return nil, fmt.Errorf("logging.max_log_files must be at least 1")
@@ -434,22 +426,22 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 func (c *Config) IdentityFiles(alias string) []string { return c.resolved[alias].identityFiles }
 
 // ChooseIdentity returns the first existing key, or where login setup should create
-// one: a path the user configured, otherwise OpenSSH's default id_ed25519,
-// which OpenSSH uses without any IdentityFile line.
+// one. Without an IdentityFile line, OpenSSH lists its default keys, including
+// ~/.ssh/id_ed25519, which is created then. Otherwise OpenSSH tries only the
+// configured keys, so the first one is created, whatever its name.
 func ChooseIdentity(files []string, exists func(string) bool) (path string, found bool) {
 	for _, file := range files {
 		if exists(file) {
 			return file, true
 		}
 	}
-	defaults := []string{"id_rsa", "id_ecdsa", "id_ecdsa_sk", "id_ed25519", "id_ed25519_sk", "id_xmss", "id_dsa"}
-	if len(files) > 0 && !slices.Contains(defaults, filepath.Base(files[0])) {
-		return files[0], false
-	}
 	for _, file := range files {
-		if filepath.Base(file) == "id_ed25519" {
+		if filepath.Base(file) == "id_ed25519" && filepath.Base(filepath.Dir(file)) == ".ssh" {
 			return file, false
 		}
+	}
+	if len(files) > 0 {
+		return files[0], false
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".ssh", "id_ed25519"), false
@@ -459,14 +451,15 @@ var publicKeyLine = regexp.MustCompile(`^((?:ssh|ecdsa|sk)-[a-z0-9@.-]+) (AAAA[A
 
 // AuthorizeKeyCommand is the remote shell command that adds a public key to
 // ~/.ssh/authorized_keys unless it is already there. Only the key type and
-// base64 data are used, so nothing needs quoting.
+// base64 data are used, so nothing needs quoting. The key starts on a new line
+// because the file may not end with one.
 func AuthorizeKeyCommand(publicKey string) (string, error) {
 	match := publicKeyLine.FindStringSubmatch(strings.TrimSpace(publicKey))
 	if match == nil {
 		return "", fmt.Errorf("not an OpenSSH public key")
 	}
 	key := match[1] + " " + match[2]
-	return "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '" + key + "' ~/.ssh/authorized_keys || echo '" + key + " ssh_proxy' >> ~/.ssh/authorized_keys", nil
+	return "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '" + key + "' ~/.ssh/authorized_keys || printf '\\n%s\\n' '" + key + " ssh_proxy' >> ~/.ssh/authorized_keys", nil
 }
 
 // SSHSetupCommand logs in like SSHTrust and authorizes publicKey on the server.

@@ -195,7 +195,7 @@ func QueryStatus(p config.Paths) (result Status) {
 			if state.Exit.StartFailed {
 				st.LastError = fmt.Sprintf("Last start failed: %s; see %s", state.Exit.Error, st.Log)
 			}
-		case platform.ProcessAlive(state.PID):
+		case platform.SupervisorAlive(p.ID, state.PID):
 			st.Phase, st.PID, st.LastError = PhaseUnresponsive, state.PID, err.Error()
 		default:
 			st.UncleanExit = true

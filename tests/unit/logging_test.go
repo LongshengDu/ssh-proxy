@@ -275,12 +275,13 @@ func TestRunLogSizeLimit(t *testing.T) {
 }
 
 func TestLogSizeAndRemovedSettings(t *testing.T) {
+	// Removed settings are unused entries: ignored, not errors.
 	for _, tc := range []struct{ name, from, to, want string }{
 		{"size-zero", "max_size_mb = 10", "max_size_mb = 0", "logging.max_size_mb"},
 		{"size-too-large", "max_size_mb = 10", "max_size_mb = 1025", "logging.max_size_mb"},
 		{"size-valid", "max_size_mb = 10", "max_size_mb = 5", ""},
-		{"removed-backups", "max_size_mb = 10", "max_size_mb = 5\nbackups = 3", "unknown config setting(s): [logging.backups]"},
-		{"removed-health-target", "[health]", "[health]\ntarget = \"legacy.example:443\"", "unknown config setting(s): [health.target]"},
+		{"removed-backups", "max_size_mb = 10", "max_size_mb = 5\nbackups = 3", ""},
+		{"removed-health-target", "[health]", "[health]\ntarget = \"legacy.example:443\"", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
@@ -293,8 +294,12 @@ func TestLogSizeAndRemovedSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			cfg, err := config.LoadConfig(path)
+			size := 10
+			if strings.Contains(tc.to, "max_size_mb = 5") {
+				size = 5
+			}
 			if tc.want == "" {
-				if err != nil || cfg.Logging.MaxSizeMB != 5 {
+				if err != nil || cfg.Logging.MaxSizeMB != size {
 					t.Fatal("size limit not loaded", err)
 				}
 			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
