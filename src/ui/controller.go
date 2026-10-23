@@ -14,7 +14,7 @@ import (
 )
 
 // Backend is what the tray needs from the proxy. The CLI owns validation,
-// trust and the lifecycle; status is read from the supervisor's control API.
+// login setup and the lifecycle; status is read from the supervisor's control API.
 type Backend interface {
 	Status() control.Status
 	Check(ctx context.Context) (config.ConfigCheck, error)

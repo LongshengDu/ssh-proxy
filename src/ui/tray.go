@@ -198,7 +198,7 @@ func (d *desktopOS) ShowProxyError(err error, logPath string) {
 	}
 }
 
-// cliBackend runs validation, trust and lifecycle commands through the CLI and
+// cliBackend runs validation, login setup and lifecycle commands through the CLI and
 // reads status in-process from the supervisor's authenticated control API.
 type cliBackend struct {
 	paths config.Paths
@@ -216,11 +216,11 @@ func (b cliBackend) Check(ctx context.Context) (config.ConfigCheck, error) {
 	return result, err
 }
 func (b cliBackend) CheckLogin(ctx context.Context) error {
-	_, err := commandBackend(ctx, b.exe, "trust", "--check")
+	_, err := commandBackend(ctx, b.exe, "login", "--check")
 	return err
 }
 func (b cliBackend) Trust(ctx context.Context) error {
-	// The trust CLI and native ssh -E append to the tray log meanwhile; a cut
+	// The login CLI and native ssh -E append to the tray log meanwhile; a cut
 	// during their writes would lose them.
 	release := b.log.Hold()
 	defer release()

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -102,7 +103,7 @@ func Run(args []string) error {
 	}
 	run := func(do func(config.Paths) error) func(*cobra.Command, []string) error {
 		return func(cmd *cobra.Command, _ []string) error {
-			// pflag takes the next option as a string value, as in "trust --log --help".
+			// pflag takes the next option as a string value, as in "login --log --help".
 			var err error
 			cmd.Flags().Visit(func(f *pflag.Flag) {
 				if v := f.Value.String(); err == nil && f.Value.Type() == "string" && (v == "" || v == "=" || strings.HasPrefix(v, "-")) {
@@ -159,7 +160,7 @@ func Run(args []string) error {
 	startCommand := func(name, short string, restart bool) *cobra.Command {
 		cmd := &cobra.Command{Use: name, Short: short, GroupID: "commands", Args: cobra.NoArgs, Long: short + `
 
-Background mode requires SSH keys or ssh-agent; run trust for setup. After
+Background mode requires SSH keys or ssh-agent; run login for setup. After
 --wait expires, the proxy may keep retrying; check status for readiness. --wait
 has no effect with --foreground.`}
 		foreground := cmd.Flags().Bool("foreground", false, "Run in this terminal; Ctrl+C stops the proxy")
@@ -215,14 +216,20 @@ has no effect with --foreground.`}
 		}
 		return testProxy(cfg, *url)
 	})
-	trustCmd := &cobra.Command{Use: "trust [ENDPOINT]", Short: "Set up SSH login and host-key trust", GroupID: "commands",
-		Args: cobra.MaximumNArgs(1), Long: `Set up SSH login and host-key trust. Without ENDPOINT, try SSH aliases in file
-order until one succeeds. Verify host fingerprints before accepting. Already
-working logins exit 0.`}
-	check := trustCmd.Flags().Bool("check", false, "Check unattended login only: no prompts or new host keys; the tray runs it before each start")
-	logPath := trustCmd.Flags().String("log", "", "Append SSH diagnostics to `FILE` (used by the tray)")
-	trustCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return run(func(p config.Paths) error { return trust(p, strings.Join(args, ""), *check, *logPath) })(cmd, args)
+	loginCmd := &cobra.Command{Use: "login [ENDPOINT]", Short: "Set up passwordless SSH login", GroupID: "commands",
+		Args: cobra.MaximumNArgs(1), Long: `Set up unattended SSH login, skipping steps that are already done. Without
+ENDPOINT, try SSH aliases in file order until one succeeds.
+
+If no key exists, login creates one (OpenSSH's default ~/.ssh/id_ed25519, so no
+IdentityFile line is needed). It then logs in once, where you verify the host
+fingerprint and may enter your server password, and adds your public key to the
+server. Finally it checks that login works without prompts. Working logins exit
+0 at once. If the server refuses password login, send the printed public key to
+your administrator. --check only checks and changes nothing.`}
+	check := loginCmd.Flags().Bool("check", false, "Check unattended login only: no prompts or new host keys; the tray runs it before each start")
+	logPath := loginCmd.Flags().String("log", "", "Append SSH diagnostics to `FILE` (used by the tray)")
+	loginCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		return run(func(p config.Paths) error { return login(p, strings.Join(args, ""), *check, *logPath) })(cmd, args)
 	}
 	autostartCmd := &cobra.Command{Use: "autostart", Short: "Manage proxy startup at login", GroupID: "autostart",
 		Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }, Long: `Start the proxy at login for the current user, independently of the tray app.
@@ -240,7 +247,7 @@ not be reflected. Disable before moving the installation folder.`}
 	root.AddCommand(startCommand("start", "Start the proxy in the background", false),
 		startCommand("restart", "Restart with the current configuration", true),
 		&cobra.Command{Use: "stop", Short: "Stop the proxy and its SSH tunnel", GroupID: "commands", Args: cobra.NoArgs, RunE: run(stop)},
-		statusCmd, trustCmd, logsCmd, testCmd,
+		statusCmd, loginCmd, logsCmd, testCmd,
 		&cobra.Command{Use: "check", Short: "Validate configuration as JSON", GroupID: "commands", Args: cobra.NoArgs,
 			Long: "Validate configuration as JSON. Inspect the valid field to determine validity.",
 			RunE: run(func(p config.Paths) error { return printJSON(config.CheckConfig(p.Config)) })},
@@ -258,8 +265,8 @@ func autostart(p config.Paths, action string) error {
 		if _, err := config.LoadConfig(p.Config); err != nil {
 			return err
 		}
-		if err := trust(p, "", true, ""); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: unattended SSH login check failed: %v\nAutostart will still be registered; set up SSH keys or ssh-agent before login.\n", err)
+		if err := login(p, "", true, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: unattended SSH login check failed: %v\nAutostart will still be registered; run login to set it up before you log in.\n", err)
 		}
 		if err := entry.Enable(); err != nil {
 			return err
@@ -314,7 +321,7 @@ func stop(p config.Paths) error {
 	return printStatus(control.QueryStatus(p))
 }
 
-func trust(p config.Paths, endpoint string, check bool, logPath string) error {
+func login(p config.Paths, endpoint string, check bool, logPath string) error {
 	cfg, err := config.LoadConfig(p.Config)
 	if err != nil {
 		return err
@@ -335,19 +342,7 @@ func trust(p config.Paths, endpoint string, check bool, logPath string) error {
 		output = io.MultiWriter(os.Stdout, file)
 		errorOutput = io.MultiWriter(os.Stderr, file)
 	}
-	var failures []error
-	for _, e := range cfg.Endpoints {
-		if endpoint != "" && e != endpoint {
-			continue
-		}
-		mode := config.SSHTrust
-		if check {
-			mode = config.SSHCheck
-			fmt.Fprintf(output, "Checking unattended SSH login for %s.\n", e)
-		} else {
-			fmt.Fprintf(output, "SSH login for %s. Verify any host fingerprint before accepting.\n", e)
-		}
-		cmd := config.SSHCommand(cfg, e, mode)
+	runSSH := func(cmd *exec.Cmd) error {
 		if !check {
 			cmd.Stdin = os.Stdin
 		}
@@ -358,13 +353,28 @@ func trust(p config.Paths, endpoint string, check bool, logPath string) error {
 		if logPath != "" {
 			cmd.Args = append(cmd.Args[:1], append([]string{"-E", logPath}, cmd.Args[1:]...)...)
 		}
-		if err = cmd.Run(); err != nil {
-			failure := fmt.Errorf("SSH login for %s: %w", e, err)
-			fmt.Fprintln(errorOutput, failure)
-			failures = append(failures, failure)
+		return cmd.Run()
+	}
+	var failures []error
+	for _, e := range cfg.Endpoints {
+		if endpoint != "" && e != endpoint {
 			continue
 		}
-		return nil // Native SSH needs no prompt when trust/authentication already work.
+		var err error
+		if check {
+			fmt.Fprintf(output, "Checking unattended SSH login for %s.\n", e)
+			if err = runSSH(config.SSHCommand(cfg, e, config.SSHCheck)); err != nil {
+				err = fmt.Errorf("SSH login for %s: %w", e, err)
+			}
+		} else {
+			err = setupLogin(cfg, e, runSSH, output)
+		}
+		if err != nil {
+			fmt.Fprintln(errorOutput, err)
+			failures = append(failures, err)
+			continue
+		}
+		return nil
 	}
 	if len(failures) == 0 {
 		return fmt.Errorf("endpoint not found: %s", endpoint)

@@ -1,178 +1,220 @@
 # SSH Proxy
 
-**Installation and usage: [user guide — 中文 / English](src/packaging/defaults/README.md).**
+**Using SSH Proxy?** See the [中文使用指南 / English guide](src/packaging/defaults/README.md).
 
-SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through native OpenSSH. The CLI owns the proxy on Windows, macOS and Linux; Windows/macOS also have a small tray app. Ship only `ssh_proxy_cli` and `ssh_proxy_app`, as portable ZIPs. Prefer existing libraries, small adapters and sensible defaults over new abstractions or settings.
+SSH Proxy runs local HTTP/HTTPS and SOCKS5 proxies through native OpenSSH. It ships two programs as a portable ZIP:
+
+- **`ssh_proxy_cli`** (Windows, macOS, Linux) owns the proxy.
+- **`ssh_proxy_app`** (Windows, macOS) is a tray GUI built on the CLI. The CLI never depends on the app.
+
+Prefer existing libraries, small adapters and sensible defaults over new abstractions or settings. Start with [build and release](#build-and-release), then follow the [development checks](#test-and-verify).
 
 ## Architecture
 
 ```text
-HTTP/HTTPS client -> Go HTTP listener :8181 -> SOCKS5 dialer --+
-                                                            |
-SOCKS client -----------------------------------------------+
-                                                            v
-                                             native OpenSSH -D :1081
-                                                            |
-                                                       SSH server
-                                                            |
-                                                       destination
+HTTP/HTTPS client ─> Go HTTP proxy :8181 ─> SOCKS5 dialer ─┐
+SOCKS5 client ─────────────────────────────────────────────┤
+                                                           v
+                              native OpenSSH  ssh -N -D :1081 ─> SSH server ─> destination
 ```
 
-OpenSSH owns encryption, authentication, host trust and SOCKS serving. The remote server only needs SSH TCP forwarding. The Go bridge uses remote DNS and forwards HTTPS through CONNECT without TLS interception or a direct-connection fallback. Listeners use distinct ports on numeric loopback addresses; mixed-port mode, UDP and VPN routing are outside this design.
+- **OpenSSH** owns encryption, authentication, host trust and the SOCKS server. The remote side only needs SSH TCP forwarding.
+- **The Go bridge** forwards HTTP and HTTPS `CONNECT` through SOCKS with remote DNS. It does no TLS interception and has no direct-connection fallback.
+- **Out of scope:** UDP, VPN routing and mixed-port mode.
 
-| Responsibility | Library / implementation |
+| Responsibility | Implementation |
 | --- | --- |
-| SSH and SOCKS server | Native `ssh -F`, `-G`, `-D` |
-| HTTP, CONNECT, WebSockets, streaming | `elazarl/goproxy` |
+| SSH, SOCKS server | native `ssh` (`-F`, `-G`, `-D`), OpenSSH 8.7+ |
+| HTTP, CONNECT, WebSocket, streaming | `elazarl/goproxy` |
 | SOCKS client | `golang.org/x/net/proxy` |
-| Configuration | `BurntSushi/toml`, `trzsz/ssh_config`; OpenSSH resolves effective settings |
+| Configuration | `BurntSushi/toml`, `trzsz/ssh_config`; `ssh -G` resolves effective settings |
 | CLI | `spf13/cobra` |
-| Login startup | Per-user Windows Run entries, macOS LaunchAgents, Linux systemd user units |
-| Tray | `gogpu/systray`; native dialogs and file openers |
-| Process ownership | Windows mutex/Job Object; Unix `gofrs/flock`, sessions and guardian |
-| Test SSH server | `gliderlabs/ssh`, `x/crypto/ssh`; no production SSH implementation |
+| Tray | `gogpu/systray`, native dialogs and file openers |
+| Login startup | Windows HKCU Run values, macOS LaunchAgents, Linux systemd user units |
+| Process ownership | Windows mutex and Job Object; Unix `gofrs/flock`, sessions and the `_ssh` guardian |
+| Test SSH server (tests only) | `gliderlabs/ssh`, `x/crypto/ssh` |
 
-Application builds use `CGO_ENABLED=0`. Use native tools, without WSL. Keep networking in these libraries; adapters should preserve protocol behavior rather than replace it.
+All builds use `CGO_ENABLED=0` and native tools (no WSL).
 
 ## Source map
 
 | Path | Responsibility |
 | --- | --- |
-| `src/cmd/ssh_proxy_cli`, `src/cmd/ssh_proxy_app` | Two executable entry points |
+| `src/cmd/ssh_proxy_cli`, `src/cmd/ssh_proxy_app` | The two entry points |
 | `src/cli` | Cobra commands, flags, help and reports |
-| `src/config` | TOML, paths/identity, SSH aliases, effective settings and arguments |
-| `src/bridge` | HTTP-to-SOCKS integration, connection tracking and probes |
-| `src/supervisor` | SSH lifecycle, readiness, health, failover and background run |
-| `src/control` | Authenticated local API and runtime state |
-| `src/platform` | Locks, detach, child containment, Unix SSH guardian and generic login registration |
-| `src/logs` | Continuous run logs, retention and size limits |
-| `src/ui` | Tray controller, setup terminal, errors, login and scripts |
-| `src/packaging` | Public defaults, bilingual guide, launchers and executable resources |
+| `src/config` | TOML, install paths and identity, SSH aliases, `ssh -G`, SSH arguments, `app.json` |
+| `src/bridge` | HTTP-to-SOCKS bridge, connection tracking, health probes |
+| `src/supervisor` | Supervisor run, SSH lifecycle, readiness, health, failover, background start/stop |
+| `src/control` | `state.json`, the authenticated local API and `status` |
+| `src/platform` | Locks, detaching, child containment, Unix SSH guardian, login registration |
+| `src/logs` | Run logs, retention and size limits |
+| `src/ui` | Tray controller, menu, setup terminal, dialogs, app login item, scripts |
+| `src/packaging` | Public defaults (`config.toml`, `ssh_config`, user guide, launchers) and executable resources |
 | `scripts` | `build.py`, `run_unit_tests.py`, `run_sys_tests.py`, `visible.py` |
-| `tests/unit`, `tests/system` | Flat `*_test.go` suites; reusable fixtures in `tests/helpers` |
-| `build`, `.build-tools` | Ignored outputs/private settings/reports/caches and downloaded Go |
+| `tests/unit`, `tests/system`, `tests/helpers` | Flat test suites and shared fixtures |
 
-Compiled application code stays under `src/`. Imports flow from `platform` through `config`/`logs`/`bridge`, then `control`/`supervisor` and `cli`. The tray uses `config`, `control`, `platform` and `logs`; it calls the CLI for validation, trust and lifecycle, and reads the same authenticated status API in-process. Internal `_run` and `_ssh` modes reuse the CLI executable. See [AGENTS.md](AGENTS.md) for repository rules.
+Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `bridge` support `control` and `supervisor`; `cli` coordinates them. Lower-level packages never import the CLI or UI. The tray uses `config`, `control`, `platform` and `logs`, invokes the CLI for validation, login setup and start/stop, and queries the authenticated control API in-process. Internal `_run` (supervisor) and `_ssh` (Unix guardian) modes reuse the CLI executable.
 
-## Contracts to preserve
+## Design
 
 ### Configuration and SSH
 
-- `config.toml` is always beside the CLI, independent of the working directory. TOML-relative paths resolve from its directory; logs stay beside the CLI. Native SSH runs from the SSH config directory.
-- Concrete `Host` aliases in the selected SSH file define candidate order, with duplicates removed. Wildcards, exclusions and `Match` do not declare candidates. Native `ssh -G` resolves `Include`, `Match`, `ProxyJump` and authentication settings; do not duplicate its parser.
-- Reject unknown TOML keys and invalid values. Connect-timeout, attempt, keepalive and logging defaults are supplied by `LoadConfig`; readiness, retry and health settings are required. Public settings live in [config.toml](src/packaging/defaults/config.toml).
-- Require OpenSSH 8.7+, with clear missing/outdated-client errors. Managed tunnels enforce batch authentication, strict host checking, no TTY/agent forwarding, no SSH backgrounding/multiplexing, and exit on forwarding failure. Use OpenSSH's normal trust files.
-- Reuse one matching `DynamicForward`; reject conflicting/multiple forwards and `ClearAllForwardings yes`. Endpoint details belong in `ssh_config`, not TOML.
-- `trust` runs an interactive SSH login with remote `exit`, without forwarding. `trust --check` uses noninteractive tunnel authentication policy. `--log` appends setup diagnostics without piping terminal input/output; native SSH owns password hiding.
+`config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Unknown TOML keys and invalid values are rejected. `LoadConfig` supplies connection-policy and logging defaults; readiness, retry and health settings are required. See the [public defaults](src/packaging/defaults/config.toml).
 
-### Forwarding and lifecycle
+Endpoints are the concrete `Host` aliases declared in the selected SSH config, in first-appearance order without duplicates. Wildcards, exclusions and `Match` add no targets. `Include` can supply settings, but its aliases are not enumerated as targets. Native `ssh -G` resolves effective settings, including `ProxyJump` and authentication; do not reimplement it.
 
-`start` detaches the same supervisor used by `start --foreground`. Only the supervisor holding the installation lock creates a run log. Concurrent background starters join the winner through its control API; a second foreground start fails without touching its state or logs. `restart` validates before stopping; foreground runs terminate on Ctrl+C. There is no OS-service routing.
+Managed tunnels enforce batch authentication, strict host-key checking, no TTY or agent forwarding, no authentication forking or multiplexing, and `ExitOnForwardFailure`. One matching `DynamicForward` is reused; conflicting or multiple forwards and `ClearAllForwardings yes` are rejected. Host trust uses OpenSSH's default files.
 
-The supervisor locks its identity, reserves listeners and tries aliases in order. Readiness requires SOCKS forwarding to at least one health target. Until ready, HTTP requests receive 503. SSH exit triggers cleanup and ordered failover; exhausting the list waits for the configured retry delay. A live tunnel with failed probes becomes `degraded` and stays connected by default. Probe-triggered failover is opt-in; healthy backup endpoints do not periodically fail back.
+`login` is a guided setup that skips steps already done (`src/cli/setup.go`): if unattended login already works it exits 0; otherwise it uses the first existing key from `ssh -G`'s `identityfile` list, or creates one without a passphrase (a configured custom path, else OpenSSH's default `~/.ssh/id_ed25519`, so no `IdentityFile` is needed), using `ssh-keygen` beside the configured `ssh`. It then logs in interactively, without forwarding, and appends the public key's type and data to the remote `~/.ssh/authorized_keys` unless present (POSIX shell assumed; nothing from the key comment reaches the remote command). It checks unattended login again, offers `ssh-add` for a passphrase-protected key, and on failure prints the public key for the administrator. It never stores passwords, and only OpenSSH prompts, so the tray's setup terminal runs the same `login`. `login --check` only verifies the tunnel's unattended authentication policy and changes nothing. `--log FILE` appends diagnostics without piping terminal input.
 
-HTTP forwarding preserves the client's encoding and response bytes. A small transport adapter aborts incomplete upstream responses; headers for SSE and responses without Content-Length flush before the first data. The transport retains up to 100 idle connections total/per host. User connection setup has a 30-second budget; health probes use their own configured deadline. Established transfers and tunnels have no lifetime timeout. Preserve CONNECT buffered bytes and half-close, streaming flushes/trailers, WebSocket cleanup, cancellation and the generation check that rejects dials completed after tunnel replacement. Stop/failover closes tracked and idle connections; clients reconnect.
+### One supervisor per install
 
-`start/restart --wait` bounds the caller's wait, not the supervisor's lifetime. A successful command can still report `connecting`/`reconnecting`; consumers inspect the phase. The tray uses the default wait in a worker while continuing to poll.
+The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh_proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates tests.
 
-Config identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes instance locks, registration names and runtime state under the user cache (`%LOCALAPPDATA%/ssh_proxy/<id>` on Windows). `SSH_PROXY_RUNTIME` isolates tests. `state.json` contains the PID, config/log paths, ephemeral loopback API address and random token. Only authenticated `GET /status` and `POST /stop` exist. Control calls bypass environment proxies; a stale PID never authorizes killing a process.
+All entry points use the same supervisor. Background `start` launches detached `_run`; foreground starts run in the calling terminal. Only the instance-lock holder creates the run log and publishes state. Concurrent background starters join the winner through its control API; a losing `_run` exits with code 10 without creating a log. A duplicate foreground start fails without touching live state. `restart` validates configuration before stopping anything.
 
-Windows contains SSH in a kill-on-close Job Object. Background startup tries to leave the caller's job; if the parent forbids breakaway, closing that job can still stop the proxy. Unix uses a detached session and a guardian attached to a supervisor-owned pipe. Preserve cleanup after supervisor crashes; never terminate by process name.
+`--wait` bounds the readiness wait, not the supervisor's lifetime. Control-API initialization gets up to 30 extra seconds. A successful `start` can report `connecting` or `reconnecting`; callers must inspect the phase.
 
-### CLI, tray and autostart
+`state.json` contains the PID, config/log paths, an ephemeral loopback address and a random token. The only API routes are authenticated `GET /status` and `POST /stop`; requests bypass environment proxies. Only the instance-lock holder writes or deletes this file.
 
-Plain `status` and `check` return JSON. `status --proxy_http` / `--proxy_socks` return only an `http://` / `socks5h://` URL when the phase is `running`, otherwise empty stdout with exit 0; the flags are mutually exclusive. Other commands return text. `check` exits 0 after producing a validation report, even when `valid` is false; `error`/`edit_file` describe failures. Operational errors use stderr and nonzero exit. Help/version return before configuration or OS access. Flags/defaults live in `src/cli/cli.go`; keep unique command flags in root help and login startup details under `autostart --help`. Plain `help`/`version`, tray-management commands, `--json` and all `service` commands remain rejected.
+| Exit | State and diagnostics |
+| --- | --- |
+| Requested stop: `/stop`, Ctrl+C, SIGTERM | Remove state; report `stopped` without a failure |
+| Startup failure, server failure or recovered panic | Write an exit record containing time, reason and run log |
+| Fatal crash or hard kill | Leave state with a dead PID; report an unexpected stop |
+| Hung supervisor | Report `unresponsive`; recovery is manual |
 
-The tray controller polls about every two seconds, serializes actions and changes native menu items only when their values change. Keep menu structure stable to avoid flicker. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keeping the proxy running exits only the tray.
+The next successful start replaces old diagnostics. Parents reuse a child's log and exit record; only failures before the child owns diagnostics allocate a parent-written failure log. Temporary bootstrap output stays in the runtime folder. Fatal panics go to the run log through `debug.SetCrashOutput`; recovered panics explicitly log `debug.Stack()`.
 
-Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the normal OS opener. Do not prompt users to choose an application for `ssh_config`.
+On Windows, a kill-on-close Job Object contains SSH. Background launch attempts job breakaway; if the caller's job forbids it, closing that job can still stop the proxy. On Unix, background launch detaches into a new session, and the `_ssh` guardian ends SSH when the supervisor's pipe closes. A stale PID never authorizes a kill; never kill by process name.
 
-Start validates configuration, then tries silent trust. Only failed silent trust opens interactive setup; success is rechecked before starting because password-only login cannot run unattended. Invalid SSH config opens once per run; errors show their reason and the same app log, with repeated polling errors suppressed. Windows uses a native console; macOS uses Terminal through AppleScript and may require Automation permission. Setup closes after completion and does not retry until another Start action.
+### Connection lifecycle
 
-**Start Proxy When App Launches** reuses this Start flow; the tray stores it as `start_proxy_on_launch` in `app.json` beside `config.toml` and rewrites that file whole. The CLI ignores this app setting. Login startup opens only the tray: Windows uses a per-user Run value (a hidden launcher handles the OS length limit); macOS uses a LaunchAgent. Registration existence does not detect external OS disablement.
+Startup checks that the SOCKS port is free, reserves the HTTP listener, then tries aliases in order. OpenSSH owns the SOCKS listener. Readiness requires forwarding to at least one health target; HTTP returns 503 until ready. SSH exit triggers cleanup and the next alias. After every alias fails, the supervisor waits `retry_delay_seconds` and retries indefinitely.
 
-The app takes no command-line arguments and finds the adjacent CLI, including from its macOS bundle. Script discovery reads `scripts/` once at startup (`.ps1` on Windows, `.sh` on macOS). Scripts run noninteractively with output in the app log. Each bundled Codex/Claude launcher sets `SSH_PROXY_URL` to `http://127.0.0.1:8181`, replacing it only when the adjacent CLI's `status --proxy_http` succeeds with a nonempty URL. Launchers automatically find the installed desktop app, falling back to the script-local `CODEX_APP` or `CLAUDE_APP` path (empty by default). They query status without starting the proxy, then set desktop proxy arguments/environment. Linux uses the user-guide instructions.
+Failed probes on a live tunnel mark it `degraded`; switching on probe failures is opt-in. A healthy backup does not automatically fail back. Stop and failover close tracked connections and the HTTP idle pool; clients reconnect.
 
-`autostart enable|disable|status` belongs to the CLI and never launches the app. Enable validates config and warns, but still registers, if silent SSH login fails. It does not connect immediately; disable leaves the current proxy running. Windows registers `start --wait 1` in HKCU Run; macOS and Linux register `start --foreground` with no restart policy. No elevation, stored account password or pre-login startup is supported. The app's login entry and fallback settings are separate. Old app entry formats at the same location are repaired on app launch. Folder moves change identity: disable both entries before moving and enable afterwards.
+The HTTP bridge preserves `Accept-Encoding` and response bytes, aborts incomplete upstream bodies, and flushes headers immediately for SSE and responses without `Content-Length`. It keeps up to 100 idle upstream connections, both total and per host. Connection setup has a 30-second budget; probes use their own deadline. Established transfers and tunnels have no lifetime timeout.
 
-`status.autostart` reports the CLI registration without starting another process. Registration existence does not guarantee OS-enabled state (for example, disabling it in Windows Task Manager). The retained `service` JSON field is always false for compatibility.
+Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, WebSocket cleanup, client cancellation, and the generation check that rejects dials completing after a tunnel replacement.
 
-Only the instance-lock holder writes or deletes `state.json`. An intentional stop removes it; failures replace it with an exit record (time, reason, run log), and hard kills leave dead-PID state. Both report `stopped` with `last_error`; a successful start replaces old diagnostics. Parents reuse child diagnostics; only failures before the child owns a log allocate a parent-written failure log. Bootstrap output uses a temporary runtime file, removed after launch. Panics go to the run log through `debug.SetCrashOutput`; recovered panics explicitly log `debug.Stack`. The tray alerts once when a supervisor it observed alive becomes an unclean stopped run, opening that proxy log. Old failures and normal external stops do not trigger alerts. Hung supervisors require manual recovery; PID/path guesses never authorize killing.
+### CLI contract
 
+- **JSON output:** `status` and `check` print JSON; there's no `--json` flag.
+  - `status` includes `autostart`, read without starting a process.
+  - `status --proxy_http` or `--proxy_socks` (mutually exclusive) prints only the `http://` or `socks5h://` URL while `running`. Otherwise it prints nothing and exits 0.
+  - `check` exits 0 even when `valid` is false.
+- **Errors** go to stderr with a nonzero exit. Help and version return before any config or OS access.
+- **Flags and help** live in `src/cli/cli.go`. Root help lists each command's own flags; `autostart --help` has the login-startup details.
+- **Rejected commands** (keep the tests): plain `help` and `version`, `--json`, tray-management commands, and every `service …` command.
+
+### Login startup
+
+| Entry | Owner | Windows | macOS | Linux |
+| --- | --- | --- | --- | --- |
+| Proxy at login | CLI `autostart enable/disable/status` | HKCU Run `SSHProxyCLI-<id>`: `ssh_proxy_cli.exe start --wait 1` | LaunchAgent `com.sshproxy.cli.<id>`: `start --foreground` | systemd user unit `ssh-proxy-<id>.service`: `start --foreground`, `Restart=no` |
+| App at login | App menu "Launch App at Login" | HKCU Run `SSHProxy-<id>`: the app exe | LaunchAgent `com.sshproxy.login.<id>` | (no app) |
+
+- **Independent and safe together:** the two entries are independent, and starting twice is harmless because a second start joins the first.
+- **What the CLI entry does and doesn't do:**
+  - `enable` validates the config and warns, without failing, when `login --check` fails; it doesn't start the proxy now.
+  - `disable` leaves the running proxy alone. On macOS, that means removing the plist without `bootout`.
+  - No elevation, stored password, pre-login start or OS restart policy.
+- **Windows long-path fallback:** a Run command over 260 characters becomes a hidden PowerShell launcher that reads its own key (`HKCU\Software\SSHProxy\CLI-<id>` or `App-<id>`). The key is deleted when unused.
+- **Repair:** the app rewrites an old-format app entry at the same location when it starts.
+- **Folder moves change `<id>`,** so users disable both entries before moving and enable them again afterwards. Registration doesn't detect disabling in OS settings, for example Task Manager.
+
+### Tray
+
+The app takes no arguments and locates the adjacent CLI, including from its macOS bundle. Its controller polls about every two seconds, serializes actions, and changes native menu items only when their values change. The status rows show SSH host:port, SOCKS5 and HTTP addresses.
+
+Start runs `check`, opening an invalid SSH config once per run, then silent `login --check`. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
+
+**Start Proxy When App Launches** reuses that flow. Its `start_proxy_on_launch` setting lives in `app.json` beside the TOML, defaults to false when absent, and is rewritten as a whole file. CLI autostart ignores it. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keep-proxy-running exits only the tray.
+
+Normal errors show their reason and open the tray run log; repeated polling errors are suppressed. The tray alerts once when a supervisor observed alive becomes an unclean stopped run, opening that proxy's log. It does not alert for old failures or normal stops. Login-registration repair failures are logged without preventing app launch.
+
+Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the file manager. Scripts are discovered once at startup (`.ps1` on Windows, `.sh` on macOS), run non-interactively, and write output to the tray log. The bundled launchers use `status --proxy_http`, falling back to their default `SSH_PROXY_URL`; they discover desktop apps before using the script-local `CODEX_APP`/`CLAUDE_APP` fallback.
 
 ### Logs
 
-Each app/proxy run owns one continuous file under `logs/`. Retention applies independently to tray/proxy logs across config identities; active files are protected and unrelated files are untouched. Instance locks precede app/proxy log creation, including background runs.
+- **One file per run:** each tray or proxy run writes one continuous file in `logs/`. Retention keeps `max_log_files` per kind (tray, proxy) across identities, never deletes a file still in use, and ignores unrelated files. The instance lock is taken before the log is created.
+- **Size limit:** above `max_size_mb`, the owner removes the older half in place and marks the cut. Truncation is held while `login` or `ssh -E` append. The cut marker carries a cumulative byte offset, so `logs --follow` never skips or repeats retained text.
+- **Unreadable TOML:** config failures are still logged, using the default limits.
 
-When a log exceeds its size limit, remove its older half in place and mark the cut. Only the owner truncates; hold truncation while interactive trust/native `ssh -E` append. The cut marker carries a cumulative byte offset so `logs --follow` neither skips nor repeats retained text. Logging must capture configuration failures using default limits when TOML is unreadable.
+## Build and release
 
-## Build and distribution
+Requirements:
 
-Use Python 3.10+ and OpenSSH 8.7+. `build.py` discovers a Go version satisfying [go.mod](go.mod), or downloads a project-local toolchain with SHA-256 verification. No C compiler or pip packages are needed for builds. Runtime targets are Windows 10+, macOS 13+ and Linux, on amd64/arm64; the app is Windows/macOS only. Cross-builds do not validate runtime behavior. Do not build macOS during Windows development unless requested.
+- Python 3.10+ and OpenSSH 8.7+.
+- No C compiler or pip packages.
+- `build.py` uses a Go version that satisfies [go.mod](go.mod), or downloads one into `.build-tools` with SHA-256 verification.
+
+Targets:
+
+- Windows 10+, macOS 13+ and Linux, on amd64 and arm64.
+- The app builds only for Windows and macOS.
+- A cross-build proves compilation only, not runtime behaviour.
+- Don't build macOS during Windows development unless asked.
+
+`--os` accepts `windows`, `darwin` or `linux`; `--arch` accepts `amd64` or `arm64`. Both default to the build host.
 
 ```sh
-python scripts/build.py
-python scripts/build.py --target-dir build/scratch
-python scripts/build.py --release
+python scripts/build.py                                   # build/<os>-<arch>/
+python scripts/build.py --target-dir build/scratch        # while build/<os>-<arch> is running
+python scripts/build.py --release                         # build/release/<os>-<arch>/ + .zip
 python scripts/build.py --release --os linux --arch arm64 --target-dir ./packages
 ```
 
-Use `python3` on macOS/Linux. Default builds target the current OS/architecture in `build/<os>-<arch>/`; release mode produces a full folder and sibling ZIP under `build/release/`. `--target-dir`, `--os`, `--arch` override these; `--go` selects a toolchain.
+- **Dev builds** keep an existing `config.toml`, `ssh_config`, `scripts/` and `README.md`. They add missing defaults and replace binaries and metadata.
+- **Releases** replace all packaged files in the target folder with public defaults and produce a matching ZIP. The ZIP includes only the declared payload; unrelated files and private settings from an existing target folder are excluded. Use a dedicated release directory, never an installation containing private settings.
+- **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
+- **Versioning:** [.version](.version) is the only version source; change it only on request.
+- **Packaging** generates `BUILDINFO.txt`, `SHA256SUMS` and `THIRD_PARTY_NOTICES.txt` (only for modules linked into that target). Text files use LF.
+- **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing.
+- **macOS:** the `.app` stays beside the CLI and configs, and its plist declares macOS 13.
+- **Signing:** packages are unsigned and not notarized.
+- **The builder never runs tests.**
 
-Development builds preserve existing config, SSH file, scripts and README, adding missing defaults and replacing binaries/metadata. Build into another folder while the normal build is running. Releases use public defaults and an explicit payload; private settings/unrelated files never enter ZIPs. The macOS `.app` stays beside CLI/configs, and its plist declares the OS minimum. Packages are unsigned/not notarized.
+## Test and verify
 
-[.version](.version) is the sole version source; never increment automatically. Packaging generates build info, hashes and notices for modules actually linked into each target. Text metadata/defaults use LF. `go-winres`, pinned in `go.mod`, embeds Windows resources before hashing. The builder never runs tests.
-
-## Development and verification
-
-All four Python scripts support Windows, macOS and Linux with Python 3.10+. Run them from the repository root in a visible native terminal. `visible.py` opens PowerShell on Windows and closes that window when the command finishes; on macOS/Linux it uses the current terminal. Output and completion are saved under `build/test-results/`. Use `python3` instead of `python` on macOS/Linux if needed.
+Follow [AGENTS.md](AGENTS.md). Run scripts from the repository root in a visible native terminal; use `python3` on macOS/Linux if needed. `visible.py` opens a PowerShell window on Windows and closes it after completion; elsewhere it uses the current terminal. It saves output and exit status under `build/test-results/<name>-<stamp>/`.
 
 ```sh
-python scripts/visible.py --name unit -- python scripts/run_unit_tests.py
+python scripts/visible.py --name unit  -- python scripts/run_unit_tests.py
 python scripts/visible.py --name build -- python scripts/build.py
-python scripts/visible.py --name cli -- python scripts/run_sys_tests.py --cli-only
-python scripts/visible.py --name app -- python scripts/run_sys_tests.py --app-only
-```
-
-Run system tests only when requested; the table identifies the relevant scope.
-
-| Change | Checks |
-| --- | --- |
-| CLI/backend Go | Unit/static checks, native build, CLI system tests |
-| Tray Go | Unit/static checks, native build, app system tests |
-| Shared Go or system-test runner | Both system-test scopes |
-| Packaging | Exercise the affected build/release path |
-| Scripts/docs only | Scoped checks; no application rebuild or Go suites |
-
-The unit runner verifies modules/formatting, runs vet/staticcheck for Windows/macOS/Linux, then executes host unit tests. Staticcheck is pinned in `go.mod` and cached under `build/.cache/bin`. The system runner tests existing binaries; use `--build-dir build/scratch/<os>-<arch>` for a separate build. No selection runs all platform-supported tests. App-only needs the CLI; Linux runs CLI tests and rejects app-only. After a failure, rerun only that test through the same runner, for example:
-
-```sh
+python scripts/visible.py --name cli   -- python scripts/run_sys_tests.py --cli-only
+python scripts/visible.py --name app   -- python scripts/run_sys_tests.py --app-only
 python scripts/visible.py --name retry -- python scripts/run_sys_tests.py --app-only --test TestTrayNativeWorkflow
 ```
 
-`--test NAME` selects one top-level test, including its subtests, and still performs platform permission checks and writes a result summary. A misspelled or out-of-scope name fails instead of reporting success with no tests.
+| Change | Checks |
+| --- | --- |
+| CLI or backend Go | Unit tests and a build; CLI system tests when asked |
+| Tray Go | Unit tests and a build; app system tests when asked |
+| Shared Go or the system-test runner | Both system-test scopes, when asked |
+| Packaging | Run the affected build or release path |
+| Scripts or docs only | Checks scoped to the change; no app build or Go suites |
 
-System tests use isolated configs/runtime paths, ephemeral SSH keys, local servers and native UI automation. They must not stop existing user proxies or modify user trust. `--live-config PATH` opts into real endpoint checks and is incompatible with app-only. Autostart tests use isolated registrations and launch through launchd/systemd or the Windows Run command. Windows also requires a manual real sign-in check; OS-manager environments and SSH-agent access need native validation.
+- **Unit runner:** checks modules and formatting, runs `go vet` and staticcheck for Windows, macOS and Linux, then runs the host's unit tests.
+- **CLI output snapshot:** `tests/unit/testdata/cli/expected.txt` records each distinct help or error output. After an intended change, regenerate it with `SSH_PROXY_UPDATE_EXPECTED=1` and review the diff.
+- **System runner:** tests an existing build; use `--build-dir build/scratch/<os>-<arch>` for a separate one.
+  - It tests the selected build’s binaries with current source defaults, not preserved files in an existing dev folder. Release packaging separately verifies default file contents and writes only the declared ZIP payload.
+  - With no scope it runs everything the platform supports. `--app-only` needs the CLI too, and Linux has no app tests.
+  - `--test NAME` reruns one top-level test, with its subtests; an unknown name fails. After a failure, fix and rerun only that test.
+  - Default runs use isolated configs, runtime folders, throwaway SSH keys and a local SSH server. They do not stop the user’s proxy or change host trust.
+  - `--live-config PATH` adds checks against real endpoints; it can't be combined with `--app-only`.
+  - Autostart tests use isolated entries and launch them through launchd, systemd or the stored Windows Run command. Windows also needs one manual check with a real sign-in.
+- **Platform needs:**
+  - **App tests:** an unlocked desktop and a default text editor.
+  - **macOS:** install `requirements.txt` in a virtual environment. From Terminal, run `python3 -m venv build/venv`, `source build/venv/bin/activate`, then `python -m pip install -r requirements.txt`. The runner requests Accessibility and Automation access to System Events, Terminal and TextEdit and waits for approval; allow the app to control Terminal too. Other default text editors must expose opened document names in their window titles.
+  - **Windows and Linux:** no Python packages. Linux autostart tests need a working systemd user session.
+- **Results:** output, JSON events and summaries are saved under `build/test-results/`. Every selected test must pass; only the unrequested live-endpoint test may skip. Native runs are required to validate each OS; Windows results do not certify macOS or Linux.
 
-App tests need an unlocked desktop and default text editor. On macOS, install the permission-request dependency once (a virtual environment avoids changing the system Python):
+## Documentation and assets
 
-```sh
-python3 -m venv build/venv
-source build/venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-Then use the build/test commands above from Terminal, without sudo. Before app tests, the runner requests Accessibility and Automation for System Events, Terminal and TextEdit, opens System Settings when needed, and waits for you to grant access. Allow any SSH Proxy → Terminal prompt as well. The app opens configs/logs with `open -t`; opening text does not require UI automation. Tests use TextEdit automation to verify full document paths and close only their own documents, even when TextEdit was already running. Other default editors must expose document names in their window titles.
-
-Windows/Linux need no Python packages; Linux needs the native OpenSSH client and runs no tray automation. Reports contain output, JSON events and a summary; every selected test must pass, with only the unrequested live test allowed to skip. Run on each native OS to verify its behavior: Windows results and static checks do not certify macOS/Linux runtime behavior.
-
-CLI snapshots record each distinct help/error output once; equivalent invocations compare complete stdout, stderr and exit codes. Keep forbidden-command coverage. After intended output changes, regenerate with `SSH_PROXY_UPDATE_EXPECTED=1` and review the diff.
-
-## Assets and documentation
-
-Keep developer design here and user instructions in the Chinese-first/English [user guide](src/packaging/defaults/README.md). Update both user-guide languages for user-visible changes. Public defaults must contain no private hosts, usernames, keys or logs.
-
-`src/ui/icon.svg` is canonical; keep PNG/ICNS synchronized. The tray embeds PNG; Windows uses `src/packaging/windows-icon.json`; macOS packages ICNS. Optional regeneration:
+- **Where docs go:** design and build go here. Usage goes only in the [user guide](src/packaging/defaults/README.md), Chinese first and English second, with both updated for every user-visible change. Public defaults must not contain real hosts, usernames, keys or logs.
+- **Icon:** `src/ui/icon.svg` is the source; keep `icon.png` (tray, Windows via `src/packaging/windows-icon.json`) and `icon.icns` (macOS) in sync with it:
 
 ```sh
 uv run --with resvg-py==0.5.0 python -c "from pathlib import Path; import resvg_py; p=Path('src/ui/icon.svg'); p.with_suffix('.png').write_bytes(resvg_py.svg_to_bytes(svg_path=str(p), skip_system_fonts=True))"

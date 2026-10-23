@@ -137,7 +137,7 @@ func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
 	}{
 		{[]string{"tray"}, `unknown command "tray"`},
 		{[]string{"tray", "--hidden"}, `unknown command "tray"`},
-		{[]string{"login"}, `unknown command "login"`},
+		{[]string{"trust"}, `unknown command "trust"`},
 		{[]string{"startup"}, `unknown command "startup"`},
 		{[]string{"startup", "enable"}, `unknown command "startup"`},
 		{[]string{"startup", "disable"}, `unknown command "startup"`},

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,7 @@ type Config struct {
 type sshSettings struct {
 	destination       string
 	hasDynamicForward bool
+	identityFiles     []string
 }
 
 // App is the tray settings file, app.json beside config.toml.
@@ -415,7 +417,71 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 			return sshSettings{}, fmt.Errorf("%s: SSH DynamicForward %q must match %s from config.toml; remove it to let the supervisor add -D", alias, forwards[0], c.SocksAddr())
 		}
 	}
-	return sshSettings{destination: one("user") + "@" + net.JoinHostPort(one("hostname"), one("port")), hasDynamicForward: len(forwards) == 1}, nil
+	var identities []string
+	for _, name := range values["identityfile"] {
+		identities = append(identities, resolvePath(filepath.Dir(c.SSH.ConfigFile), name))
+	}
+	return sshSettings{destination: one("user") + "@" + net.JoinHostPort(one("hostname"), one("port")), hasDynamicForward: len(forwards) == 1, identityFiles: identities}, nil
+}
+
+// IdentityFiles are the private keys OpenSSH tries for an alias, in order.
+func (c *Config) IdentityFiles(alias string) []string { return c.resolved[alias].identityFiles }
+
+// ChooseIdentity returns the first existing key, or where login setup should create
+// one: a path the user configured, otherwise OpenSSH's default id_ed25519,
+// which OpenSSH uses without any IdentityFile line.
+func ChooseIdentity(files []string, exists func(string) bool) (path string, found bool) {
+	for _, file := range files {
+		if exists(file) {
+			return file, true
+		}
+	}
+	defaults := []string{"id_rsa", "id_ecdsa", "id_ecdsa_sk", "id_ed25519", "id_ed25519_sk", "id_xmss", "id_dsa"}
+	if len(files) > 0 && !slices.Contains(defaults, filepath.Base(files[0])) {
+		return files[0], false
+	}
+	for _, file := range files {
+		if filepath.Base(file) == "id_ed25519" {
+			return file, false
+		}
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".ssh", "id_ed25519"), false
+}
+
+var publicKeyLine = regexp.MustCompile(`^((?:ssh|ecdsa|sk)-[a-z0-9@.-]+) (AAAA[A-Za-z0-9+/]+={0,2})(\s|$)`)
+
+// AuthorizeKeyCommand is the remote shell command that adds a public key to
+// ~/.ssh/authorized_keys unless it is already there. Only the key type and
+// base64 data are used, so nothing needs quoting.
+func AuthorizeKeyCommand(publicKey string) (string, error) {
+	match := publicKeyLine.FindStringSubmatch(strings.TrimSpace(publicKey))
+	if match == nil {
+		return "", fmt.Errorf("not an OpenSSH public key")
+	}
+	key := match[1] + " " + match[2]
+	return "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '" + key + "' ~/.ssh/authorized_keys || echo '" + key + " ssh_proxy' >> ~/.ssh/authorized_keys", nil
+}
+
+// SSHSetupCommand logs in like SSHTrust and authorizes publicKey on the server.
+func SSHSetupCommand(c *Config, alias, publicKey string) (*exec.Cmd, error) {
+	remote, err := AuthorizeKeyCommand(publicKey)
+	if err != nil {
+		return nil, err
+	}
+	cmd := SSHCommand(c, alias, SSHTrust)
+	cmd.Args[len(cmd.Args)-1] = remote
+	return cmd, nil
+}
+
+// SSHTool finds an OpenSSH companion program, such as ssh-keygen, beside the
+// configured ssh executable.
+func (c *Config) SSHTool(name string) (string, error) {
+	path := filepath.Join(filepath.Dir(c.SSH.Executable), name+filepath.Ext(c.SSH.Executable))
+	if _, err := os.Stat(path); err != nil {
+		return "", fmt.Errorf("%s not found beside %s", name, c.SSH.Executable)
+	}
+	return path, nil
 }
 
 // Destination is the user@host:port that OpenSSH resolved for an alias.

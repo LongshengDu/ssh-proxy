@@ -98,7 +98,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 						t.Fatal("exit choice does not match proxy state", phase, item)
 					}
 				case ui.SSHLabel:
-					if !strings.Contains(item.Label, st.Destination) || !item.Disabled {
+					if item.Label != "SSH: example.com:2222" || !item.Disabled {
 						t.Fatal(item)
 					}
 				case ui.SOCKSLabel:

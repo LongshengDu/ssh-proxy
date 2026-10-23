@@ -67,7 +67,7 @@ func RunTrustTerminal(ctx context.Context, backend, logPath string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{backend, "trust", "--log", logPath}))
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{backend, "login", "--log", logPath}))
 	if err != nil {
 		return err
 	}

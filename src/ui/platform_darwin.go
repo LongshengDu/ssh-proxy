@@ -30,13 +30,13 @@ func RunTrustTerminal(ctx context.Context, backend, logPath string) error {
 		return err
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-	dir, err := os.MkdirTemp("", "ssh-proxy-trust-")
+	dir, err := os.MkdirTemp("", "ssh-proxy-login-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
 	result := filepath.Join(dir, "exit-code")
-	command := quote(backend) + " trust --log " + quote(logPath)
+	command := quote(backend) + " login --log " + quote(logPath)
 	// Explicit sh also works when the user's Terminal profile uses another shell.
 	command = "exec /bin/sh -c " + quote(command+"; code=$?; printf '%s' \"$code\" > "+quote(result+".tmp")+" && mv "+quote(result+".tmp")+" "+quote(result)+"; exit \"$code\"")
 	out, err := exec.CommandContext(ctx, "/usr/bin/osascript", "-e", `on run argv

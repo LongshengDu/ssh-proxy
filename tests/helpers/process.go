@@ -96,7 +96,7 @@ func RunProcess() bool {
 				st.PID, st.Phase = 123, "running"
 			}
 			json.NewEncoder(os.Stdout).Encode(st)
-		case "trust", "start":
+		case "login", "start":
 			file, err := os.OpenFile(os.Getenv("SSH_PROXY_TEST_RECORD"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 			if err != nil {
 				os.Exit(2)
@@ -110,7 +110,7 @@ func RunProcess() bool {
 			// The silent check passes after an interactive setup exited 0, unless
 			// SSH_PROXY_TEST_CHECK is "never" (password-only login) or "always".
 			trusted := os.Getenv("SSH_PROXY_TEST_RECORD") + ".trusted"
-			if os.Args[1] == "trust" && slices.Contains(os.Args, "--check") {
+			if os.Args[1] == "login" && slices.Contains(os.Args, "--check") {
 				_, err := os.Stat(trusted)
 				switch mode := os.Getenv("SSH_PROXY_TEST_CHECK"); {
 				case mode == "always", mode != "never" && err == nil:
@@ -119,7 +119,7 @@ func RunProcess() bool {
 				fmt.Fprintln(os.Stderr, "fixture: Permission denied (publickey)")
 				os.Exit(255)
 			}
-			if os.Args[1] == "trust" {
+			if os.Args[1] == "login" {
 				if gate := os.Getenv("SSH_PROXY_TEST_GATE"); gate != "" {
 					deadline := time.Now().Add(90 * time.Second)
 					for time.Now().Before(deadline) {

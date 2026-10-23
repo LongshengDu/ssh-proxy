@@ -117,11 +117,11 @@ func TestCLITunnelLifecycleAndHealth(t *testing.T) {
 	f := testutil.LocalSSH(t, dir)
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
 	testutil.MustCLI(t, dir, "check")
-	testutil.MustCLI(t, dir, "trust", "primary") // Known host + key succeeds without prompting.
-	if out, err := testutil.CallCLI(dir, "trust", "not-an-endpoint"); err == nil {
+	testutil.MustCLI(t, dir, "login", "primary") // Known host + key succeeds without prompting.
+	if out, err := testutil.CallCLI(dir, "login", "not-an-endpoint"); err == nil {
 		t.Fatal("unknown endpoint accepted", string(out))
 	}
-	testutil.MustCLI(t, dir, "trust") // First endpoint refuses; second succeeds.
+	testutil.MustCLI(t, dir, "login") // First endpoint refuses; second succeeds.
 	testutil.MustCLI(t, dir, "start", "--wait", "15")
 	before := testutil.StatusCLI(t, dir)
 	if before.Phase != "running" || before.Endpoint != "primary" {

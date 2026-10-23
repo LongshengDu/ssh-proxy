@@ -82,7 +82,8 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	}
 	testutil.ExpectMenu(t, pid, "Stop proxy", false, false)
 	st := status()
-	testutil.ExpectMenu(t, pid, "SSH: "+st.Destination+" ("+st.Endpoint+")", true, false)
+	_, hostPort, _ := strings.Cut(st.Destination, "@")
+	testutil.ExpectMenu(t, pid, "SSH: "+hostPort, true, false)
 	testutil.ExpectMenu(t, pid, "SOCKS5: "+st.SOCKS, true, false)
 	testutil.ExpectMenu(t, pid, "HTTP: "+st.HTTP, true, false)
 	call("test", "--url", f.Origin.URL)

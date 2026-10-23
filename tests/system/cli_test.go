@@ -70,7 +70,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		t.Fatal("help advertises a removed option or internal command")
 	}
 	position := -1
-	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check", "autostart enable", "autostart disable", "autostart status"} {
+	for _, name := range []string{"start", "restart", "stop", "status", "login", "logs", "test", "check", "autostart enable", "autostart disable", "autostart status"} {
 		next := strings.Index(help, "\n  "+name)
 		if next <= position {
 			t.Fatal("command absent or out of order in help", name)
@@ -80,7 +80,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	for _, usage := range []string{
 		"start [--foreground] [--wait=SECONDS]", "restart [--foreground] [--wait=SECONDS]",
 		"status [--proxy_http] [--proxy_socks]",
-		"trust [ENDPOINT] [--check] [--log=FILE]", "logs [--follow] [--lines=N]", "test [--url=URL]",
+		"login [ENDPOINT] [--check] [--log=FILE]", "logs [--follow] [--lines=N]", "test [--url=URL]",
 	} {
 		if !strings.Contains(help, "\n  "+usage+"\n      ") {
 			t.Fatal("overview must show command flags above its description", usage)
@@ -89,7 +89,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	for _, tc := range []struct{ command, want string }{
 		{"start", "--wait SECONDS"}, {"start", "(default 20)"}, {"restart", "--foreground"},
 		{"logs", "-f, --follow"}, {"logs", "(default 60)"}, {"test", `(default "https://example.com/")`},
-		{"trust", "--log FILE"}, {"trust", "--check"}, {"trust", "[ENDPOINT]"},
+		{"login", "--log FILE"}, {"login", "--check"}, {"login", "[ENDPOINT]"},
 		{"autostart", "No elevation or sudo needed"}, {"autostart", "still registers"},
 	} {
 		page := runHelp(append(strings.Fields(tc.command), "--help")...)
@@ -97,7 +97,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 			t.Fatalf("%s help missing %q: %s", tc.command, tc.want, page)
 		}
 	}
-	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "trust", "autostart", "autostart enable", "autostart disable", "autostart status"} {
+	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "login", "autostart", "autostart enable", "autostart disable", "autostart status"} {
 		command := strings.Fields(name)
 		if runHelp(append(command, "-h")...) != runHelp(append(command, "--help")...) {
 			t.Fatalf("command help flags disagree: %s", name)
@@ -106,12 +106,12 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if runHelp("autostart") != runHelp("autostart", "--help") {
 		t.Fatal("autostart without a subcommand must show autostart help")
 	}
-	for _, args := range [][]string{{"help"}, {"help", "start"}, {"help", "service", "install"}, {"version"}, {"tray"}, {"login"}, {"startup", "enable"}, {"startup", "disable"}, {"startup", "status"}, {"completion"}, {"invalid"}} {
+	for _, args := range [][]string{{"help"}, {"help", "start"}, {"help", "service", "install"}, {"version"}, {"tray"}, {"trust"}, {"startup", "enable"}, {"startup", "disable"}, {"startup", "status"}, {"completion"}, {"invalid"}} {
 		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "unknown command") {
 			t.Fatalf("%v: %v %s", args, err, out)
 		}
 	}
-	for _, args := range [][]string{{"start"}, {"trust"}, {"test"}} {
+	for _, args := range [][]string{{"start"}, {"login"}, {"test"}} {
 		testutil.WriteFile(t, configPath, template)
 		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "add your hosts") {
 			t.Fatalf("%v: %v %s", args, err, out)
@@ -145,7 +145,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 			t.Fatal("JSON is unconditional; obsolete flag accepted", command)
 		}
 	}
-	for _, args := range [][]string{{"start"}, {"stop"}, {"restart"}, {"logs"}, {"test"}, {"trust"}, {"-v"}, {"--version"}, {"autostart", "status"}} {
+	for _, args := range [][]string{{"start"}, {"stop"}, {"restart"}, {"logs"}, {"test"}, {"login"}, {"-v"}, {"--version"}, {"autostart", "status"}} {
 		if out, err := testutil.CallCLI(dir, append(args, "--json")...); err == nil {
 			t.Fatalf("text command must not accept --json: %v: %s", args, out)
 		}

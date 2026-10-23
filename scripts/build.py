@@ -179,7 +179,9 @@ def payload_names(target):
         executables = ("ssh_proxy_cli.exe", "ssh_proxy_app.exe")
     elif target.startswith("darwin-"):
         executables = ("ssh_proxy_cli", MAC_APP, MAC_PLIST, MAC_ICON)
-    return (*executables, *COMMON)
+    # run_on_mac.sh removes macOS download quarantine; other OS folders don't need it.
+    common = tuple(name for name in COMMON if name != "run_on_mac.sh" or target.startswith("darwin-"))
+    return (*executables, *common)
 
 
 def app_plist(path, name, executable, identifier):

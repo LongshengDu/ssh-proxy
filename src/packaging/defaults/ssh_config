@@ -1,89 +1,72 @@
-# 这里只填写你自己的连接信息。程序按本文件中 Host 的首次出现顺序连接。
-# Only enter your own connection details here. Hosts are tried in first-appearance order.
-# 只取消所需 Host 示例前的 #；下方说明文字保持注释。无需在 config.toml 再填写列表。
-# Uncomment only the Host examples you need. No separate endpoint list is required.
+# 填写你的 SSH 服务器：删掉下面示例每行开头的 "# "，换成你自己的信息。
+# Your SSH server: remove the "# " at the start of each example line and enter your own details.
 #
-# Host host_name_1
-#     User user_name
-#     HostName host_address
-#     Port 1234
-#     IdentityFile ~/.ssh/id_ed25519
-#     IdentitiesOnly yes
+# Host my-proxy
+#     HostName ssh.example.com
+#     User my-user
+#     Port 22
 #
-# Host host_name_2
-#     User user_name
-#     HostName host_address
-#     Port 5678
+# 有多台服务器时，照样再写一段 Host；第一台连不上时自动用下一台。
+# For more servers, add another Host block; the next one is used if the first fails.
 #
-# 多个别名可写在同一 Host 行，按从左到右排序；重复别名只尝试一次。
-# Host *、通配符及 ! 排除规则不作为连接目标。Match 不新增目标。
-# 将代理目标的明确 Host 别名写在本文件；Include 可用于原生 SSH 设置。
-# Multiple aliases on one Host line run left to right; duplicate aliases are tried once.
-# Host *, wildcards, exclusions (!) and Match do not add connection targets.
-# Declare explicit target aliases in this file; Include can supply native SSH settings.
-# 共用超时和保活设置在 config.toml 管理；主机信任使用 OpenSSH 默认文件。
-# Shared timeouts/keepalives are managed in config.toml. Host trust uses OpenSSH defaults.
+# ===== 中文：设置免密码登录 =====
+# 代理在后台运行，必须能不输入密码自动登录。保存本文件后，在托盘点 Start proxy，
+# 或在安装目录的终端运行（Windows 用 .\ssh_proxy_cli.exe）：
+#       ./ssh_proxy_cli login
+# 它会自动完成需要的步骤，已完成的会跳过：
+#   1. 没有 SSH 密钥时自动创建（~/.ssh/id_ed25519）。
+#   2. 首次连接显示服务器指纹：向管理员确认后输入 yes。
+#   3. 提示时输入一次服务器密码，它会把你的公钥加到服务器上；以后不再需要密码。
+#   4. 最后检查能否免密码登录，显示 Ready 即可使用。
+# 若服务器不允许密码登录：把 login 显示的公钥（ssh-ed25519 开头的一行）发给管理员，
+# 加好后再运行一次 login。
 #
-# ===== 中文：如何配置免密码登录 =====
-# 免密码登录指 SSH 密钥认证；不是把密码写进此文件。OpenSSH 没有 Password 配置项。
-# 1. 已有可用密钥时直接使用，不要覆盖。没有时在本机终端执行：
-#       ssh-keygen -t ed25519
-#    按提示保存（通常是 ~/.ssh/id_ed25519），建议设置密钥口令以保护私钥。
-# 2. 将公钥文件 id_ed25519.pub 的内容交给服务器管理员，加入远端登录账户的
-#    公钥授权配置。Linux/macOS 服务端通常是 ~/.ssh/authorized_keys，目录权限 700、
-#    文件权限 600。也可先用密码登录远端完成这一步。绝不要上传或分享无 .pub 的私钥。
-#    Windows 查看公钥：Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
-#    macOS/Linux 查看公钥：cat ~/.ssh/id_ed25519.pub
-# 3. IdentityFile 指向本机私钥。使用默认密钥/agent 时可以省略；使用上面的
-#    IdentitiesOnly yes 时，应保留对应 IdentityFile，避免选错密钥。
-# 4. 私钥有口令时先加载进本机 ssh-agent；输入一次口令后后台代理才能无提示登录。
-#    Windows：如果 ssh-agent 服务未启用，在管理员 PowerShell 中执行：
-#       Set-Service -Name ssh-agent -StartupType Automatic
-#       Start-Service ssh-agent
-#    再在使用代理的普通用户 PowerShell 中执行：
-#       ssh-add "$env:USERPROFILE\.ssh\id_ed25519"
-#    macOS：使用登录会话自带的 agent，执行：
-#       ssh-add ~/.ssh/id_ed25519
-#    Linux：优先使用登录会话的 agent。若当前终端没有 agent，可执行：
-#       eval "$(ssh-agent -s)"
-#       ssh-add ~/.ssh/id_ed25519
-#    用 ssh-add -l 检查密钥是否已加载；重启/重新登录后如有需要再次加载。
-# 5. 在安装目录打开终端，先确认服务器指纹（向管理员核对），再测试无交互登录：
-#    Windows：
-#       .\ssh_proxy_cli.exe trust host_name_1
-#       ssh -F ./ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes host_name_1 exit
-#    macOS/Linux：使用 ./ssh_proxy_cli trust host_name_1，后面的 ssh 测试命令相同。
-#    测试无任何密码提示且成功退出后，再启动代理。每台服务器都需要授权你的公钥。
-# 主机信任记录使用 OpenSSH 默认文件（通常 ~/.ssh/known_hosts），无需在应用目录创建。
-# trust 只确认身份并登录，不会自动安装公钥或保存密码。密码认证成功不代表免密已配置好。
+# ----- 可选：指定密钥（IdentityFile） -----
+# 使用默认位置的密钥（如 ~/.ssh/id_ed25519）时不用填写。密钥在其他位置，或有多把
+# 密钥想指定其中一把时，在对应 Host 下加：
+#     IdentityFile ~/.ssh/my_key
+#     IdentitiesOnly yes          （可选）只用这把密钥
+# login 会使用这个文件；文件不存在时会在该位置创建。
 #
-# ===== English: set up passwordless SSH =====
-# Passwordless login uses SSH keys, not a password stored in this file. There is no Password directive.
-# 1. Reuse an existing working key; do not overwrite it. Otherwise run locally:
-#       ssh-keygen -t ed25519
-#    Follow the prompts (normally ~/.ssh/id_ed25519). A key passphrase protects the private key.
-# 2. Give only id_ed25519.pub to the server administrator for your remote account's key authorization.
-#    On Linux/macOS servers this is usually ~/.ssh/authorized_keys (directory 700, file 600).
-#    An initial password login may be used to install the public key. Never share the private key.
-#    View the public key on Windows: Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
-#    On macOS/Linux: cat ~/.ssh/id_ed25519.pub
-# 3. IdentityFile names the LOCAL private key. It is optional for default keys/agent use.
-#    With IdentitiesOnly yes, keep the matching IdentityFile so OpenSSH selects the intended key.
-# 4. Load passphrase-protected keys into the local agent before starting the background proxy.
-#    Windows, if ssh-agent is disabled: in elevated PowerShell run the following:
-#       Set-Service -Name ssh-agent -StartupType Automatic
-#       Start-Service ssh-agent
-#    Then, in your regular user's PowerShell:
-#       ssh-add "$env:USERPROFILE\.ssh\id_ed25519"
-#    macOS: use the login session's agent and run ssh-add ~/.ssh/id_ed25519
-#    Linux: prefer the login session's agent. If this shell has none, run:
-#       eval "$(ssh-agent -s)"
-#       ssh-add ~/.ssh/id_ed25519
-#    Check with ssh-add -l; reload after reboot/sign-in if your agent needs it.
-# 5. From the installed folder, verify the server fingerprint, then test noninteractive login:
-#       .\ssh_proxy_cli.exe trust host_name_1
-#       ssh -F ./ssh_config -o BatchMode=yes -o StrictHostKeyChecking=yes host_name_1 exit
-#    On macOS/Linux use ./ssh_proxy_cli trust host_name_1; the ssh test command is the same.
-#    Start the proxy only after this succeeds without a password prompt. Authorize each server.
-# Host trust stays in native OpenSSH files (usually ~/.ssh/known_hosts); no app-specific file is needed.
-# trust does not install keys or save passwords. Successful password login alone is not enough.
+# ----- 可选：不用 login，手动设置 -----
+# 1. 生成密钥：ssh-keygen -t ed25519
+# 2. 把公钥加到服务器（会提示输入一次服务器密码），或把 .pub 文件内容发给管理员：
+#       macOS/Linux：ssh-copy-id -p 22 my-user@ssh.example.com
+#       Windows PowerShell：
+#         Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub" | ssh -p 22 my-user@ssh.example.com "mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys"
+# 3. 密钥设置了口令时，用 ssh-add 加载到 ssh-agent。Windows 需先在管理员 PowerShell 执行一次：
+#       Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent
+# 4. 检查：./ssh_proxy_cli login --check    成功即可启动代理。
+#
+# ===== English: set up passwordless login =====
+# The proxy runs in the background, so it must log in without a password. After saving this
+# file, click Start proxy in the tray, or run this in a terminal in the install folder
+# (on Windows use .\ssh_proxy_cli.exe):
+#       ./ssh_proxy_cli login
+# It does whatever is still needed and skips what's already done:
+#   1. Creates an SSH key (~/.ssh/id_ed25519) if you don't have one.
+#   2. On first connection it shows the server fingerprint: confirm it with your administrator, then type yes.
+#   3. Enter your server password once when asked; your public key is added to the server,
+#      so no password is needed after that.
+#   4. Checks that login works without a password and shows Ready.
+# If the server doesn't allow password login: send the public key login prints (the line starting
+# with ssh-ed25519) to your administrator, then run login again.
+#
+# ----- Optional: choose a key (IdentityFile) -----
+# Not needed for a key in the default location (such as ~/.ssh/id_ed25519). If your key is
+# elsewhere, or you have several keys and want a specific one, add under that Host:
+#     IdentityFile ~/.ssh/my_key
+#     IdentitiesOnly yes          (optional) use only this key
+# login uses that file, and creates it there if it doesn't exist.
+#
+# ----- Optional: set up manually instead of login -----
+# 1. Create a key: ssh-keygen -t ed25519
+# 2. Add the public key to the server (asks for your server password once), or send the .pub
+#    file's contents to your administrator:
+#       macOS/Linux: ssh-copy-id -p 22 my-user@ssh.example.com
+#       Windows PowerShell:
+#         Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub" | ssh -p 22 my-user@ssh.example.com "mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys"
+# 3. If the key has a passphrase, load it into ssh-agent with ssh-add. On Windows, first run once
+#    in an administrator PowerShell:
+#       Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent
+# 4. Check: ./ssh_proxy_cli login --check    once it succeeds, you can start the proxy.

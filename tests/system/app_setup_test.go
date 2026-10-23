@@ -122,7 +122,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 						if entry.Terminal {
 							t.Fatalf("silent login check had a terminal: %+v", entry)
 						}
-					case entry.Args[0] == "trust" && setup == nil:
+					case entry.Args[0] == "login" && setup == nil:
 						setup = &entry
 					}
 				}
@@ -144,15 +144,15 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 			} else {
 				var entry *command
 				testutil.WaitFor(t, func() bool { _, entry, _ = commands(); return entry != nil })
-				if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 3 || entry.Args[0] != "trust" || entry.Args[1] != "--log" || entry.Args[2] != testutil.TrayLog(dir) {
-					t.Fatalf("trust lost terminal handles or literal paths: %+v", entry)
+				if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 3 || entry.Args[0] != "login" || entry.Args[1] != "--log" || entry.Args[2] != testutil.TrayLog(dir) {
+					t.Fatalf("login lost terminal handles or literal paths: %+v", entry)
 				}
 				if !platform.ProcessAlive(entry.PID) {
 					t.Fatal("setup exited before input was supplied")
 				}
 				time.Sleep(2300 * time.Millisecond)
 				if _, _, started := commands(); started {
-					t.Fatal("start ran before trust completed")
+					t.Fatal("start ran before login completed")
 				}
 				testutil.ExpectMenu(t, pid, "Start proxy", true, false)
 				testutil.WriteFile(t, gate, "")
@@ -296,7 +296,7 @@ func TestTrayFirstHostKeySetup(t *testing.T) {
 	if testutil.ReadFile(f.Trust) == "" {
 		t.Fatal("confirmation did not persist host trust")
 	}
-	testutil.MustCLI(t, dir, "trust", "primary") // The same host must now succeed without input.
+	testutil.MustCLI(t, dir, "login", "primary") // The same host must now succeed without input.
 	testutil.MustCLI(t, dir, "test", "--url", f.Origin.URL)
 	testutil.NativeClick(t, app.Process.Pid, "Stop proxy")
 	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "stopped" })

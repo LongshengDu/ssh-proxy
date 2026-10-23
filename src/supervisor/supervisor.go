@@ -302,10 +302,20 @@ func RunContext(parent context.Context, p config.Paths, foreground bool) (runErr
 	}
 	defer httpBridge.SetReady(false)
 	s := &Supervisor{cfg: c, paths: p, logger: logger, bridge: httpBridge, status: control.Status{Phase: control.PhaseStarting, PID: os.Getpid(), Config: p.Config, Started: time.Now(), SOCKS: c.SocksAddr(), HTTP: c.HTTPAddr(), Log: p.Log}}
-	ctx, stopSignal := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
-	defer stopSignal()
-	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(context.Canceled)
+	// Ctrl+C and SIGTERM (logout, systemctl stop) are requested stops like /stop.
+	// signal.NotifyContext would instead report them as an unexpected cause.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go func() {
+		select {
+		case <-signals:
+			cancel(context.Canceled)
+		case <-ctx.Done():
+		}
+	}()
 	state, err := control.NewState(p, controlListener.Addr().String())
 	if err != nil {
 		return err
@@ -402,7 +412,10 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
+	// --wait bounds readiness. A live child may need longer to validate its
+	// aliases and publish its control API; that is not a startup failure.
 	deadline := time.Now().Add(wait)
+	apiDeadline := deadline.Add(30 * time.Second)
 	for {
 		select {
 		case exitErr := <-exited:
@@ -429,7 +442,7 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 				return nil
 			}
 		}
-		if time.Now().After(deadline) {
+		if time.Now().After(apiDeadline) {
 			return fmt.Errorf("proxy has not exposed its control API yet; use status or inspect %s", p.Logs)
 		}
 		time.Sleep(100 * time.Millisecond)

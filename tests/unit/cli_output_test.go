@@ -17,9 +17,9 @@ var cliOutputCases = [][]string{
 	// Record each distinct help output once; equivalent invocations are checked below.
 	{},
 	{"start", "--help"}, {"restart", "-h"}, {"stop", "--help"}, {"status", "--help"},
-	{"trust", "--help"}, {"logs", "--help"}, {"test", "--help"}, {"check", "--help"},
+	{"login", "--help"}, {"logs", "--help"}, {"test", "--help"}, {"check", "--help"},
 	// Record help combined with invalid options/arguments, using Cobra's parsing rules.
-	{"start", "--wait", "invalid", "--help"}, {"trust", "--log", "--help"}, {"logs", "--bogus", "-h"},
+	{"start", "--wait", "invalid", "--help"}, {"login", "--log", "--help"}, {"logs", "--bogus", "-h"},
 	{"bogus", "--help"}, {"_run", "--help"},
 	{"autostart"},
 	{"autostart", "status", "--help"},
@@ -35,7 +35,7 @@ var cliOutputCases = [][]string{
 	{"status", "--proxy_http", "--proxy_socks"},
 	{"logs", "--lines", "0"}, {"logs", "--lines", "10001"}, {"logs", "extra"},
 	{"test", "extra"}, {"test", "--url"},
-	{"trust", "first", "second"}, {"trust", "--log"},
+	{"login", "first", "second"}, {"login", "--log"}, {"trust"},
 	{"service", "start"}, {"service", "stop"}, {"service", "restart"},
 	{"service", "bogus"}, {"autostart", "status", "extra"}, {"autostart", "bogus"},
 	{"service", "install", "--user", "other"}, {"service", "install", "extra"},

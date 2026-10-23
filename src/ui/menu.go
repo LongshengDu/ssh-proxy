@@ -62,9 +62,9 @@ func Menu(s MenuState, scripts ...Script) []Item {
 		}
 		return s
 	}
-	ssh := value(st.Destination)
-	if st.Endpoint != "" {
-		ssh += " (" + st.Endpoint + ")"
+	ssh := st.Destination
+	if at := strings.LastIndexByte(ssh, '@'); at >= 0 {
+		ssh = ssh[at+1:]
 	}
 	toggle := "Start proxy"
 	if st.PID != 0 {
@@ -72,7 +72,7 @@ func Menu(s MenuState, scripts ...Script) []Item {
 	}
 	items := []Item{
 		{ID: StatusLabel, Label: label, Disabled: true},
-		{ID: SSHLabel, Label: "SSH: " + ssh, Disabled: true},
+		{ID: SSHLabel, Label: "SSH: " + value(ssh), Disabled: true},
 		{ID: SOCKSLabel, Label: "SOCKS5: " + value(st.SOCKS), Disabled: true},
 		{ID: HTTPLabel, Label: "HTTP: " + value(st.HTTP), Disabled: true},
 		{Separator: true},

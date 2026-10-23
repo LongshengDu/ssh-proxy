@@ -50,7 +50,6 @@ const (
 )
 
 type Status struct {
-	Service     bool      `json:"service"`
 	Autostart   bool      `json:"autostart"`
 	UncleanExit bool      `json:"-"` // Internal tray classification; last_error is the public diagnostic.
 	Phase       Phase     `json:"phase"`

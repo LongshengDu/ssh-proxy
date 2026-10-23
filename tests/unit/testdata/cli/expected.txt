@@ -15,8 +15,8 @@ Commands:
       Stop the proxy and its SSH tunnel
   status [--proxy_http] [--proxy_socks]
       Show status as JSON or print a proxy URL
-  trust [ENDPOINT] [--check] [--log=FILE]
-      Set up SSH login and host-key trust
+  login [ENDPOINT] [--check] [--log=FILE]
+      Set up passwordless SSH login
   logs [--follow] [--lines=N]
       Show or follow proxy logs
   test [--url=URL]
@@ -45,7 +45,7 @@ exit 0
 --- stdout
 Start the proxy in the background
 
-Background mode requires SSH keys or ssh-agent; run trust for setup. After
+Background mode requires SSH keys or ssh-agent; run login for setup. After
 --wait expires, the proxy may keep retrying; check status for readiness. --wait
 has no effect with --foreground.
 
@@ -63,7 +63,7 @@ exit 0
 --- stdout
 Restart with the current configuration
 
-Background mode requires SSH keys or ssh-agent; run trust for setup. After
+Background mode requires SSH keys or ssh-agent; run login for setup. After
 --wait expires, the proxy may keep retrying; check status for readiness. --wait
 has no effect with --foreground.
 
@@ -101,20 +101,26 @@ Flags:
       --proxy_http    Print only the running HTTP proxy URL (http://)
       --proxy_socks   Print only the running SOCKS5 proxy URL (socks5h://)
 --- stderr
-=== ssh_proxy_cli trust --help
+=== ssh_proxy_cli login --help
 exit 0
 --- stdout
-Set up SSH login and host-key trust. Without ENDPOINT, try SSH aliases in file
-order until one succeeds. Verify host fingerprints before accepting. Already
-working logins exit 0.
+Set up unattended SSH login, skipping steps that are already done. Without
+ENDPOINT, try SSH aliases in file order until one succeeds.
+
+If no key exists, login creates one (OpenSSH's default ~/.ssh/id_ed25519, so no
+IdentityFile line is needed). It then logs in once, where you verify the host
+fingerprint and may enter your server password, and adds your public key to the
+server. Finally it checks that login works without prompts. Working logins exit
+0 at once. If the server refuses password login, send the printed public key to
+your administrator. --check only checks and changes nothing.
 
 Usage:
-  ssh_proxy_cli trust [ENDPOINT] [flags]
+  ssh_proxy_cli login [ENDPOINT] [flags]
 
 Flags:
       --check      Check unattended login only: no prompts or new host
                    keys; the tray runs it before each start
-  -h, --help       help for trust
+  -h, --help       help for login
       --log FILE   Append SSH diagnostics to FILE (used by the tray)
 --- stderr
 === ssh_proxy_cli logs --help
@@ -159,7 +165,7 @@ exit 1
 --- stdout
 --- stderr
 Error: invalid argument "invalid" for "--wait" flag: strconv.ParseInt: parsing "invalid": invalid syntax
-=== ssh_proxy_cli trust --log --help
+=== ssh_proxy_cli login --log --help
 exit 1
 --- stdout
 --- stderr
@@ -367,16 +373,25 @@ exit 1
 --- stdout
 --- stderr
 Error: flag needs an argument: --url
-=== ssh_proxy_cli trust first second
+=== ssh_proxy_cli login first second
 exit 1
 --- stdout
 --- stderr
 Error: accepts at most 1 arg(s), received 2
-=== ssh_proxy_cli trust --log
+=== ssh_proxy_cli login --log
 exit 1
 --- stdout
 --- stderr
 Error: flag needs an argument: --log
+=== ssh_proxy_cli trust
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "trust" for "ssh_proxy_cli"
+
+Did you mean this?
+	test
+
 === ssh_proxy_cli service start
 exit 1
 --- stdout

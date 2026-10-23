@@ -114,27 +114,31 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 		return nil
 	}
 	t.Setenv("SSH_PROXY_TEST_PROCESS", "trust")
+	// Setup looks for SSH keys in the home folder; never use the developer's.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("SSH_PROXY_TEST_DIAGNOSTIC", "fixture SSH refused login")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "second")
 	// The tray's silent check uses the same ordered endpoints without prompting.
-	if err := call("trust", "--check"); err != nil {
+	if err := call("login", "--check"); err != nil {
 		t.Fatal("silent check must succeed through the second endpoint", err)
 	}
-	if err := call("trust", "--check", "first"); err == nil {
+	if err := call("login", "--check", "first"); err == nil {
 		t.Fatal("failed silent check returned success")
 	}
 	log := filepath.Join(t.TempDir(), "trust.txt")
-	if err := call("trust", "--log", log); err != nil {
+	if err := call("login", "--log", log); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(log)
 	if !strings.Contains(string(data), "SSH login for first") || !strings.Contains(string(data), "SSH login for second") {
 		t.Fatalf("ordered fallback not logged: %s", data)
 	}
-	if err := call("trust", "second"); err != nil {
+	if err := call("login", "second"); err != nil {
 		t.Fatal("trusted host did not exit successfully", err)
 	}
-	if err := call("trust", "first"); err == nil {
+	if err := call("login", "first"); err == nil {
 		t.Fatal("failed SSH login returned success")
 	}
 	// SSH runs in the SSH config directory; a caller-relative log path must
@@ -142,7 +146,7 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 	caller := t.TempDir()
 	t.Chdir(caller)
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", filepath.Join(caller, "handles.json"))
-	if err := call("trust", "--log", "setup/session.txt", "second"); err != nil {
+	if err := call("login", "--log", "setup/session.txt", "second"); err != nil {
 		t.Fatal(err)
 	}
 	data, err = os.ReadFile(filepath.Join(caller, "setup/session.txt"))

@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -31,6 +32,9 @@ func Run(args []string) (runErr error) {
 		return err
 	}
 	unlock, err := platform.LockInstance(p.ID + "-tray")
+	if errors.Is(err, platform.ErrAlreadyRunning) {
+		return fmt.Errorf("SSH Proxy app is already running")
+	}
 	if err != nil {
 		return err
 	}
@@ -55,8 +59,9 @@ func Run(args []string) (runErr error) {
 	if _, err := os.Stat(backend); err != nil {
 		return fmt.Errorf("backend missing: %w", err)
 	}
+	// A registry or LaunchAgents problem must not keep the app from opening.
 	if err := RepairStartup(p.ID, exe); err != nil {
-		return fmt.Errorf("repair login startup: %w", err)
+		logger.Printf("Cannot repair login startup: %v", err)
 	}
 	return run(p, backend, logger, writer)
 }

@@ -18,7 +18,7 @@ import (
 	"ssh_proxy/tests/helpers"
 )
 
-// A logged trust session must leave native SSH's input/output on real console
+// A logged login session must leave native SSH's input/output on real console
 // handles while native -E appends diagnostics to the same run log.
 func TestTrustLoggingPreservesConsole(t *testing.T) {
 	config, _ := testutil.Config(t, "Host first target\n HostName fixture.invalid\n User tester\n")
@@ -42,7 +42,7 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "target")
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", record)
-	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{cli, "trust", "--log", log}))
+	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{cli, "login", "--log", log}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,11 +57,11 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	state, err := windows.WaitForSingleObject(process.Process, 15000)
 	if err != nil || state != windows.WAIT_OBJECT_0 {
 		windows.TerminateProcess(process.Process, 1)
-		t.Fatalf("trust did not finish: %d: %v", state, err)
+		t.Fatalf("login did not finish: %d: %v", state, err)
 	}
 	var code uint32
 	if err := windows.GetExitCodeProcess(process.Process, &code); err != nil || code != 0 {
-		t.Fatalf("trust failed: %d: %v", code, err)
+		t.Fatalf("login failed: %d: %v", code, err)
 	}
 	data, err = os.ReadFile(record)
 	var terminal []bool

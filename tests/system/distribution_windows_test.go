@@ -97,7 +97,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		t.Helper()
 		phase, toggle, ssh, socks, http := "○ Stopped", "Start proxy", "SSH: —", "SOCKS5: —", "HTTP: —"
 		if running {
-			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: tester@example.invalid:2222 (primary)", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
+			phase, toggle, ssh, socks, http = "● Running", "Stop proxy", "SSH: example.invalid:2222", "SOCKS5: 127.0.0.1:1088", "HTTP: 127.0.0.1:8088"
 		}
 		exit := "Exit app"
 		if running {
