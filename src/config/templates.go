@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 //     drops settings it no longer has. It is rewritten only then, and its
 //     comments are not kept. Invalid TOML is left for validation to report.
 //
-// Without support/*.in files (development and test layouts) it does nothing.
+// Every installation ships support/; a missing template is an error.
 func EnsureConfig(configPath string) error {
 	dir := filepath.Dir(configPath)
 	templates, err := filepath.Glob(filepath.Join(dir, "support", "*.in"))
@@ -36,17 +37,14 @@ func EnsureConfig(configPath string) error {
 	return upgradeConfig(configPath, filepath.Join(dir, "support", "config.toml.in"))
 }
 
-// CopyIfMissing creates path from template unless path exists or template is missing.
+// CopyIfMissing creates path from template unless path exists.
 func CopyIfMissing(template, path string) error {
 	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		return nil // Present, or not checkable: never replace a user's file.
 	}
 	data, err := os.ReadFile(template)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
 	if err != nil {
-		return err
+		return templateError(template, err)
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if errors.Is(err, fs.ErrExist) {
@@ -61,10 +59,8 @@ func CopyIfMissing(template, path string) error {
 
 func upgradeConfig(path, template string) error {
 	var defaults, user map[string]any
-	if _, err := toml.DecodeFile(template, &defaults); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	} else if err != nil {
-		return err
+	if _, err := toml.DecodeFile(template, &defaults); err != nil {
+		return templateError(template, err)
 	}
 	if _, err := toml.DecodeFile(path, &user); err != nil {
 		return nil // Missing or invalid: LoadConfig reports it.
@@ -91,6 +87,13 @@ func upgradeConfig(path, template string) error {
 	}
 	if err != nil {
 		os.Remove(temp)
+	}
+	return err
+}
+
+func templateError(template string, err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%s is missing; extract the complete release ZIP into this folder again", template)
 	}
 	return err
 }

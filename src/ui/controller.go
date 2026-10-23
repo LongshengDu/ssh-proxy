@@ -124,7 +124,9 @@ func (c *Controller) checkConfig(ctx context.Context) error {
 			// Every launch or Start opens it again; the file says why it opened.
 			err, path = fmt.Errorf("%w: %s", errSetupNeeded, result.Error), result.EditFile
 			// A missing SSH file starts from the template, so it explains itself too.
-			_ = config.CopyIfMissing(filepath.Join(filepath.Dir(c.paths.Config), "support", "ssh_config.in"), path)
+			if copyErr := config.CopyIfMissing(filepath.Join(filepath.Dir(c.paths.Config), "support", "ssh_config.in"), path); copyErr != nil {
+				return errors.Join(errors.New(result.Error), copyErr)
+			}
 		}
 		if path != "" && path != c.paths.Config {
 			c.logger.Printf("Opening configuration for setup: %s", path)

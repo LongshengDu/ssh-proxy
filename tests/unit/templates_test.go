@@ -16,17 +16,23 @@ import (
 func templateInstall(t *testing.T) (dir, configPath string) {
 	t.Helper()
 	dir = t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "support"), 0700); err != nil {
+	testutil.Support(t, dir)
+	return dir, filepath.Join(dir, "config.toml")
+}
+
+// support/ is part of every install: without its templates, commands stop with a clear error.
+func TestEnsureConfigNeedsSupportTemplates(t *testing.T) {
+	dir, configPath := templateInstall(t)
+	writeText(t, configPath, string(testutil.ConfigTemplate(t)))
+	if err := os.Remove(filepath.Join(dir, "support", "config.toml.in")); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"config.toml.in", "ssh_config.in"} {
-		data, err := os.ReadFile(filepath.Join(testutil.Root(), "src", "packaging", "defaults", "support", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		writeText(t, filepath.Join(dir, "support", name), string(data))
+	if err := config.EnsureConfig(configPath); err == nil || !strings.Contains(err.Error(), "config.toml.in is missing") {
+		t.Fatal("missing config.toml.in must fail", err)
 	}
-	return dir, filepath.Join(dir, "config.toml")
+	if err := config.CopyIfMissing(filepath.Join(dir, "support", "absent.in"), filepath.Join(dir, "absent")); err == nil {
+		t.Fatal("a missing template must fail when its file is missing")
+	}
 }
 
 // A fresh install gets every support/NAME.in as NAME, and existing files are never replaced.

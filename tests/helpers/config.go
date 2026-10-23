@@ -23,12 +23,31 @@ func ConfigTemplate(t *testing.T) []byte {
 	return template
 }
 
+// Support adds the shipped support/*.in templates, which every install folder has.
+func Support(t *testing.T, dir string) {
+	t.Helper()
+	templates, err := filepath.Glob(filepath.Join(Root(), "src", "packaging", "defaults", "support", "*.in"))
+	if err != nil || len(templates) == 0 {
+		t.Fatal("no support/*.in templates", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "support"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, template := range templates {
+		data, err := os.ReadFile(template)
+		if err == nil {
+			err = os.WriteFile(filepath.Join(dir, "support", filepath.Base(template)), data, 0600)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func Config(t *testing.T, sshText string) (string, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "path with spaces")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
+	Support(t, dir)
 	template := ConfigTemplate(t)
 	configPath := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(configPath, template, 0600); err != nil {

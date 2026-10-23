@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/ui"
+	"ssh_proxy/tests/helpers"
 )
 
 type fakeBackend struct {
@@ -403,6 +406,10 @@ func TestTrayControllerOpensFailingConfigOnce(t *testing.T) {
 // Unfinished setup, as on first launch, opens ssh_config at launch and on every
 // Start, without an error dialog or log: the file says why it opened.
 func TestTrayControllerUnfinishedSetupOpensSSHConfigQuietly(t *testing.T) {
+	// The controller's relative config.toml and ssh_config resolve in this install folder.
+	dir := t.TempDir()
+	testutil.Support(t, dir)
+	t.Chdir(dir)
 	ctx := context.Background()
 	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: noSSHServer, autoStart: true}
 	c, desktop, _ := newController(backend)
@@ -414,6 +421,10 @@ func TestTrayControllerUnfinishedSetupOpensSSHConfigQuietly(t *testing.T) {
 	}
 	if !slices.Equal(desktop.edited, []string{"ssh_config", "ssh_config", "ssh_config"}) || len(desktop.messages) != 0 {
 		t.Fatal("ssh_config must open each time without error dialogs", desktop.edited, desktop.messages)
+	}
+	// A missing ssh_config starts from the template, which explains why it opened.
+	if text, _ := os.ReadFile(filepath.Join(dir, "ssh_config")); !strings.Contains(string(text), "Why did this file open?") {
+		t.Fatal("missing ssh_config not created from support/ssh_config.in")
 	}
 	if slices.Contains(backend.calls, "login") || slices.Contains(backend.calls, "start") {
 		t.Fatal("unfinished setup must stop before SSH login", backend.calls)

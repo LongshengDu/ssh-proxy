@@ -175,12 +175,12 @@ Background mode requires SSH keys or ssh-agent; run login for setup. After
 has no effect with --foreground.`}
 		foreground := cmd.Flags().Bool("foreground", false, "Run in this terminal; Ctrl+C stops the proxy")
 		wait := cmd.Flags().Int("wait", 20, "Wait up to `SECONDS` (1..3600) for background readiness")
-		cmd.RunE = run(setup(func(p config.Paths) error {
+		cmd.RunE = run(func(p config.Paths) error {
 			if *wait < 1 || *wait > 3600 {
 				return fmt.Errorf("--wait must be in 1..3600")
 			}
-			return start(p, restart, *foreground, *wait)
-		}))
+			return setup(func(p config.Paths) error { return start(p, restart, *foreground, *wait) })(p)
+		})
 		return cmd
 	}
 	statusCmd := &cobra.Command{Use: "status", Short: "Show status as JSON or print a proxy URL", GroupID: "commands", Args: cobra.NoArgs,

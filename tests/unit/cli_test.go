@@ -51,6 +51,11 @@ func TestCLITestResponseBody(t *testing.T) {
 			}
 			// The CLI reads beside Go's temporary test executable. Never overwrite
 			// an existing config if this suite is run from a manually built binary.
+			install := filepath.Dir(p.Config)
+			if _, err := os.Stat(filepath.Join(install, "support")); os.IsNotExist(err) {
+				testutil.Support(t, install)
+				t.Cleanup(func() { os.RemoveAll(filepath.Join(install, "support")) })
+			}
 			for name, data := range map[string]string{"config.toml": text,
 				"ssh_config": "Host test\n HostName test.invalid\n User tester\n"} {
 				path := filepath.Join(filepath.Dir(p.Config), name)
