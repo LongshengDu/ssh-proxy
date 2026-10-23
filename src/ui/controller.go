@@ -22,7 +22,7 @@ type Backend interface {
 	Trust(ctx context.Context) error      // Interactive setup in a real terminal.
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	AutoStart() (bool, error) // app.start_proxy_on_launch.
+	AutoStart() (bool, error) // start_proxy_on_launch in app.json.
 	SetAutoStart(enabled bool) error
 }
 
@@ -92,7 +92,7 @@ func (c *Controller) CheckConfig(ctx context.Context) bool {
 }
 
 // Launch runs once when the tray starts. It checks the configuration and, when
-// app.start_proxy_on_launch is set and no proxy runs yet, returns the same
+// start_proxy_on_launch is set in app.json and no proxy runs yet, returns the same
 // start job as the Start item. Invalid configuration never starts setup.
 func (c *Controller) Launch(ctx context.Context) func() error {
 	valid := c.CheckConfig(ctx)
@@ -100,7 +100,7 @@ func (c *Controller) Launch(ctx context.Context) func() error {
 	if !valid || !c.autoStart || c.st.PID != 0 {
 		return nil
 	}
-	c.logger.Print("Starting the proxy at app launch (app.start_proxy_on_launch)")
+	c.logger.Print("Starting the proxy at app launch (start_proxy_on_launch in app.json)")
 	return c.Handle(ctx, ToggleProxy)
 }
 
@@ -125,7 +125,7 @@ func (c *Controller) Refresh(ctx context.Context) {
 	previous := c.st
 	c.st = c.backend.Status()
 	c.startup, c.startupErr = c.desktop.StartupEnabled()
-	// Invalid TOML is reported by CheckConfig; here it only disables the item.
+	// An unreadable app.json disables the item.
 	c.autoStart, c.autoStartErr = c.backend.AutoStart()
 	issue := c.startupErr
 	if c.st.LastError != "" {

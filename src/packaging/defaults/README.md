@@ -63,7 +63,7 @@ Host my-proxy
 
 **Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看（安装路径过长时可能显示为 Windows PowerShell）；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
 
-**Start Proxy When App Launches** 让托盘每次启动时自动启动代理，流程与 **Start proxy** 相同：需要时打开配置文件或 SSH 设置终端；代理已在运行时直接沿用。设置保存在 `config.toml` 的 `[app] start_proxy_on_launch`，托盘只修改这一行，保留其他内容和注释。与 **Launch App at Login** 同时勾选即可在登录后自动连接；系统服务不受此设置影响。
+**Start Proxy When App Launches** 让托盘每次启动时自动启动代理，流程与 **Start proxy** 相同：需要时打开配置文件或 SSH 设置终端；代理已在运行时直接沿用。与 **Launch App at Login** 同时勾选即可在登录后自动连接；系统服务不受此设置影响。
 
 ### 3. 使用代理
 
@@ -156,7 +156,6 @@ unset ALL_PROXY all_proxy
 | `health.failover_on_probe_failure` | `false`；检查失败显示 `degraded`，默认保留仍存活的 SSH |
 | `logging.max_log_files` | `10`，至少为 1；托盘与代理各自保留此数量的最新日志 |
 | `logging.max_size_mb` | `10`，范围 1..1024；单个日志达到上限时删除较早的一半内容 |
-| `app.start_proxy_on_launch` | `false`；仅 Windows/macOS 托盘，托盘启动时自动启动代理，可在菜单切换 |
 
 每次托盘/代理运行各写一个连续日志，错误追加到同一文件；文件达到 `max_size_mb` 时删除较早的一半并在开头标注。启动时各自清理旧日志，包含当前文件默认最多保留 10 个托盘日志和 10 个代理日志，位于 CLI 旁的 `logs/`。
 
@@ -284,7 +283,7 @@ The menu shows status, SSH user/host/port and proxy addresses, with proxy contro
 
 **Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup (a very long installation path may make it appear as Windows PowerShell). On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
 
-**Start Proxy When App Launches** starts the proxy whenever the tray starts, using the same flow as **Start proxy**: it opens the config file or an SSH setup terminal when needed and reuses a proxy that is already running. The setting is `[app] start_proxy_on_launch` in `config.toml`; the tray changes only that line and keeps everything else, including comments. Check it together with **Launch App at Login** to connect automatically after sign-in. OS services ignore this setting.
+**Start Proxy When App Launches** starts the proxy whenever the tray starts, using the same flow as **Start proxy**: it opens the config file or an SSH setup terminal when needed and reuses a proxy that is already running. Check it together with **Launch App at Login** to connect automatically after sign-in. OS services ignore this setting.
 
 ### 3. Use the proxy
 
@@ -377,7 +376,6 @@ See [config.toml](config.toml) for all settings; run `restart` after saving chan
 | `health.failover_on_probe_failure` | `false`; failed checks report `degraded` and preserve a live SSH session by default |
 | `logging.max_log_files` | `10`, minimum 1; separate retention limits for tray and proxy logs |
 | `logging.max_size_mb` | `10`, range 1..1024; at the limit a log's older half is removed |
-| `app.start_proxy_on_launch` | `false`; Windows/macOS tray only: start the proxy when the tray starts; toggled from the menu |
 
 Each tray/proxy run writes one continuous log; errors append to it. When a file reaches `max_size_mb`, its older half is removed and the cut is marked at the top. At startup each cleans up its oldest files, keeping at most 10 tray logs and 10 proxy logs by default, including current files, in `logs/` beside the CLI.
 

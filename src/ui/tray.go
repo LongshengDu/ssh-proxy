@@ -237,9 +237,12 @@ func (b cliBackend) Stop(ctx context.Context) error {
 	return err
 }
 
-func (b cliBackend) AutoStart() (bool, error) { return config.StartProxyOnLaunch(b.paths.Config) }
+func (b cliBackend) AutoStart() (bool, error) {
+	s, err := config.LoadAppSettings(b.paths.App)
+	return s.StartProxyOnLaunch, err
+}
 func (b cliBackend) SetAutoStart(enabled bool) error {
-	return config.SetStartProxyOnLaunch(b.paths.Config, enabled)
+	return config.SaveAppSettings(b.paths.App, config.AppSettings{StartProxyOnLaunch: enabled})
 }
 
 func commandBackend(parent context.Context, backend string, args ...string) ([]byte, error) {

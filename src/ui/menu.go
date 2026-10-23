@@ -38,7 +38,7 @@ type Item struct {
 type MenuState struct {
 	Status                    control.Status
 	Startup, StartupKnown     bool // Launch App at Login.
-	AutoStart, AutoStartKnown bool // app.start_proxy_on_launch in config.toml.
+	AutoStart, AutoStartKnown bool // start_proxy_on_launch in app.json.
 	Busy                      bool
 	Exiting                   bool // Waiting for Stop proxy and exit to finish.
 }

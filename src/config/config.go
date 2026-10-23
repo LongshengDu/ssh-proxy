@@ -61,9 +61,6 @@ type Config struct {
 		MaxLogFiles int `toml:"max_log_files"`
 		MaxSizeMB   int `toml:"max_size_mb"`
 	} `toml:"logging"`
-	App struct {
-		StartProxyOnLaunch bool `toml:"start_proxy_on_launch"` // Read by the Windows/macOS tray only.
-	} `toml:"app"`
 	Path     string `toml:"-"`
 	resolved map[string]sshSettings
 }
@@ -71,7 +68,9 @@ type sshSettings struct {
 	destination       string
 	hasDynamicForward bool
 }
-type Paths struct{ Config, Runtime, State, Logs, Log, ID string }
+
+// App is the tray settings file, app.json beside config.toml.
+type Paths struct{ Config, App, Runtime, State, Logs, Log, ID string }
 
 // ConfigCheck identifies the file to edit without making the tray parse errors.
 type ConfigCheck struct {
@@ -141,7 +140,7 @@ func PathsForExecutable(exe string) (Paths, error) {
 	}
 	// Discover the latest proxy run even after its control state has been removed.
 	logs := filepath.Join(filepath.Dir(exe), "logs")
-	return Paths{Config: abs, Runtime: runtimeDir, State: filepath.Join(runtimeDir, "state.json"),
+	return Paths{Config: abs, App: filepath.Join(filepath.Dir(abs), "app.json"), Runtime: runtimeDir, State: filepath.Join(runtimeDir, "state.json"),
 		Logs: logs, Log: LatestLog(logs, id), ID: id}, nil
 }
 

@@ -13,7 +13,7 @@ import (
 	"ssh_proxy/tests/helpers"
 )
 
-// app.start_proxy_on_launch starts the proxy through the same flow as Start:
+// Start Proxy When App Launches (app.json) starts the proxy through the same flow as Start:
 // missing hosts open ssh_config once and start nothing, an untrusted host opens
 // setup at launch, a working login starts silently, and a running proxy is reused.
 func TestTrayStartsProxyAtLaunch(t *testing.T) {
@@ -24,11 +24,9 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 	configPath, sshPath := filepath.Join(dir, "config.toml"), filepath.Join(dir, "servers.txt")
 	text := testutil.ReadFile(filepath.Join(dir, "ssh_config"))
 	hosts := text[strings.Index(text, "Host primary\n"):]
-	// Keep the public default's bilingual [app] comments: the tray edits only its own line.
-	template := string(testutil.ConfigTemplate(t))
-	settings := strings.Replace(f.Config, `config_file = "ssh_config"`, `config_file = "servers.txt"`, 1)
-	testutil.WriteFile(t, configPath, settings+"\n"+template[strings.Index(template, "# 仅 Windows/macOS"):])
-	if err := config.SetStartProxyOnLaunch(configPath, true); err != nil {
+	testutil.WriteFile(t, configPath, strings.Replace(f.Config, `config_file = "ssh_config"`, `config_file = "servers.txt"`, 1))
+	appPath := filepath.Join(dir, "app.json")
+	if err := config.SaveAppSettings(appPath, config.AppSettings{StartProxyOnLaunch: true}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
@@ -98,12 +96,12 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 	}
 	testutil.MustCLI(t, dir, "test", "--url", f.Origin.URL)
 
-	// The checkbox edits only its own line of config.toml.
+	// The checkbox rewrites app.json and leaves config.toml alone.
 	original := testutil.ReadFile(configPath)
 	testutil.NativeClick(t, app.Process.Pid, "Start Proxy When App Launches")
-	testutil.WaitFor(t, func() bool { enabled, err := config.StartProxyOnLaunch(configPath); return err == nil && !enabled })
-	if want := strings.Replace(original, "start_proxy_on_launch = true", "start_proxy_on_launch = false", 1); testutil.ReadFile(configPath) != want {
-		t.Fatal("toggling changed other lines of config.toml")
+	testutil.WaitFor(t, func() bool { s, err := config.LoadAppSettings(appPath); return err == nil && !s.StartProxyOnLaunch })
+	if testutil.ReadFile(configPath) != original {
+		t.Fatal("toggling changed config.toml")
 	}
 	testutil.ExpectMenu(t, app.Process.Pid, "Start Proxy When App Launches", false, false)
 	if testutil.StatusCLI(t, dir).Phase != "running" {
