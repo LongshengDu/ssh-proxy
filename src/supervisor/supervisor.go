@@ -465,7 +465,7 @@ func StopBackground(p config.Paths) error {
 			return fmt.Errorf("cannot tell whether the proxy is running: %w", err)
 		}
 		if !running {
-			return nil
+			return removeStaleState(p)
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("control API unavailable; no process was killed; inspect %s", p.Log)
@@ -484,4 +484,26 @@ func StopBackground(p config.Paths) error {
 		time.Sleep(150 * time.Millisecond)
 	}
 	return fmt.Errorf("shutdown is still in progress; inspect %s", p.Log)
+}
+
+// removeStaleState clears the control state a hard-stopped supervisor left. Its
+// PID may now belong to another process, which Unix status reports as
+// unresponsive, with no way to start again from the tray. Only the lock holder
+// writes state; a supervisor that starts meanwhile keeps its own.
+func removeStaleState(p config.Paths) error {
+	if s, err := control.ReadState(p); err != nil || s.Exit != nil {
+		return nil
+	}
+	unlock, err := platform.LockInstance(p.ID)
+	if err != nil {
+		return nil
+	}
+	defer unlock()
+	if s, err := control.ReadState(p); err != nil || s.Exit != nil {
+		return nil
+	}
+	if err := os.Remove(p.State); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

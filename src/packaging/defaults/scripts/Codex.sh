@@ -34,9 +34,11 @@ export HTTP_PROXY="$SSH_PROXY_URL" HTTPS_PROXY="$SSH_PROXY_URL" NO_PROXY='localh
 export http_proxy="$SSH_PROXY_URL" https_proxy="$SSH_PROXY_URL" no_proxy="$NO_PROXY"
 unset ALL_PROXY all_proxy
 mkdir -p "$root/logs"
-log="$root/logs/codex_$(date -u +%Y%m%d_%H%M%S)_$$.txt"
+# One log, overwritten at each launch; appending keeps a still-running earlier launch's writes in order.
+log="$root/logs/codex.txt"
+: >"$log"
 nohup "$app" "--proxy-server=$SSH_PROXY_URL" \
-    '--proxy-bypass-list=localhost;127.0.0.1;[::1]' --disable-quic >"$log" 2>&1 < /dev/null &
+    '--proxy-bypass-list=localhost;127.0.0.1;[::1]' --disable-quic >>"$log" 2>&1 < /dev/null &
 pid=$!
 sleep 1
 if ! kill -0 "$pid" 2>/dev/null; then

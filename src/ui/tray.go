@@ -200,7 +200,10 @@ func (d *desktopOS) SetStartup(enabled bool) error {
 func (d *desktopOS) Open(path string) error         { return openPath(path) }
 func (d *desktopOS) OpenEditable(path string) error { return openEditable(path) }
 func (d *desktopOS) RunScript(ctx context.Context, script Script) error {
-	return runScript(ctx, script, d.log)
+	// The script appends to the tray log directly; defer size cuts meanwhile.
+	release := d.log.Hold()
+	defer release()
+	return RunScript(ctx, script, d.log.File)
 }
 
 // ShowError never blocks the caller, so a visible error cannot freeze status

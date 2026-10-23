@@ -200,6 +200,41 @@ func TestInterruptedHTTPBodyFails(t *testing.T) {
 	}
 }
 
+// An origin may answer an upload before its body ends, such as with a 413. The
+// client must get that answer while it still holds the rest of the body.
+func TestEarlyResponseDuringUpload(t *testing.T) {
+	origin, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer origin.Close()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		c, err := origin.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		if _, err = http.ReadRequest(bufio.NewReader(c)); err == nil {
+			io.WriteString(c, "HTTP/1.1 413 Request Entity Too Large\r\nContent-Length: 0\r\n\r\n")
+		}
+		<-done
+	}()
+	_, server, _ := testutil.BridgeFixture(t, origin.Addr().String())
+	c, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	io.WriteString(c, "POST http://upload.invalid/ HTTP/1.1\r\nHost: upload.invalid\r\nContent-Length: 65536\r\n\r\nx")
+	resp, err := http.ReadResponse(bufio.NewReader(c), &http.Request{Method: "POST"})
+	if err != nil || resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("early response waited for the upload: %v %v", resp, err)
+	}
+}
+
 func TestStreamHeadersBeforeFirstData(t *testing.T) {
 	for _, contentType := range []string{"text/event-stream; charset=utf-8", "application/x-ndjson"} {
 		t.Run(contentType, func(t *testing.T) {

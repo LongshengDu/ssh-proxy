@@ -85,12 +85,12 @@ All entry points use the same supervisor. Background `start` launches detached `
 | --- | --- |
 | Requested stop: `/stop`, Ctrl+C, SIGTERM | Remove state; report `stopped` without a failure |
 | Startup failure, server failure or recovered panic | Write an exit record containing time, reason and run log |
-| Fatal crash or hard kill | Leave state; report an unexpected stop (on Unix, `unresponsive` if the PID was reused) |
+| Fatal crash or hard kill | Leave state; report an unexpected stop (on Unix, `unresponsive` if the PID was reused); `stop` takes the free lock and clears it |
 | Hung supervisor | Report `unresponsive`; `stop` fails after 30 seconds without killing; recovery is manual |
 
 The next successful start replaces old diagnostics. Parents reuse a child's log and exit record; only failures before the child owns diagnostics allocate a parent-written failure log. Temporary bootstrap output stays in the runtime folder. Fatal panics go to the run log through `debug.SetCrashOutput`; recovered panics explicitly log `debug.Stack()`.
 
-On Windows, a kill-on-close Job Object contains SSH. Background launch attempts job breakaway; if the caller's job forbids it, closing that job can still stop the proxy. On Unix, background launch detaches into a new session, and the `_ssh` guardian ends SSH when the supervisor's pipe closes. A stale PID never authorizes a kill; never kill by process name.
+On Windows, a kill-on-close Job Object contains SSH. Background launch attempts job breakaway; if the caller's job forbids it, closing that job can still stop the proxy. On Unix, background launch detaches into a new session, and the `_ssh` guardian ends SSH when the supervisor's pipe closes. The guardian leads its own process group and runs SSH in another, so it also ends a ProxyCommand or ProxyJump process SSH started, and a closed terminal or launchd's job cleanup cannot kill it first. The guardian gives SSH a 1024-file limit instead of macOS's default 256, since each proxied connection holds one. A stale PID never authorizes a kill; never kill by process name.
 
 ### Connection lifecycle
 
@@ -98,7 +98,7 @@ Startup checks that the SOCKS port is free, reserves the HTTP listener, then tri
 
 Failed probes on a live tunnel mark it `degraded`; switching on probe failures is opt-in. A healthy backup does not automatically fail back. Stop and failover close tracked connections and the HTTP idle pool; clients reconnect.
 
-The HTTP bridge preserves `Accept-Encoding` and response bytes, aborts incomplete upstream bodies, and flushes headers immediately for SSE and responses without `Content-Length`. It keeps up to 100 idle upstream connections, both total and per host. Connection setup has a 30-second budget; probes use their own deadline. Established transfers and tunnels have no lifetime timeout.
+The HTTP bridge preserves `Accept-Encoding` and response bytes, aborts incomplete upstream bodies, and flushes headers immediately for SSE and responses without `Content-Length`. It serves HTTP requests full duplex, so a response that arrives before the upload ends, such as a 413, reaches the client at once. It keeps up to 100 idle upstream connections, both total and per host. Connection setup has a 30-second budget; probes use their own deadline. Established transfers and tunnels have no lifetime timeout.
 
 Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, WebSocket cleanup, client cancellation, and the generation check that rejects dials completing after a tunnel replacement.
 
@@ -138,7 +138,7 @@ Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH 
 
 Failed actions and invalid configs show their reason and open the tray run log. The supervisor's own errors while it retries (reconnecting, degraded) appear only in the tooltip and the tray log, never as dialogs. The tray alerts once when a supervisor observed alive becomes an unclean stopped run, opening that proxy's log. It does not alert for old failures or normal stops. Login-registration repair failures are logged without preventing app launch.
 
-Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the file manager. Scripts are discovered once at startup (`.ps1` on Windows, `.sh` on macOS), run non-interactively, and write output to the tray log. The bundled launchers use `status --proxy_http`, falling back to their default `SSH_PROXY_URL`; they discover desktop apps before using the script-local `CODEX_APP`/`CLAUDE_APP` fallback.
+Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the file manager. Scripts are discovered once at startup (`.ps1` on Windows, `.sh` on macOS), run non-interactively, and write output straight to the tray log file, so a process a script leaves running cannot keep the tray busy. The bundled launchers use `status --proxy_http`, falling back to their default `SSH_PROXY_URL`; they discover desktop apps before using the script-local `CODEX_APP`/`CLAUDE_APP` fallback. On macOS they write the app's output to `logs/claude.txt` or `logs/codex.txt`, overwritten at each launch.
 
 ### Logs
 
@@ -170,7 +170,7 @@ python scripts/build.py --release --out build/release     # clean folder: build/
 python scripts/build.py --release --os linux --arch arm64 --out ./packages
 ```
 
-- **Every build** writes the whole payload into `<out>/ssh-proxy-<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
+- **Every build** writes the whole payload into `<out>/ssh-proxy-<os>-<arch>/` from the public defaults: programs, guide, launchers (`.ps1` on Windows, `.sh` and `run_on_mac.sh` on macOS, none on Linux), `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
 - **`--release`** also creates `<out>/ssh-proxy-<os>-<arch>.zip`, whose root folder has the same name, and its `.sha256` (`sha256sum -c`). Names carry no version, so unzipping a new release over an installation keeps its folder. The release first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--out`, for example `build/release`.
 - **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
 - **Versioning:** [.version](.version) is the only version source; change it only on request.

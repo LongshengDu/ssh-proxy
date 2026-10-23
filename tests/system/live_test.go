@@ -5,9 +5,11 @@ package tests
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,8 +24,9 @@ import (
 
 // Opt-in: real SSH credentials and reachable corporate endpoints are required.
 // Each alias must authenticate and forward; the local SSH suite covers the
-// lifecycle. Test subprocesses and listener ports are private to this test. No
-// service or login startup entries are installed, and no existing proxy is stopped.
+// lifecycle. Test subprocesses and listener ports are private to this test,
+// except an alias's own DynamicForward port. No service or login startup
+// entries are installed, and no existing proxy is stopped.
 func TestLiveEndpoints(t *testing.T) {
 	configPath := os.Getenv("SSH_PROXY_LIVE_CONFIG")
 	if configPath == "" {
@@ -37,8 +40,24 @@ func TestLiveEndpoints(t *testing.T) {
 		t.Run(alias, func(t *testing.T) {
 			dir := testutil.IsolatedBuild(t)
 			cfg := *base
-			cfg.SSH.ConfigFile = filepath.Join(dir, "ssh_config")
-			cfg.Proxy.SocksPort, cfg.Proxy.HTTPPort = testutil.FreePort(t), testutil.FreePort(t)
+			// Only this alias is declared here. A top-level Include supplies every
+			// host, ProxyJump hosts included; living beside the original keeps its
+			// relative paths. Host trust uses OpenSSH's normal user files.
+			sshFile, err := os.CreateTemp(filepath.Dir(base.SSH.ConfigFile), ".ssh-proxy-live-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.Remove(sshFile.Name()) })
+			_, err = sshFile.WriteString("Include \"" + filepath.ToSlash(base.SSH.ConfigFile) + "\"\nHost " + alias + "\n")
+			if err = errors.Join(err, sshFile.Close()); err != nil {
+				t.Fatal(err)
+			}
+			cfg.SSH.ConfigFile = sshFile.Name()
+			// An alias's own DynamicForward must keep its port.
+			if slices.Contains(config.SSHCommand(base, alias, config.SSHTunnel).Args, "-D") {
+				cfg.Proxy.SocksPort = testutil.FreePort(t)
+			}
+			cfg.Proxy.HTTPPort = testutil.FreePort(t)
 			for cfg.Proxy.SocksPort == cfg.Proxy.HTTPPort {
 				cfg.Proxy.HTTPPort = testutil.FreePort(t)
 			}
@@ -47,9 +66,6 @@ func TestLiveEndpoints(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutil.WriteFile(t, filepath.Join(dir, "config.toml"), text.String())
-			// Only this alias is declared here. Native Include resolves the actual
-			// private connection data; host trust uses OpenSSH's normal user files.
-			testutil.WriteFile(t, cfg.SSH.ConfigFile, "Host "+alias+"\n Include \""+filepath.ToSlash(base.SSH.ConfigFile)+"\"\n")
 			call := func(args ...string) ([]byte, error) {
 				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 				defer cancel()

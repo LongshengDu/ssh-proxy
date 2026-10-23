@@ -89,6 +89,9 @@ func StartDetached(newCmd func() *exec.Cmd) (*exec.Cmd, error) {
 	return cmd, err
 }
 
+// RunGuardian is the Unix _ssh helper; Windows contains SSH in a job instead.
+func RunGuardian([]string) error { return errors.New("_ssh is used only on macOS and Linux") }
+
 // ManagedCommand returns native SSH unchanged; ContainChild's job owns it.
 func ManagedCommand(native *exec.Cmd) (*exec.Cmd, io.Closer, error) {
 	return native, nil, nil

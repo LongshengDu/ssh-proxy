@@ -33,8 +33,9 @@ import (
 )
 
 // A state file left by a hard stop may name a live, unrelated PID. Nothing holds
-// the lock, so stop has nothing to stop and never kills by PID. Windows reuses
-// PIDs quickly, so its status trusts the lock; Unix status keeps the PID check.
+// the lock, so stop kills nothing; it clears the state, so the tray can start
+// again. Windows reuses PIDs quickly, so its status trusts the lock; Unix status
+// keeps the PID check.
 func TestStaleStateDoesNotAuthorizeKillingLiveProcess(t *testing.T) {
 	dir := t.TempDir()
 	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json"), Logs: dir, ID: fmt.Sprintf("stale%011x", os.Getpid())}
@@ -58,8 +59,8 @@ func TestStaleStateDoesNotAuthorizeKillingLiveProcess(t *testing.T) {
 	if err := supervisor.StopBackground(p); err != nil {
 		t.Fatal("stop without a supervisor must succeed:", err)
 	}
-	if _, err := os.Stat(p.State); err != nil {
-		t.Fatal("only the lock holder may remove state", err)
+	if st := control.QueryStatus(p); st.Phase != control.PhaseStopped || st.PID != 0 || st.UncleanExit {
+		t.Fatalf("stop must clear stale state: %+v", st)
 	}
 }
 

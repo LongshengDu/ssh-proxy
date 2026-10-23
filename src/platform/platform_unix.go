@@ -120,7 +120,9 @@ func (p *parentLease) Close() error { p.reader.Close(); return p.writer.Close() 
 
 // ManagedCommand runs native SSH under this executable's _ssh guardian. A pipe
 // lease lets the guardian stop SSH even if an unmanaged supervisor crashes.
-// Native SSH inherits neither end of the lease. OS services also own the process group.
+// Native SSH inherits neither end of the lease. The guardian leads its own
+// process group, so a closed terminal or launchd's cleanup of the supervisor's
+// group cannot kill it before it has stopped SSH; systemd's cgroup still holds it.
 func ManagedCommand(native *exec.Cmd) (*exec.Cmd, io.Closer, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -132,5 +134,6 @@ func ManagedCommand(native *exec.Cmd) (*exec.Cmd, io.Closer, error) {
 	}
 	cmd := exec.Command(exe, append([]string{"_ssh"}, native.Args...)...)
 	cmd.Dir, cmd.Stdin = native.Dir, reader
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd, &parentLease{reader, writer}, nil
 }

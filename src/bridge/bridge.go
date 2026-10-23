@@ -225,6 +225,9 @@ func (b *Bridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.proxy.ServeHTTP(connectWriter{w, b}, r)
 		return
 	}
+	// The origin may answer before the client finishes its upload, such as a 413.
+	// Without full duplex, net/http would first wait for the rest of the body.
+	_ = http.NewResponseController(w).EnableFullDuplex()
 	writer := &streamWriter{ResponseWriter: w, bridge: b}
 	defer func() {
 		// goproxy closes the upstream body when an upgrade relay returns, but

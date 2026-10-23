@@ -5,7 +5,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +38,9 @@ func DiscoverScripts(directory, goos string) ([]Script, error) {
 	return scripts, nil
 }
 
-func runScript(ctx context.Context, script Script, log io.Writer) error {
+// RunScript writes the script's output straight to the log file, not through a
+// pipe, so a process the script leaves running cannot keep the tray busy.
+func RunScript(ctx context.Context, script Script, log *os.File) error {
 	cmd := exec.CommandContext(ctx, "/bin/bash", script.Path)
 	if runtime.GOOS == "windows" {
 		shell := filepath.Join(os.Getenv("SystemRoot"), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")

@@ -4,12 +4,16 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"ssh-proxy/src/control"
 	"ssh-proxy/src/ui"
@@ -54,6 +58,42 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 		if index < 1 || !items[index-1].Separator || items[index].Label != "Run: Codex" {
 			t.Fatal(items)
 		}
+	}
+}
+
+// A process a script leaves running keeps the script's output handles. The
+// script must still finish at once, or the tray stays busy and cannot exit.
+func TestScriptLeavingProcessFinishes(t *testing.T) {
+	dir := t.TempDir()
+	script, text := filepath.Join(dir, "Leave.sh"), "echo started\nsleep 20 &\necho $! > pid\n"
+	if runtime.GOOS == "windows" {
+		script, text = filepath.Join(dir, "Leave.ps1"), "Write-Output started\n"+
+			"$p = Start-Process -NoNewWindow -PassThru -FilePath \"$env:SystemRoot\\System32\\PING.EXE\" -ArgumentList '-n','20','127.0.0.1'\n"+
+			"Set-Content -LiteralPath pid -Value $p.Id\n"
+	}
+	if err := os.WriteFile(script, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+	log, err := os.Create(filepath.Join(dir, "tray.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer log.Close()
+	began := time.Now()
+	err = ui.RunScript(context.Background(), ui.Script{Name: "Leave", Path: script}, log)
+	elapsed := time.Since(began)
+	data, _ := os.ReadFile(filepath.Join(dir, "pid"))
+	if pid, _ := strconv.Atoi(strings.TrimSpace(string(data))); pid > 0 {
+		if process, err := os.FindProcess(pid); err == nil {
+			process.Kill()
+			if runtime.GOOS == "windows" {
+				process.Wait() // Release the log before the folder is removed.
+			}
+		}
+	}
+	output, _ := os.ReadFile(log.Name())
+	if err != nil || elapsed > 10*time.Second || !strings.Contains(string(output), "started") {
+		t.Fatalf("script took %s: %v; output %q", elapsed, err, output)
 	}
 }
 

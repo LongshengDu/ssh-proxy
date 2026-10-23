@@ -22,6 +22,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 - **OpenSSH 8.7 或更新：** 未打包在内，用 `ssh -V` 检查。Windows 10 和较早 Windows 11 自带的版本可能过旧，可安装新版 [Win32-OpenSSH](https://github.com/PowerShell/Win32-OpenSSH/releases)，并在 `config.toml` 的 `ssh.executable` 填写其完整路径。
 - **安装：** 把对应的 `ssh-proxy-<系统>-<架构>.zip` 完整解压到可写的固定目录（`windows`/`darwin`/`linux`；`amd64` 为 Intel/AMD，`arm64` 为 Apple Silicon 等 ARM）。所有文件保持在同一目录；macOS 不要单独移动 `.app`。
 - **macOS 首次使用前运行 `run_on_mac.sh`：** 程序未签名且未经公证，macOS 会阻止从网络下载的文件。打开“终端”，输入 `bash `（末尾有一个空格），把解压目录中的 `run_on_mac.sh` 拖入终端窗口，按回车。每次下载新版本后都要再运行一次。
+- **Windows 解压前先解除锁定：** 程序未签名，从网络下载后 Windows 可能提示风险或阻止运行（SmartScreen）。解压前右键 ZIP → 属性 → 勾选“解除锁定” → 确定。每次下载新版本后都要这样做。
 
 | 文件 | 用途 |
 | --- | --- |
@@ -31,7 +32,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 | `config.toml` | 端口、超时、健康检查和日志设置；首次启动时从 `support/` 创建 |
 | `support/` | 默认配置模板（`*.in`）、版本信息和许可证（Apache 2.0），升级时会被替换；请修改上面两个文件，不要改这里 |
 | `run_on_mac.sh` | 仅 macOS：首次使用前解除下载限制 |
-| `scripts/`、`logs/` | Codex/Claude 启动脚本、运行日志 |
+| `scripts/`、`logs/` | Codex/Claude 启动脚本（Windows/macOS）、运行日志 |
 
 解压即可使用，无需安装器、Go 或 Python。Linux 用户先按下例填写 `ssh_config`，再看第 4 节命令行操作。
 
@@ -80,7 +81,7 @@ Host my-proxy
 
 SSH Proxy 不修改系统代理，请在需要代理的应用中填写上面的地址；HTTPS 也使用 `http://` 地址。
 
-**Codex / Claude 桌面应用：** 安装后先**完全退出**正在运行的桌面应用，代理显示 running 后在托盘选择 **Run: Codex** 或 **Run: Claude**。也可在安装目录运行 `.\scripts\Codex.ps1` / `.\scripts\Claude.ps1`（Windows）或 `bash ./scripts/Codex.sh` / `bash ./scripts/Claude.sh`（macOS）。这些桌面脚本不支持 Linux，Linux 客户端使用下方环境变量。脚本使用正在运行的 HTTP 代理地址，默认 `http://127.0.0.1:8181`。脚本会自动查找已安装的应用；找不到时，先把脚本复制为新文件名（如 `scripts/MyCodex.ps1`），再在副本顶部的 `CODEX_APP` / `CLAUDE_APP` 填写可执行文件路径（macOS 也可填 `.app` 路径）；升级会替换自带脚本，你的副本会保留。退出桌面应用不会停止代理。
+**Codex / Claude 桌面应用：** 安装后先**完全退出**正在运行的桌面应用，代理显示 running 后在托盘选择 **Run: Codex** 或 **Run: Claude**。也可在安装目录运行 `powershell -ExecutionPolicy Bypass -File .\scripts\Codex.ps1`（或 `Claude.ps1`，Windows）或 `bash ./scripts/Codex.sh` / `bash ./scripts/Claude.sh`（macOS）。这些桌面脚本不支持 Linux，Linux 客户端使用下方环境变量。脚本使用正在运行的 HTTP 代理地址，默认 `http://127.0.0.1:8181`。脚本会自动查找已安装的应用；找不到时，先把脚本复制为新文件名（如 `scripts/MyCodex.ps1`），再在副本顶部的 `CODEX_APP` / `CLAUDE_APP` 填写可执行文件路径（macOS 也可填 `.app` 路径）；升级会替换自带脚本，你的副本会保留。退出桌面应用不会停止代理。
 
 **命令行客户端：** 设置环境变量后，从同一终端启动客户端：
 
@@ -208,6 +209,7 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 - **OpenSSH 8.7 or later:** not bundled; check with `ssh -V`. Windows 10 and older Windows 11 may include an outdated client. Install a newer [Win32-OpenSSH](https://github.com/PowerShell/Win32-OpenSSH/releases) and set its full path as `ssh.executable` in `config.toml`.
 - **Install:** extract the whole `ssh-proxy-<os>-<arch>.zip` (`windows`/`darwin`/`linux`; `amd64` for Intel/AMD, `arm64` for Apple Silicon and other ARM) into a writable, permanent folder. Keep all files together; don't move the macOS `.app` on its own.
 - **On macOS, run `run_on_mac.sh` before first use:** the programs are unsigned and not notarized, so macOS blocks them when downloaded. Open Terminal, type `bash ` (with a space at the end), drag `run_on_mac.sh` from the extracted folder into the Terminal window, and press Return. Run it again after each new download.
+- **On Windows, unblock the ZIP before extracting:** the programs are unsigned, so Windows may warn about or block them when downloaded (SmartScreen). Right-click the ZIP → Properties → check Unblock → OK. Do this for each new download.
 
 | File | Purpose |
 | --- | --- |
@@ -217,7 +219,7 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 | `config.toml` | Ports, timeouts, health checks and logging; created from `support/` on first start |
 | `support/` | Default configuration templates (`*.in`), build information and the license (Apache 2.0), replaced on upgrade; edit the two files above, not these |
 | `run_on_mac.sh` | macOS only: removes the download block before first use |
-| `scripts/`, `logs/` | Codex/Claude launchers, run logs |
+| `scripts/`, `logs/` | Codex/Claude launchers (Windows/macOS), run logs |
 
 No installer, Go or Python is needed. On Linux, fill in `ssh_config` using the example below, then follow section 4 for CLI usage.
 
@@ -266,7 +268,7 @@ View login startup in Windows Task Manager → Startup apps or macOS System Sett
 
 SSH Proxy doesn't change system proxy settings; enter these addresses in the apps you want to proxy. HTTPS also uses the `http://` address.
 
-**Codex / Claude desktop apps:** install the app and **fully quit** any running instance. Once the proxy is running, choose **Run: Codex** or **Run: Claude** in the tray. From the install folder, you can also run `.\scripts\Codex.ps1` / `.\scripts\Claude.ps1` on Windows or `bash ./scripts/Codex.sh` / `bash ./scripts/Claude.sh` on macOS. These desktop scripts do not support Linux; use the environment variables below for Linux clients. They use the running HTTP proxy address, defaulting to `http://127.0.0.1:8181`, and find the installed app automatically; if discovery fails, copy the script to a new name (for example `scripts/MyCodex.ps1`) and set `CODEX_APP` / `CLAUDE_APP` at the top of the copy to the executable path (or a `.app` path on macOS). Upgrades replace the bundled scripts but keep your copy. Quitting the desktop app leaves the proxy running.
+**Codex / Claude desktop apps:** install the app and **fully quit** any running instance. Once the proxy is running, choose **Run: Codex** or **Run: Claude** in the tray. From the install folder, you can also run `powershell -ExecutionPolicy Bypass -File .\scripts\Codex.ps1` (or `Claude.ps1`) on Windows or `bash ./scripts/Codex.sh` / `bash ./scripts/Claude.sh` on macOS. These desktop scripts do not support Linux; use the environment variables below for Linux clients. They use the running HTTP proxy address, defaulting to `http://127.0.0.1:8181`, and find the installed app automatically; if discovery fails, copy the script to a new name (for example `scripts/MyCodex.ps1`) and set `CODEX_APP` / `CLAUDE_APP` at the top of the copy to the executable path (or a `.app` path on macOS). Upgrades replace the bundled scripts but keep your copy. Quitting the desktop app leaves the proxy running.
 
 **Command-line clients:** set these variables, then start the client from the same terminal:
 
