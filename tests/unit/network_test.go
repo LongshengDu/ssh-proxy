@@ -200,27 +200,31 @@ func TestInterruptedHTTPBodyFails(t *testing.T) {
 	}
 }
 
-func TestSSEHeadersBeforeFirstEvent(t *testing.T) {
-	release := make(chan struct{})
-	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		w.(http.Flusher).Flush()
-		<-release
-		io.WriteString(w, "data: first\n\n")
-	}))
-	defer func() { close(release); origin.Close() }()
-	_, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
-	proxyURL, _ := url.Parse(server.URL)
-	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 3 * time.Second}
-	defer client.CloseIdleConnections()
-	resp, err := client.Get("http://events.invalid/")
-	if err != nil {
-		t.Fatal("SSE headers must arrive before the first event", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		t.Fatalf("wrong SSE response: %v", resp)
+func TestStreamHeadersBeforeFirstData(t *testing.T) {
+	for _, contentType := range []string{"text/event-stream; charset=utf-8", "application/x-ndjson"} {
+		t.Run(contentType, func(t *testing.T) {
+			release := make(chan struct{})
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", contentType)
+				w.WriteHeader(http.StatusOK)
+				w.(http.Flusher).Flush()
+				<-release
+				io.WriteString(w, "first\n")
+			}))
+			defer func() { close(release); origin.Close() }()
+			_, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
+			proxyURL, _ := url.Parse(server.URL)
+			client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 3 * time.Second}
+			defer client.CloseIdleConnections()
+			resp, err := client.Get("http://events.invalid/")
+			if err != nil {
+				t.Fatal("stream headers must arrive before the first data", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != contentType {
+				t.Fatalf("wrong stream response: %v", resp)
+			}
+		})
 	}
 }
 

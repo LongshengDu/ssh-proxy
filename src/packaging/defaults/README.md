@@ -10,7 +10,7 @@
 - **完整解压到可写的固定目录：** 保留应用、CLI、配置和 `scripts/` 在一起；macOS 不要只移动 `.app`。Windows/macOS 从 `ssh_proxy_app` 打开托盘；Linux 使用 CLI。
 - **先准备 SSH：** 本机需要 OpenSSH，服务器需允许 TCP 转发。后台连接需要免交互的密钥认证；有口令的私钥先加载到 `ssh-agent`。首次连接需核对服务器指纹。详细步骤见 [ssh_config](ssh_config)。
 - **代理就绪后再使用：** 等菜单显示 `running`，再设置客户端代理。默认 HTTP/HTTPS 为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`；程序不会自动修改系统代理。用启动脚本打开 Codex/Claude 前，先完全退出已运行的桌面应用。
-- **退出时选择是否保留代理：** **Stop proxy and exit** 停止代理并退出；**Keep proxy running and exit** 保留代理、只退出托盘。代理未运行时用 **Exit app**。**Launch App at Login** 只启动托盘；要在托盘启动时自动连接，再勾选 **Start Proxy When App Launches**，无需托盘时可安装系统服务。
+- **退出时选择是否保留代理：** **Exit: Stop proxy** 停止代理并退出；**Exit: Keep proxy running** 保留代理、只退出托盘。代理未运行时用 **Exit app**。**Launch App at Login** 只启动托盘；要在托盘启动时自动连接，再勾选 **Start Proxy When App Launches**，无需托盘时可安装系统服务。
 - **出错时查看日志：** 应用会显示错误并打开本次日志；也可选择 **Open Current Log**。所有运行日志位于解压目录的 `logs/`。
 
 SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 和 SOCKS5 代理。Windows、macOS 可使用托盘/菜单栏应用；Windows、macOS、Linux 都可使用命令行。服务器只需允许 SSH TCP 转发，无需安装 HTTP 代理。
@@ -57,9 +57,9 @@ Host my-proxy
 
 每次菜单启动都会先在后台静默检查：主机已信任且免交互登录可用时，直接启动代理，不打开任何窗口。只有检查失败时才打开 SSH 设置终端（Windows 使用原生控制台，macOS 使用 Terminal，可能需允许 Automation（自动化）权限），按提示核对指纹并登录。终端关闭后会再静默检查一次，通过后才启动代理；仅密码登录成功不够，需配置密钥或 agent。失败或取消会显示原因并打开本次应用日志，代理保持停止，可修正后再次点击 **Start proxy**。
 
-等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理。退出时，**Stop proxy and exit** 先停止代理再关闭托盘；停止失败会显示错误并保留托盘。**Keep proxy running and exit** 只关闭托盘。代理未运行时 **Exit app** 直接退出，停止并退出选项不可用。
+等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理。退出时，**Exit: Stop proxy** 先停止代理再关闭托盘；停止失败会显示错误并保留托盘。**Exit: Keep proxy running** 只关闭托盘。代理未运行时 **Exit app** 直接退出，停止并退出选项不可用。
 
-菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置、日志和目录使用系统默认应用打开。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。
+菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置和日志以文本方式打开（Windows 无默认文本编辑器时使用记事本），目录使用文件管理器打开。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。
 
 **Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看（安装路径过长时可能显示为 Windows PowerShell）；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
 
@@ -122,7 +122,7 @@ unset ALL_PROXY all_proxy
 
 `check` 的 `valid` 应为 `true`；`status` 的 `phase` 为 `running` 表示转发就绪。`start` 默认等待最多 20 秒，返回时仍可能是 `connecting` / `reconnecting`，后台会继续重试。`trust my-proxy` 可设置指定主机；省略名称则按顺序尝试，首个成功后退出。
 
-后台启动后可关闭终端，或选择 **Keep proxy running and exit** 退出托盘，代理会继续运行。使用 **Stop proxy** 或 CLI 的 `stop` 同时停止 SSH 隧道和 HTTP 代理。调试用 `start --foreground`，按 Ctrl+C 停止。
+后台启动后可关闭终端，或选择 **Exit: Keep proxy running** 退出托盘，代理会继续运行。使用 **Stop proxy** 或 CLI 的 `stop` 同时停止 SSH 隧道和 HTTP 代理。调试用 `start --foreground`，按 Ctrl+C 停止。
 
 命令前加 Windows 的 `.\ssh_proxy_cli.exe` 或 macOS/Linux 的 `./ssh_proxy_cli`：
 
@@ -230,7 +230,7 @@ Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问�
 - **Extract the whole ZIP into a writable, permanent folder:** Keep the app, CLI, configuration and `scripts/` together; do not move the macOS `.app` alone. Open `ssh_proxy_app` on Windows/macOS; use the CLI on Linux.
 - **Prepare SSH first:** Local OpenSSH and server-side TCP forwarding are required. Background connections need noninteractive key authentication; load passphrase-protected keys into `ssh-agent`. Verify the server fingerprint on first connection. See [ssh_config](ssh_config) for setup instructions.
 - **Wait for readiness:** Wait for `running` in the menu before configuring clients. Defaults are `http://127.0.0.1:8181` for HTTP/HTTPS and `socks5h://127.0.0.1:1081` for SOCKS5. System proxy settings are not changed automatically. Fully quit existing Codex/Claude desktop instances before using their launchers.
-- **Choose whether to keep the proxy when exiting:** **Stop proxy and exit** stops it and closes the tray; **Keep proxy running and exit** closes only the tray. With no proxy running, choose **Exit app**. **Launch App at Login** opens only the tray; to connect when the tray starts, also check **Start Proxy When App Launches**, or install an OS service to run without the tray.
+- **Choose whether to keep the proxy when exiting:** **Exit: Stop proxy** stops it and closes the tray; **Exit: Keep proxy running** closes only the tray. With no proxy running, choose **Exit app**. **Launch App at Login** opens only the tray; to connect when the tray starts, also check **Start Proxy When App Launches**, or install an OS service to run without the tray.
 - **Read the log when something fails:** The app shows the error and opens the current run log; you can also choose **Open Current Log**. Run logs are under `logs/` in the extracted folder.
 
 SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. Windows and macOS have a tray/menu-bar app; Windows, macOS and Linux all have a CLI. The server only needs SSH TCP forwarding enabled, with no HTTP proxy installation.
@@ -277,9 +277,9 @@ Save the file, then right-click the icon and choose **Start proxy**.
 
 Each menu start first checks silently: with a trusted host and working noninteractive login, the proxy starts without opening any window. Only when that check fails does an SSH setup terminal open (a native console on Windows, Terminal on macOS, which may require Automation permission); verify the fingerprint and log in as prompted. After the terminal closes, the silent check runs again and the proxy starts only if it passes; a password login alone is not enough, so set up keys or an agent. Failure or cancellation shows the reason and opens this app run's log; the proxy stays stopped until you correct the problem and choose **Start proxy** again.
 
-Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. **Stop proxy and exit** stops the proxy before closing the tray; a stop failure shows an error and keeps the app open. **Keep proxy running and exit** closes only the tray. With no proxy running, **Exit app** closes immediately and the stop-and-exit option is disabled.
+Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. **Exit: Stop proxy** stops the proxy before closing the tray; a stop failure shows an error and keeps the app open. **Exit: Keep proxy running** closes only the tray. With no proxy running, **Exit app** closes immediately and the stop-and-exit option is disabled.
 
-The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs, logs and the folder open in default applications. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs.
+The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs and logs open as text (Windows falls back to Notepad if no text editor is registered); the folder opens in the file manager. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs.
 
 **Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup (a very long installation path may make it appear as Windows PowerShell). On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
 
@@ -342,7 +342,7 @@ Open a terminal in the extracted folder and, on first use, run:
 
 Check that `check` reports `valid: true` and `status` reports `phase: running` for ready forwarding. `start` waits up to 20 seconds by default; it can return while still `connecting` / `reconnecting`, with background retries continuing. Use `trust my-proxy` for one host; without a name it tries hosts until one succeeds.
 
-After a background start, you may close the terminal or choose **Keep proxy running and exit** in the tray; the proxy keeps running. Use **Stop proxy** or CLI `stop` to stop both SSH and HTTP forwarding. For debugging, use `start --foreground`; Ctrl+C stops it.
+After a background start, you may close the terminal or choose **Exit: Keep proxy running** in the tray; the proxy keeps running. Use **Stop proxy** or CLI `stop` to stop both SSH and HTTP forwarding. For debugging, use `start --foreground`; Ctrl+C stops it.
 
 Prefix commands with `.\ssh_proxy_cli.exe` on Windows or `./ssh_proxy_cli` on macOS/Linux:
 

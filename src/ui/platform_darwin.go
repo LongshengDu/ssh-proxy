@@ -13,7 +13,17 @@ func defaultBackend(exe string) string {
 	// Installed folder/ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app
 	return filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "..", "..", "ssh_proxy_cli"))
 }
-func openPath(path string) error { return exec.Command("/usr/bin/open", path).Run() }
+func openPath(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	args := []string{path}
+	if !info.IsDir() {
+		args = []string{"-t", path} // Configs and logs use the default text editor.
+	}
+	return exec.Command("/usr/bin/open", args...).Run()
+}
 
 func RunTrustTerminal(ctx context.Context, backend, logPath string) error {
 	if err := ctx.Err(); err != nil {

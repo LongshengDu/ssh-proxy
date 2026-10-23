@@ -101,9 +101,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 		}
 		exit := "Exit app"
 		if running {
-			exit = "Keep proxy running and exit"
+			exit = "Exit: Keep proxy running"
 		}
-		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Stop proxy and exit", exit}
+		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit: Stop proxy", exit}
 		testutil.ExpectMenu(t, tray.Process.Pid, toggle, false, false)
 		testutil.ExpectMenu(t, tray.Process.Pid, "Launch App at Login", false, wantStartup)
 		testutil.ExpectMenu(t, tray.Process.Pid, http, true, false)
@@ -127,7 +127,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		if byLabel[toggle].Checked {
 			t.Fatal("proxy action has a checkbox")
 		}
-		if byLabel["Stop proxy and exit"].Disabled == running || byLabel[exit].Disabled {
+		if byLabel["Exit: Stop proxy"].Disabled == running || byLabel[exit].Disabled {
 			t.Fatal("exit choices do not match the proxy state")
 		}
 		for _, label := range []string{"Run: Claude", "Run: Codex"} {

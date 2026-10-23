@@ -41,7 +41,7 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 		t.Helper()
 		label := "Exit app"
 		if testutil.StatusCLI(t, dir).PID != 0 {
-			label = "Keep proxy running and exit"
+			label = "Exit: Keep proxy running"
 		}
 		testutil.NativeClick(t, app.Process.Pid, label)
 		if err := app.Wait(); err != nil {

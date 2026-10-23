@@ -2,15 +2,81 @@ package tests
 
 import (
 	"encoding/json"
+	"io"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"ssh_proxy/src/bridge"
 	"ssh_proxy/src/cli"
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
+	"ssh_proxy/tests/helpers"
 )
+
+func TestCLITestResponseBody(t *testing.T) {
+	for _, truncated := range []bool{false, true} {
+		name, length, label, wantCode := "complete", "5", "PASS", 0
+		if truncated {
+			name, length, label, wantCode = "truncated", "100", "FAIL", 1
+		}
+		t.Run(name, func(t *testing.T) {
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Length", length)
+				io.WriteString(w, "short")
+				// Returning closes an incomplete response without completing its body.
+			}))
+			defer origin.Close()
+			socks, _ := testutil.FakeSOCKS(t, strings.TrimPrefix(origin.URL, "http://"))
+			b, err := bridge.NewBridge(socks, time.Second)
+			if err != nil {
+				t.Fatal(err)
+			}
+			b.SetReady(true)
+			proxy := httptest.NewServer(b)
+			defer proxy.Close()
+			defer b.SetReady(false)
+			_, socksPort, _ := net.SplitHostPort(socks)
+			_, httpPort, _ := net.SplitHostPort(proxy.Listener.Addr().String())
+			text := strings.NewReplacer("socks_port = 1081", "socks_port = "+socksPort,
+				"http_port = 8181", "http_port = "+httpPort).Replace(string(testutil.ConfigTemplate(t)))
+			p, err := config.PathsFor()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The CLI reads beside Go's temporary test executable. Never overwrite
+			// an existing config if this suite is run from a manually built binary.
+			for name, data := range map[string]string{"config.toml": text,
+				"ssh_config": "Host test\n HostName test.invalid\n User tester\n"} {
+				path := filepath.Join(filepath.Dir(p.Config), name)
+				f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = io.WriteString(f, data)
+				f.Close()
+				t.Cleanup(func() { os.Remove(path) })
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			out, stderr, code := runCLI(t, []string{"test", "--url", "http://body.invalid/"})
+			if code != wantCode || (truncated && !strings.Contains(stderr, "proxy checks failed")) || (!truncated && stderr != "") {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, out, stderr)
+			}
+			for _, protocol := range []string{"HTTP proxy", "SOCKS5"} {
+				if !strings.Contains(out, label+" "+protocol+": ") {
+					t.Fatalf("expected %s for %s: %s", label, protocol, out)
+				}
+			}
+		})
+	}
+}
 
 func TestStatusProxyURLs(t *testing.T) {
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())

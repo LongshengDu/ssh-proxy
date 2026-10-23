@@ -72,7 +72,7 @@ Compiled application code stays under `src/`. Imports flow from `config`, `logs`
 
 The supervisor locks its identity, reserves listeners and tries aliases in order. Readiness requires SOCKS forwarding to at least one health target. Until ready, HTTP requests receive 503. SSH exit triggers cleanup and ordered failover; exhausting the list waits for the configured retry delay. A live tunnel with failed probes becomes `degraded` and stays connected by default. Probe-triggered failover is opt-in; healthy backup endpoints do not periodically fail back.
 
-HTTP forwarding preserves the client's encoding and response bytes. A small transport adapter aborts incomplete upstream responses; SSE headers flush before the first event. The transport retains up to 100 idle connections total/per host. User connection setup has a 30-second budget; health probes use their own configured deadline. Established transfers and tunnels have no lifetime timeout. Preserve CONNECT buffered bytes and half-close, streaming flushes/trailers, WebSocket cleanup, cancellation and the generation check that rejects dials completed after tunnel replacement. Stop/failover closes tracked and idle connections; clients reconnect.
+HTTP forwarding preserves the client's encoding and response bytes. A small transport adapter aborts incomplete upstream responses; headers for SSE and responses without Content-Length flush before the first data. The transport retains up to 100 idle connections total/per host. User connection setup has a 30-second budget; health probes use their own configured deadline. Established transfers and tunnels have no lifetime timeout. Preserve CONNECT buffered bytes and half-close, streaming flushes/trailers, WebSocket cleanup, cancellation and the generation check that rejects dials completed after tunnel replacement. Stop/failover closes tracked and idle connections; clients reconnect.
 
 `start/restart --wait` bounds the caller's wait, not the supervisor's lifetime. A successful command can still report `connecting`/`reconnecting`; consumers inspect the phase. The tray uses the default wait in a worker while continuing to poll.
 
@@ -85,6 +85,8 @@ Windows contains SSH in a kill-on-close Job Object. Background startup tries to 
 Plain `status` and `check` return JSON. `status --proxy_http` / `--proxy_socks` return only an `http://` / `socks5h://` URL when the phase is `running`, otherwise empty stdout with exit 0; the flags are mutually exclusive. Other commands return text. `check` exits 0 after producing a validation report, even when `valid` is false; `error`/`edit_file` describe failures. Operational errors use stderr and nonzero exit. Help/version return before configuration or OS access. Flags/defaults live in `src/cli/cli.go`; keep unique command flags in root help and service details under `service --help`. Plain `help`/`version`, tray-management commands, `--json` and `service start/stop/restart` remain rejected.
 
 The tray controller polls about every two seconds, serializes actions and changes native menu items only when their values change. Keep menu structure stable to avoid flicker. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keeping the proxy running exits only the tray.
+
+Configs and logs open as text regardless of extension: Windows uses the `.txt` association with a Notepad fallback; macOS uses `open -t`. Folders use the normal OS opener. Do not prompt users to choose an application for `ssh_config`.
 
 Start validates configuration, then tries silent trust. Only failed silent trust opens interactive setup; success is rechecked before starting because password-only login cannot run unattended. Invalid SSH config opens once per run; errors show their reason and the same app log, with repeated polling errors suppressed. Windows uses a native console; macOS uses Terminal through AppleScript and may require Automation permission. Setup closes after completion and does not retry until another Start action.
 
@@ -150,7 +152,7 @@ CLI snapshots record each distinct help/error output once; equivalent invocation
 
 Keep developer design here and user instructions in the Chinese-first/English [user guide](src/packaging/defaults/README.md). Update both user-guide languages for user-visible changes. Public defaults must contain no private hosts, usernames, keys or logs.
 
-`src/ui/icon.svg` is canonical; keep PNG/ICNS synchronized and preserve `icon.bak.svg`. The tray embeds PNG; Windows uses `src/packaging/windows-icon.json`; macOS packages ICNS. Optional regeneration:
+`src/ui/icon.svg` is canonical; keep PNG/ICNS synchronized. The tray embeds PNG; Windows uses `src/packaging/windows-icon.json`; macOS packages ICNS. Optional regeneration:
 
 ```sh
 uv run --with resvg-py==0.5.0 python -c "from pathlib import Path; import resvg_py; p=Path('src/ui/icon.svg'); p.with_suffix('.png').write_bytes(resvg_py.svg_to_bytes(svg_path=str(p), skip_system_fonts=True))"

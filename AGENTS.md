@@ -5,6 +5,7 @@
 - Script-only or documentation-only changes do not require application builds or Go unit/system test suites. Keep validation scoped to the changed files.
 - Select system tests by the affected component: `python scripts/run_sys_tests.py --cli-only` for CLI/backend changes, `--app-only` for tray changes. Shared changes and test-runner changes need both scopes. With no selection, the runner tests all platform-supported components.
 - Never auto run system tests. Only run system tests when asked to.
+- When system tests fails, only fix the failed one and run the failed one after fix.
 - Use native tools only: no WSL, no cgo, and no macOS application builds during Windows development unless explicitly requested.
 - Keep `.version` unchanged unless the user requests a version change.
 - When your tray, proxy or another program is running from `build/<os>-<arch>/`, build into another folder (`--target-dir build/scratch`) and test it with `--build-dir`.
@@ -16,4 +17,4 @@
 - Keep real hosts, usernames, keys and logs out of public defaults.
 - Update both language sections of `src/packaging/defaults/README.md` for user-visible changes. Do not add chat history, changing verification dates or a second version value to the READMEs.
 - Keep CLI flag descriptions/defaults in `src/cli/cli.go` synchronized with behavior and keep the `status`/`check` JSON contracts. After an intended help or error-text change, regenerate `tests/unit/testdata/cli/expected.txt` with `SSH_PROXY_UPDATE_EXPECTED=1` and review its diff.
-- `src/ui/icon.svg` is the canonical artwork; keep the PNG and ICNS in sync with it. Preserve `src/ui/icon.bak.svg`.
+- `src/ui/icon.svg` is the canonical artwork; keep the PNG and ICNS in sync with it. 

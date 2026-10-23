@@ -40,7 +40,7 @@ type MenuState struct {
 	Startup, StartupKnown     bool // Launch App at Login.
 	AutoStart, AutoStartKnown bool // start_proxy_on_launch in app.json.
 	Busy                      bool
-	Exiting                   bool // Waiting for Stop proxy and exit to finish.
+	Exiting                   bool // Waiting for Exit: Stop proxy to finish.
 }
 
 // Menu is a snapshot of backend state, never a separate tray-owned proxy state.
@@ -95,11 +95,11 @@ func Menu(s MenuState, scripts ...Script) []Item {
 		{ID: OpenLog, Label: "Open Current Log"},
 		{ID: OpenLocation, Label: "Open Installed Location"},
 		{Separator: true},
-		{ID: StopAndQuit, Label: "Stop proxy and exit", Disabled: busy || st.PID == 0},
+		{ID: StopAndQuit, Label: "Exit: Stop proxy", Disabled: busy || st.PID == 0},
 	}...)
 	exitLabel := "Exit app"
 	if st.PID != 0 {
-		exitLabel = "Keep proxy running and exit"
+		exitLabel = "Exit: Keep proxy running"
 	}
 	return append(items, Item{ID: Quit, Label: exitLabel, Disabled: s.Exiting})
 }

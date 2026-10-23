@@ -92,7 +92,7 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 				case ui.Quit:
 					want := "Exit app"
 					if st.PID != 0 {
-						want = "Keep proxy running and exit"
+						want = "Exit: Keep proxy running"
 					}
 					if item.Label != want || item.Disabled {
 						t.Fatal("exit choice does not match proxy state", phase, item)

@@ -70,9 +70,12 @@ func testProxy(c *config.Config, target string) error {
 		if err != nil {
 			detail = err.Error()
 		} else {
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024*1024))
+			_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024*1024))
 			resp.Body.Close()
 			detail, ok = resp.Status, resp.StatusCode < 400
+			if err != nil {
+				detail, ok = err.Error(), false
+			}
 		}
 		test.transport.CloseIdleConnections()
 		label := "FAIL"

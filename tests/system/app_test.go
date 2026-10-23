@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,11 +22,10 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	testutil.NativeDesktop(t)
 	dir := testutil.IsolatedBuild(t)
 	f := testutil.LocalSSH(t, dir)
-	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	configPath := filepath.Join(dir, "config.toml")
-	servers := filepath.Join(dir, "servers-"+suffix+".txt")
-	testutil.WriteFile(t, configPath, strings.Replace(f.Config, `config_file = "ssh_config"`, `config_file = "`+filepath.Base(servers)+`"`, 1))
-	sshText := testutil.ReadFile(filepath.Join(dir, "ssh_config"))
+	// Exercise the shipped filename: its lack of an extension affects the OS opener.
+	servers := filepath.Join(dir, "ssh_config")
+	sshText := testutil.ReadFile(servers)
 	// Ordered fallback is exercised by CLI tests. This UI workflow starts with
 	// healthy endpoints so transient connection-error dialogs cannot mask later assertions.
 	sshText = sshText[strings.Index(sshText, "Host primary\n"):]
@@ -121,7 +119,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	call("start", "--wait", "15")
 	testutil.WaitFor(t, func() bool { return strings.Count(testutil.ReadFile(log), "Proxy status: running") >= 2 })
 	active := status()
-	testutil.NativeClick(t, pid, "Keep proxy running and exit")
+	testutil.NativeClick(t, pid, "Exit: Keep proxy running")
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +137,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 		currentLog := testutil.TrayLog(dir)
 		return currentLog != log && strings.Contains(testutil.ReadFile(currentLog), "Proxy status: running")
 	})
-	testutil.NativeClick(t, app.Process.Pid, "Stop proxy and exit")
+	testutil.NativeClick(t, app.Process.Pid, "Exit: Stop proxy")
 	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(app.Process.Pid) })
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)

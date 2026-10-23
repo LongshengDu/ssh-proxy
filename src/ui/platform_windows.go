@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -13,9 +14,13 @@ import (
 
 func defaultBackend(exe string) string { return filepath.Join(filepath.Dir(exe), "ssh_proxy_cli.exe") }
 
-// Windows opens files through their registered application. If an extension
-// has no association (often .toml), let the user choose through Open With.
+// Configs and logs are text, regardless of their filename. Use the .txt editor
+// and fall back to Notepad instead of displaying an application picker.
 func openPath(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	if err := windows.CoInitializeEx(0, windows.COINIT_APARTMENTTHREADED); err == nil || err == syscall.Errno(windows.S_FALSE) {
@@ -25,23 +30,35 @@ func openPath(path string) error {
 	if err != nil {
 		return err
 	}
-	// Call ShellExecuteW directly: x/sys's wrapper drops the SE_ERR_* result code.
-	shell := windows.NewLazySystemDLL("shell32.dll")
-	result, _, _ := shell.NewProc("ShellExecuteW").Call(0, 0, uintptr(unsafe.Pointer(file)), 0, 0, windows.SW_SHOWNORMAL)
-	if result > 32 {
+	if info.IsDir() {
+		return windows.ShellExecute(0, nil, file, nil, nil, windows.SW_SHOWNORMAL)
+	}
+	class, _ := windows.UTF16PtrFromString(".txt")
+	// SHELLEXECUTEINFOW; SEE_MASK_CLASSNAME overrides the file's association.
+	request := struct {
+		Size, Mask                  uint32
+		Window                      uintptr
+		Verb, File, Parameters, Dir *uint16
+		Show                        int32
+		Instance, IDList            uintptr
+		Class                       *uint16
+		ClassKey                    uintptr
+		HotKey                      uint32
+		Icon, Process               uintptr
+	}{Mask: 0x1 | 0x100 | 0x400, File: file, Class: class, Show: windows.SW_SHOWNORMAL}
+	// NOASYNC waits for shell dispatch; FLAG_NO_UI prevents an app picker/error UI.
+	request.Size = uint32(unsafe.Sizeof(request))
+	result, _, _ := windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteExW").Call(uintptr(unsafe.Pointer(&request)))
+	if result != 0 {
 		return nil
 	}
-	if result == 31 { // SE_ERR_NOASSOC
-		info := struct {
-			File, Class *uint16
-			Flags       uint32
-		}{File: file, Flags: 1 | 2 | 4}
-		result, _, _ = shell.NewProc("SHOpenWithDialog").Call(0, uintptr(unsafe.Pointer(&info)))
-		if int32(result) >= 0 {
-			return nil
-		}
+	system, err := windows.GetSystemDirectory()
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("Windows could not open %s (shell result %d)", path, result)
+	program, _ := windows.UTF16PtrFromString(filepath.Join(system, "notepad.exe"))
+	args, _ := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{path}))
+	return windows.ShellExecute(0, nil, program, args, nil, windows.SW_SHOWNORMAL)
 }
 
 // Start a console program with real terminal handles, not the hidden tray's

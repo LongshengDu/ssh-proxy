@@ -246,7 +246,7 @@ type streamWriter struct {
 
 func (w streamWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
-	if code >= 200 && strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+	if code >= 200 && (w.Header().Get("Content-Length") == "" || strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream")) {
 		w.Flush()
 	}
 }
