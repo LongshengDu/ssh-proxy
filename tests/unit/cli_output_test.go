@@ -21,9 +21,9 @@ var cliOutputCases = [][]string{
 	// Record help combined with invalid options/arguments, using Cobra's parsing rules.
 	{"start", "--wait", "invalid", "--help"}, {"trust", "--log", "--help"}, {"logs", "--bogus", "-h"},
 	{"bogus", "--help"}, {"_run", "--help"},
-	{"service"},
-	{"service", "install", "--help"}, {"service", "uninstall", "--help"}, {"service", "status", "--help"},
-	{"service", "enable", "--help"}, {"service", "disable", "-h"},
+	{"autostart"},
+	{"autostart", "status", "--help"},
+	{"autostart", "enable", "--help"}, {"autostart", "disable", "-h"},
 	{"-v"},
 	// Invalid invocations rejected before any configuration, service or process access.
 	{"bogus"}, {"help"}, {"version"}, {"help", "start"},
@@ -37,7 +37,7 @@ var cliOutputCases = [][]string{
 	{"test", "extra"}, {"test", "--url"},
 	{"trust", "first", "second"}, {"trust", "--log"},
 	{"service", "start"}, {"service", "stop"}, {"service", "restart"},
-	{"service", "bogus"}, {"service", "status", "extra"},
+	{"service", "bogus"}, {"autostart", "status", "extra"}, {"autostart", "bogus"},
 	{"service", "install", "--user", "other"}, {"service", "install", "extra"},
 	{"_run", "extra"}, {"_service", "extra"},
 	// Long options take two dashes, with a space or = before the value; one dash is rejected.
@@ -49,7 +49,7 @@ func TestCLIEquivalentOutput(t *testing.T) {
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
 	for _, group := range [][][]string{
 		{{}, {"-h"}, {"--help"}},
-		{{"service"}, {"service", "-h"}, {"service", "--help"}, {"service", "bogus", "--help"}},
+		{{"autostart"}, {"autostart", "-h"}, {"autostart", "--help"}, {"autostart", "bogus", "--help"}},
 		{{"start", "--help"}, {"start", "--wait", "0", "--help"}},
 		{{"stop", "--help"}, {"stop", "extra", "--help"}},
 		{{"-v"}, {"--version"}},

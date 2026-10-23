@@ -15,6 +15,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	runSupervisorProcess()
 	if testutil.RunProcess() {
 		return
 	}

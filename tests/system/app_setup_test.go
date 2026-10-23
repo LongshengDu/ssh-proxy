@@ -259,7 +259,7 @@ func TestTraySingleInstance(t *testing.T) {
 	})
 	activeLog := testutil.TrayLog(dir)
 	second := testutil.StartApp(t, dir)
-	testutil.ExpectDialog(t, second.Process.Pid, "another instance")
+	testutil.ExpectDialog(t, second.Process.Pid, "already running")
 	testutil.NativeDismiss(t, second.Process.Pid)
 	if err := second.Wait(); err == nil {
 		t.Fatal("second instance succeeded")

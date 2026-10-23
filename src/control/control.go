@@ -20,11 +20,19 @@ import (
 )
 
 type StateFile struct {
-	PID     int    `json:"pid"`
-	Address string `json:"address"`
-	Token   string `json:"token"`
-	Config  string `json:"config"`
-	Log     string `json:"log,omitempty"`
+	PID     int         `json:"pid"`
+	Address string      `json:"address"`
+	Token   string      `json:"token"`
+	Config  string      `json:"config"`
+	Log     string      `json:"log,omitempty"`
+	Exit    *ExitRecord `json:"exit,omitempty"`
+}
+
+// ExitRecord occupies the same state file after an unsuccessful run.
+type ExitRecord struct {
+	Time        time.Time `json:"time"`
+	Error       string    `json:"error"`
+	StartFailed bool      `json:"start_failed,omitempty"`
 }
 
 // Phase is the proxy state in status JSON, read by the tray and launcher scripts.
@@ -43,6 +51,8 @@ const (
 
 type Status struct {
 	Service     bool      `json:"service"`
+	Autostart   bool      `json:"autostart"`
+	UncleanExit bool      `json:"-"` // Internal tray classification; last_error is the public diagnostic.
 	Phase       Phase     `json:"phase"`
 	PID         int       `json:"pid,omitempty"`
 	SSHPID      int       `json:"ssh_pid,omitempty"`
@@ -78,6 +88,12 @@ func WriteState(p config.Paths, s StateFile) error {
 	return os.Rename(tmp, p.State)
 }
 
+// WriteExit requires the installation's instance lock, just like WriteState.
+func WriteExit(p config.Paths, err error, startFailed bool) error {
+	return WriteState(p, StateFile{PID: os.Getpid(), Config: p.Config, Log: p.Log,
+		Exit: &ExitRecord{Time: time.Now(), Error: err.Error(), StartFailed: startFailed}})
+}
+
 // ReadState reads and validates the state file.
 func ReadState(p config.Paths) (StateFile, error) {
 	var s StateFile
@@ -87,6 +103,9 @@ func ReadState(p config.Paths) (StateFile, error) {
 	}
 	if err = json.Unmarshal(data, &s); err != nil {
 		return s, err
+	}
+	if s.Exit != nil && strings.EqualFold(s.Config, p.Config) && s.Log != "" {
+		return s, nil
 	}
 	host, _, err := net.SplitHostPort(s.Address)
 	if err != nil || host != "127.0.0.1" || len(s.Token) != 64 || !strings.EqualFold(s.Config, p.Config) {
@@ -101,6 +120,9 @@ func Call(p config.Paths, method, path string) (Status, error) {
 	s, err := ReadState(p)
 	if err != nil {
 		return result, err
+	}
+	if s.Exit != nil {
+		return result, fmt.Errorf("proxy is stopped: %s", s.Exit.Error)
 	}
 	req, err := http.NewRequest(method, "http://"+s.Address+path, bytes.NewReader(nil))
 	if err != nil {
@@ -147,18 +169,38 @@ func ControlHandler(token string, getStatus func() Status, stop func()) http.Han
 }
 
 // QueryStatus is also usable without a live configuration file.
-func QueryStatus(p config.Paths) Status {
+func QueryStatus(p config.Paths) (result Status) {
+	defer func() {
+		enabled, _, err := p.AutostartEntry().Status()
+		result.Autostart = enabled
+		if err != nil {
+			if result.LastError != "" {
+				result.LastError += "; "
+			}
+			result.LastError += "autostart registration: " + err.Error()
+		}
+	}()
 	st, err := Call(p, "GET", "/status")
 	if err == nil {
 		return st
 	}
 	st = Status{Phase: PhaseStopped, Config: p.Config, Log: config.LatestLog(p.Logs, p.ID)}
-	if state, e := ReadState(p); e == nil && platform.ProcessAlive(state.PID) {
-		st.Phase = PhaseUnresponsive
-		st.PID = state.PID
-		st.LastError = err.Error()
+	if state, e := ReadState(p); e == nil {
 		if state.Log != "" {
 			st.Log = state.Log
+		}
+		switch {
+		case state.Exit != nil:
+			st.UncleanExit = true
+			st.LastError = fmt.Sprintf("The proxy stopped unexpectedly at %s: %s; see %s", state.Exit.Time.Format(time.RFC3339), state.Exit.Error, st.Log)
+			if state.Exit.StartFailed {
+				st.LastError = fmt.Sprintf("Last start failed: %s; see %s", state.Exit.Error, st.Log)
+			}
+		case platform.ProcessAlive(state.PID):
+			st.Phase, st.PID, st.LastError = PhaseUnresponsive, state.PID, err.Error()
+		default:
+			st.UncleanExit = true
+			st.LastError = "The proxy stopped unexpectedly; see " + st.Log
 		}
 	}
 	return st

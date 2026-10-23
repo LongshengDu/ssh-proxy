@@ -186,10 +186,14 @@ func (d *desktopOS) RunScript(ctx context.Context, script Script) error {
 // ShowError never blocks the caller, so a visible error cannot freeze status
 // refresh; further errors while one dialog is open are only logged.
 func (d *desktopOS) ShowError(err error) {
+	d.ShowProxyError(err, d.log.Name())
+}
+
+func (d *desktopOS) ShowProxyError(err error, logPath string) {
 	if d.showingError.CompareAndSwap(false, true) {
 		go func() {
 			defer d.showingError.Store(false)
-			showError(err, d.log.Name())
+			showError(err, logPath)
 		}()
 	}
 }

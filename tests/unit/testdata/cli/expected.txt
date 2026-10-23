@@ -24,19 +24,15 @@ Commands:
   check
       Validate configuration as JSON
 
-Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
+Autostart commands (current user):
+  Use "ssh_proxy_cli autostart --help" for login startup details.
 
-  service install
-      Register and enable automatic startup
-  service uninstall
-      Stop and remove the service
-  service status
-      Show service state and automatic startup
-  service enable
-      Enable automatic startup
-  service disable
-      Disable automatic startup
+  autostart enable
+      Start the proxy at future logins
+  autostart disable
+      Remove login startup; leave the proxy running
+  autostart status
+      Show login registration and outdated entries
 
 Flags:
   -h, --help      help for ssh_proxy_cli
@@ -191,95 +187,63 @@ Usage:
 Flags:
   -h, --help   help for _run
 --- stderr
-=== ssh_proxy_cli service
+=== ssh_proxy_cli autostart
 exit 0
 --- stdout
-Manage the proxy service for the current user. Registration uses the current
-user on every OS. Install enables automatic startup without starting the proxy;
-run trust and confirm unattended login works, then stop the proxy before
-installing. Enable/disable change automatic startup; use start, stop or restart
-to run it. On macOS, re-enable a disabled service before starting it manually.
-On Windows, install, uninstall, enable and disable need an elevated terminal,
-and install prompts for your Windows password; on macOS and Linux run as the
-current user, without sudo.
+Start the proxy at login for the current user, independently of the tray app.
+Enable and disable change future login startup; neither starts nor stops the
+current proxy. Use start, stop or restart for that. No elevation or sudo needed.
+Unattended SSH login is required. Enable warns if its login check fails, but
+still registers so you can enable while offline. Windows briefly opens a console
+at login. Status reports registration; changes made in OS startup settings may
+not be reflected. Disable before moving the installation folder.
 
 Usage:
-  ssh_proxy_cli service [flags]
-  ssh_proxy_cli service [command]
+  ssh_proxy_cli autostart [flags]
+  ssh_proxy_cli autostart [command]
 
 Available Commands:
-  install
-      Register and enable automatic startup
-  uninstall
-      Stop and remove the service
-  status
-      Show service state and automatic startup
   enable
-      Enable automatic startup
+      Start the proxy at future logins
   disable
-      Disable automatic startup
+      Remove login startup; leave the proxy running
+  status
+      Show login registration and outdated entries
 
 Flags:
-  -h, --help   help for service
+  -h, --help   help for autostart
 
-Use "ssh_proxy_cli service [command] --help" for command details.
+Use "ssh_proxy_cli autostart [command] --help" for command details.
 --- stderr
-=== ssh_proxy_cli service install --help
+=== ssh_proxy_cli autostart status --help
 exit 0
 --- stdout
-Register and enable automatic startup; install does not start the proxy.
-
-Before installing, run trust and confirm unattended login works, then stop the
-proxy. On Windows, run install in an elevated terminal; it prompts for your
-Windows password. On macOS and Linux, run it as the current user, without sudo.
-See "ssh_proxy_cli service --help" for details.
+Show login registration and outdated entries
 
 Usage:
-  ssh_proxy_cli service install [flags]
-
-Flags:
-  -h, --help   help for install
---- stderr
-=== ssh_proxy_cli service uninstall --help
-exit 0
---- stdout
-Stop and remove the service
-
-Usage:
-  ssh_proxy_cli service uninstall [flags]
-
-Flags:
-  -h, --help   help for uninstall
---- stderr
-=== ssh_proxy_cli service status --help
-exit 0
---- stdout
-Show service state and automatic startup
-
-Usage:
-  ssh_proxy_cli service status [flags]
+  ssh_proxy_cli autostart status [flags]
 
 Flags:
   -h, --help   help for status
 --- stderr
-=== ssh_proxy_cli service enable --help
+=== ssh_proxy_cli autostart enable --help
 exit 0
 --- stdout
-Enable automatic startup
+Start the proxy at future logins
 
 Usage:
-  ssh_proxy_cli service enable [flags]
+  ssh_proxy_cli autostart enable [flags]
 
 Flags:
   -h, --help   help for enable
 --- stderr
-=== ssh_proxy_cli service disable -h
+=== ssh_proxy_cli autostart disable -h
 exit 0
 --- stdout
-Disable automatic startup
+Remove login startup; leave the proxy running
 
 Usage:
-  ssh_proxy_cli service disable [flags]
+  ssh_proxy_cli autostart disable [flags]
 
 Flags:
   -h, --help   help for disable
@@ -417,37 +381,42 @@ Error: flag needs an argument: --log
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "start" for "ssh_proxy_cli service"
+Error: unknown command "service" for "ssh_proxy_cli"
 === ssh_proxy_cli service stop
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "stop" for "ssh_proxy_cli service"
+Error: unknown command "service" for "ssh_proxy_cli"
 === ssh_proxy_cli service restart
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "restart" for "ssh_proxy_cli service"
+Error: unknown command "service" for "ssh_proxy_cli"
 === ssh_proxy_cli service bogus
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "bogus" for "ssh_proxy_cli service"
-=== ssh_proxy_cli service status extra
+Error: unknown command "service" for "ssh_proxy_cli"
+=== ssh_proxy_cli autostart status extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli service status"
+Error: unknown command "extra" for "ssh_proxy_cli autostart status"
+=== ssh_proxy_cli autostart bogus
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "bogus" for "ssh_proxy_cli autostart"
 === ssh_proxy_cli service install --user other
 exit 1
 --- stdout
 --- stderr
-Error: unknown flag: --user
+Error: unknown command "service" for "ssh_proxy_cli"
 === ssh_proxy_cli service install extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli service install"
+Error: unknown command "service" for "ssh_proxy_cli"
 === ssh_proxy_cli _run extra
 exit 1
 --- stdout
@@ -457,7 +426,7 @@ Error: unknown command "extra" for "ssh_proxy_cli _run"
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli _service"
+Error: unknown command "_service" for "ssh_proxy_cli"
 === ssh_proxy_cli logs -lines 0
 exit 1
 --- stdout

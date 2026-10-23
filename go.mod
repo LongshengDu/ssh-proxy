@@ -9,7 +9,6 @@ require (
 	github.com/gliderlabs/ssh v0.3.8
 	github.com/gofrs/flock v0.13.1
 	github.com/gogpu/systray v0.3.0
-	github.com/kardianos/service v1.3.0
 	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9

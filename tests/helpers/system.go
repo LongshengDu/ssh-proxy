@@ -71,7 +71,7 @@ func MustCLI(t *testing.T, dir string, args ...string) []byte {
 		if !json.Valid(out) {
 			t.Fatalf("%v must return one JSON report: %s", args, out)
 		}
-	case "start", "stop", "restart", "test", "-v", "--version", "service":
+	case "start", "stop", "restart", "test", "-v", "--version", "autostart":
 		if len(out) == 0 || json.Valid(out) {
 			t.Fatalf("%v must return a text report: %s", args, out)
 		}

@@ -21,17 +21,6 @@ import (
 
 func NativeLoginLaunch(t *testing.T, id, executable string) {
 	t.Helper()
-	settings, err := registry.OpenKey(registry.CURRENT_USER, `Software\SSHProxy\`+id, registry.QUERY_VALUE)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer settings.Close()
-	for name, want := range map[string]string{"Executable": executable} {
-		got, _, err := settings.GetStringValue(name)
-		if err != nil || got != want {
-			t.Fatal("login setting", name, got, err)
-		}
-	}
 	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE)
 	if err != nil {
 		t.Fatal(err)
@@ -45,6 +34,21 @@ func NativeLoginLaunch(t *testing.T, id, executable string) {
 	args, err := windows.DecomposeCommandLine(command)
 	if err != nil || len(args) == 0 {
 		t.Fatal("invalid login command", command, err)
+	}
+	target := args[0]
+	if strings.EqualFold(filepath.Base(target), "powershell.exe") {
+		settings, err := registry.OpenKey(registry.CURRENT_USER, `Software\SSHProxy\App-`+id, registry.QUERY_VALUE)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target, _, err = settings.GetStringValue("Executable")
+		settings.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if target != executable {
+		t.Fatalf("login executable = %q, want %q", target, executable)
 	}
 	cmd := exec.Command(args[0])
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: command, HideWindow: true}

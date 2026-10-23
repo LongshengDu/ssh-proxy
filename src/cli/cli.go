@@ -23,7 +23,6 @@ import (
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/logs"
 	"ssh_proxy/src/platform"
-	"ssh_proxy/src/service"
 	"ssh_proxy/src/supervisor"
 )
 
@@ -91,9 +90,9 @@ func testProxy(c *config.Config, target string) error {
 	return nil
 }
 
-// Only the root help shows this group; it lists each service command.
-const serviceTitle = `Service commands (current user):
-  Use "ssh_proxy_cli service --help" for service details.
+// Only the root help shows this group; it lists each autostart command.
+const autostartTitle = `Autostart commands (current user):
+  Use "ssh_proxy_cli autostart --help" for login startup details.
 `
 
 // Run executes one CLI command.
@@ -130,9 +129,9 @@ func Run(args []string) error {
 	// Define boolean flags before Cobra finds the command (for example "-v extra").
 	root.InitDefaultHelpFlag()
 	root.InitDefaultVersionFlag()
-	root.AddGroup(&cobra.Group{ID: "commands", Title: "Commands:"}, &cobra.Group{ID: "service", Title: serviceTitle})
+	root.AddGroup(&cobra.Group{ID: "commands", Title: "Commands:"}, &cobra.Group{ID: "autostart", Title: autostartTitle})
 	// List each command with its own flags, such as "start [--foreground] [--wait=SECONDS]",
-	// and the root help lists each service command, such as "service install".
+	// and the root help lists each autostart command, such as "autostart enable".
 	var commandLine func(c *cobra.Command) string
 	commandLine = func(c *cobra.Command) string {
 		if c.HasAvailableSubCommands() {
@@ -225,30 +224,18 @@ working logins exit 0.`}
 	trustCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return run(func(p config.Paths) error { return trust(p, strings.Join(args, ""), *check, *logPath) })(cmd, args)
 	}
-	// Runnable, so that cobra rejects arguments such as "service start" instead of printing help.
-	serviceCmd := &cobra.Command{Use: "service", Short: "Manage the proxy service for the current user", GroupID: "service",
-		Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }, Long: `Manage the proxy service for the current user. Registration uses the current
-user on every OS. Install enables automatic startup without starting the proxy;
-run trust and confirm unattended login works, then stop the proxy before
-installing. Enable/disable change automatic startup; use start, stop or restart
-to run it. On macOS, re-enable a disabled service before starting it manually.
-On Windows, install, uninstall, enable and disable need an elevated terminal,
-and install prompts for your Windows password; on macOS and Linux run as the
-current user, without sudo.`}
-	for _, sub := range [][2]string{{"install", "Register and enable automatic startup"}, {"uninstall", "Stop and remove the service"},
-		{"status", "Show service state and automatic startup"}, {"enable", "Enable automatic startup"}, {"disable", "Disable automatic startup"}} {
+	autostartCmd := &cobra.Command{Use: "autostart", Short: "Manage proxy startup at login", GroupID: "autostart",
+		Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }, Long: `Start the proxy at login for the current user, independently of the tray app.
+Enable and disable change future login startup; neither starts nor stops the
+current proxy. Use start, stop or restart for that. No elevation or sudo needed.
+Unattended SSH login is required. Enable warns if its login check fails, but
+still registers so you can enable while offline. Windows briefly opens a console
+at login. Status reports registration; changes made in OS startup settings may
+not be reflected. Disable before moving the installation folder.`}
+	for _, sub := range [][2]string{{"enable", "Start the proxy at future logins"}, {"disable", "Remove login startup; leave the proxy running"}, {"status", "Show login registration and outdated entries"}} {
 		action := sub[0]
-		cmd := &cobra.Command{Use: action, Short: sub[1], Args: cobra.NoArgs,
-			RunE: run(func(p config.Paths) error { return service.Manage(p, action) })}
-		if action == "install" {
-			cmd.Long = `Register and enable automatic startup; install does not start the proxy.
-
-Before installing, run trust and confirm unattended login works, then stop the
-proxy. On Windows, run install in an elevated terminal; it prompts for your
-Windows password. On macOS and Linux, run it as the current user, without sudo.
-See "ssh_proxy_cli service --help" for details.`
-		}
-		serviceCmd.AddCommand(cmd)
+		autostartCmd.AddCommand(&cobra.Command{Use: action, Short: sub[1], Args: cobra.NoArgs,
+			RunE: run(func(p config.Paths) error { return autostart(p, action) })})
 	}
 	root.AddCommand(startCommand("start", "Start the proxy in the background", false),
 		startCommand("restart", "Restart with the current configuration", true),
@@ -257,39 +244,52 @@ See "ssh_proxy_cli service --help" for details.`
 		&cobra.Command{Use: "check", Short: "Validate configuration as JSON", GroupID: "commands", Args: cobra.NoArgs,
 			Long: "Validate configuration as JSON. Inspect the valid field to determine validity.",
 			RunE: run(func(p config.Paths) error { return printJSON(config.CheckConfig(p.Config)) })},
-		serviceCmd,
-		// Internal entry points: the background supervisor and the OS service.
-		&cobra.Command{Use: "_run", Hidden: true, GroupID: "commands", Args: cobra.NoArgs, RunE: run(func(p config.Paths) error { return supervisor.Run(p, false) })},
-		&cobra.Command{Use: "_service", Hidden: true, GroupID: "commands", Args: cobra.NoArgs, RunE: run(service.Run)})
+		autostartCmd,
+		// Internal entry point: the background supervisor.
+		&cobra.Command{Use: "_run", Hidden: true, GroupID: "commands", Args: cobra.NoArgs, RunE: run(func(p config.Paths) error { return supervisor.Run(p, false) })})
 	root.SetArgs(args)
 	return root.Execute()
 }
 
-func start(p config.Paths, restart, foreground bool, wait int) error {
-	action := "start"
-	if restart {
-		action = "restart"
-	}
-	// Validate once before touching a service or a running instance; _run validates again.
-	if !foreground || restart {
+func autostart(p config.Paths, action string) error {
+	entry := p.AutostartEntry()
+	switch action {
+	case "enable":
 		if _, err := config.LoadConfig(p.Config); err != nil {
 			return err
 		}
-	}
-	if !foreground {
-		handled, err := service.Action(p, action, time.Duration(wait)*time.Second)
-		if err != nil {
+		if err := trust(p, "", true, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: unattended SSH login check failed: %v\nAutostart will still be registered; set up SSH keys or ssh-agent before login.\n", err)
+		}
+		if err := entry.Enable(); err != nil {
 			return err
 		}
-		if handled {
-			return printStatus(control.QueryStatus(p))
+	case "disable":
+		if err := entry.Disable(); err != nil {
+			return err
 		}
 	}
+	enabled, stale, err := entry.Status()
+	if err != nil {
+		return err
+	}
+	setting := "disabled"
+	if enabled {
+		setting = "enabled"
+	}
+	fmt.Printf("Proxy autostart: %s\n", setting)
+	if stale {
+		fmt.Println("Registration is outdated; run autostart enable to update it.")
+	}
+	return nil
+}
+
+func start(p config.Paths, restart, foreground bool, wait int) error {
+	// A restart must not stop a working proxy because its edited config is invalid.
 	if restart {
-		if foreground {
-			if _, err := service.Action(p, "stop", 0); err != nil {
-				return err
-			}
+		if _, err := config.LoadConfig(p.Config); err != nil {
+			p.Log = ""
+			return supervisor.RecordStartFailure(p, err)
 		}
 		if err := supervisor.StopBackground(p); err != nil {
 			return err
@@ -308,14 +308,8 @@ func start(p config.Paths, restart, foreground bool, wait int) error {
 }
 
 func stop(p config.Paths) error {
-	handled, err := service.Action(p, "stop", 0)
-	if err != nil {
+	if err := supervisor.StopBackground(p); err != nil {
 		return err
-	}
-	if !handled {
-		if err := supervisor.StopBackground(p); err != nil {
-			return err
-		}
 	}
 	return printStatus(control.QueryStatus(p))
 }

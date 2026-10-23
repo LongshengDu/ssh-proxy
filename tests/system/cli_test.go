@@ -61,7 +61,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if out, err := testutil.CallCLI(dir); err != nil || string(out) != help {
 		t.Fatalf("no arguments must print the overview: %v %s", err, out)
 	}
-	for _, option := range []string{"-h, --help", "-v, --version", "Commands:", "Flags:", "Service commands (current user):", `Use "ssh_proxy_cli service --help" for service details.`} {
+	for _, option := range []string{"-h, --help", "-v, --version", "Commands:", "Flags:", "Autostart commands (current user):", `Use "ssh_proxy_cli autostart --help" for login startup details.`} {
 		if !strings.Contains(help, option) {
 			t.Fatal("help missing", option)
 		}
@@ -70,7 +70,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		t.Fatal("help advertises a removed option or internal command")
 	}
 	position := -1
-	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check", "service install", "service uninstall", "service status", "service enable", "service disable"} {
+	for _, name := range []string{"start", "restart", "stop", "status", "trust", "logs", "test", "check", "autostart enable", "autostart disable", "autostart status"} {
 		next := strings.Index(help, "\n  "+name)
 		if next <= position {
 			t.Fatal("command absent or out of order in help", name)
@@ -90,22 +90,21 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 		{"start", "--wait SECONDS"}, {"start", "(default 20)"}, {"restart", "--foreground"},
 		{"logs", "-f, --follow"}, {"logs", "(default 60)"}, {"test", `(default "https://example.com/")`},
 		{"trust", "--log FILE"}, {"trust", "--check"}, {"trust", "[ENDPOINT]"},
-		{"service", "elevated terminal"}, {"service", "without sudo"},
-		{"service install", "run trust"}, {"service install", "elevated terminal"}, {"service install", "without sudo"},
+		{"autostart", "No elevation or sudo needed"}, {"autostart", "still registers"},
 	} {
 		page := runHelp(append(strings.Fields(tc.command), "--help")...)
 		if !strings.Contains(strings.Join(strings.Fields(page), " "), tc.want) { // Ignore help wrapping.
 			t.Fatalf("%s help missing %q: %s", tc.command, tc.want, page)
 		}
 	}
-	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "trust", "service", "service install", "service uninstall", "service status", "service enable", "service disable"} {
+	for _, name := range []string{"start", "stop", "restart", "status", "logs", "test", "check", "trust", "autostart", "autostart enable", "autostart disable", "autostart status"} {
 		command := strings.Fields(name)
 		if runHelp(append(command, "-h")...) != runHelp(append(command, "--help")...) {
 			t.Fatalf("command help flags disagree: %s", name)
 		}
 	}
-	if runHelp("service") != runHelp("service", "--help") {
-		t.Fatal("service without a subcommand must show service help")
+	if runHelp("autostart") != runHelp("autostart", "--help") {
+		t.Fatal("autostart without a subcommand must show autostart help")
 	}
 	for _, args := range [][]string{{"help"}, {"help", "start"}, {"help", "service", "install"}, {"version"}, {"tray"}, {"login"}, {"startup", "enable"}, {"startup", "disable"}, {"startup", "status"}, {"completion"}, {"invalid"}} {
 		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "unknown command") {
@@ -146,7 +145,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 			t.Fatal("JSON is unconditional; obsolete flag accepted", command)
 		}
 	}
-	for _, args := range [][]string{{"start"}, {"stop"}, {"restart"}, {"logs"}, {"test"}, {"trust"}, {"-v"}, {"--version"}, {"service", "status"}} {
+	for _, args := range [][]string{{"start"}, {"stop"}, {"restart"}, {"logs"}, {"test"}, {"trust"}, {"-v"}, {"--version"}, {"autostart", "status"}} {
 		if out, err := testutil.CallCLI(dir, append(args, "--json")...); err == nil {
 			t.Fatalf("text command must not accept --json: %v: %s", args, out)
 		}

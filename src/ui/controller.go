@@ -34,6 +34,7 @@ type Desktop interface {
 	OpenEditable(path string) error
 	RunScript(ctx context.Context, script Script) error
 	ShowError(err error)
+	ShowProxyError(err error, logPath string)
 }
 
 // View shows the menu model and tooltip.
@@ -128,7 +129,12 @@ func (c *Controller) Refresh(ctx context.Context) {
 	// An unreadable app.json disables the item.
 	c.autoStart, c.autoStartErr = c.backend.AutoStart()
 	issue := c.startupErr
-	if c.st.LastError != "" {
+	if c.st.UncleanExit {
+		if previous.PID != 0 && previous.Phase != control.PhaseStopped && c.action != StopAndQuit && c.action != ToggleProxy && ctx.Err() == nil {
+			c.logger.Print(c.st.LastError)
+			c.desktop.ShowProxyError(errors.New(c.st.LastError), c.st.Log)
+		}
+	} else if c.st.LastError != "" {
 		issue = errors.Join(issue, errors.New(c.st.LastError))
 	}
 	message := ""
@@ -204,6 +210,10 @@ func (c *Controller) startProxy(ctx context.Context) error {
 	if err := c.backend.CheckLogin(ctx); err != nil {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		// CLI autostart may have won while SSH login was being checked.
+		if st := c.backend.Status(); st.PID != 0 && st.Phase != control.PhaseStopped {
+			return nil
 		}
 		c.logger.Printf("Unattended SSH login check failed; opening SSH setup terminal: %v", err)
 		if err := c.backend.Trust(ctx); err != nil {

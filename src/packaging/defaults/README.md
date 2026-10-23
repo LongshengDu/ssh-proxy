@@ -6,11 +6,11 @@
 
 ### 使用前必读
 
-- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。升级或移动前取消 **Launch App at Login**，并卸载已注册的系统服务；完成后按需重新启用或安装。
+- **升级或移动目录：** 先停止代理并退出托盘，备份 `config.toml`、`ssh_config` 及自定义脚本。升级时保留自己的配置和日志，不要用 ZIP 中的默认配置覆盖。升级或移动前取消 **Launch App at Login**，并执行 `autostart disable`；完成后按需重新启用。
 - **完整解压到可写的固定目录：** 保留应用、CLI、配置和 `scripts/` 在一起；macOS 不要只移动 `.app`。Windows/macOS 从 `ssh_proxy_app` 打开托盘；Linux 使用 CLI。
 - **先准备 SSH：** 本机需要 OpenSSH，服务器需允许 TCP 转发。后台连接需要免交互的密钥认证；有口令的私钥先加载到 `ssh-agent`。首次连接需核对服务器指纹。详细步骤见 [ssh_config](ssh_config)。
 - **代理就绪后再使用：** 等菜单显示 `running`，再设置客户端代理。默认 HTTP/HTTPS 为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`；程序不会自动修改系统代理。用启动脚本打开 Codex/Claude 前，先完全退出已运行的桌面应用。
-- **退出时选择是否保留代理：** **Exit: Stop proxy** 停止代理并退出；**Exit: Keep proxy running** 保留代理、只退出托盘。代理未运行时用 **Exit app**。**Launch App at Login** 只启动托盘；要在托盘启动时自动连接，再勾选 **Start Proxy When App Launches**，无需托盘时可安装系统服务。
+- **退出时选择是否保留代理：** **Exit app: Stop proxy** 停止代理并退出；**Exit app: Keep proxy running** 保留代理、只退出托盘。代理未运行时用 **Exit app**。**Launch App at Login** 只启动托盘；要在托盘启动时自动连接，再勾选 **Start Proxy When App Launches**，无需托盘时可用 CLI 的 `autostart enable`。
 - **出错时查看日志：** 应用会显示错误并打开本次日志；也可选择 **Open Current Log**。所有运行日志位于解压目录的 `logs/`。
 
 SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 和 SOCKS5 代理。Windows、macOS 可使用托盘/菜单栏应用；Windows、macOS、Linux 都可使用命令行。服务器只需允许 SSH TCP 转发，无需安装 HTTP 代理。
@@ -57,13 +57,13 @@ Host my-proxy
 
 每次菜单启动都会先在后台静默检查：主机已信任且免交互登录可用时，直接启动代理，不打开任何窗口。只有检查失败时才打开 SSH 设置终端（Windows 使用原生控制台，macOS 使用 Terminal，可能需允许 Automation（自动化）权限），按提示核对指纹并登录。终端关闭后会再静默检查一次，通过后才启动代理；仅密码登录成功不够，需配置密钥或 agent。失败或取消会显示原因并打开本次应用日志，代理保持停止，可修正后再次点击 **Start proxy**。
 
-等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理。退出时，**Exit: Stop proxy** 先停止代理再关闭托盘；停止失败会显示错误并保留托盘。**Exit: Keep proxy running** 只关闭托盘。代理未运行时 **Exit app** 直接退出，停止并退出选项不可用。
+等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理。退出时，**Exit app: Stop proxy** 先停止代理再关闭托盘；停止失败会显示错误并保留托盘。**Exit app: Keep proxy running** 只关闭托盘。代理未运行时 **Exit app** 直接退出，停止并退出选项不可用。
 
 菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置和日志以文本方式打开（Windows 无默认文本编辑器时使用记事本），目录使用文件管理器打开。macOS 打开配置和日志不需要辅助功能权限；SSH 设置需要控制 Terminal 时，请允许自动化提示，之前拒绝过可到系统设置 → 隐私与安全性 → 自动化中修改。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。
 
 **Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看（安装路径过长时可能显示为 Windows PowerShell）；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
 
-**Start Proxy When App Launches** 让托盘每次启动时自动启动代理，流程与 **Start proxy** 相同：需要时打开配置文件或 SSH 设置终端；代理已在运行时直接沿用。与 **Launch App at Login** 同时勾选即可在登录后自动连接；系统服务不受此设置影响。
+**Start Proxy When App Launches** 让托盘每次启动时自动启动代理，流程与 **Start proxy** 相同：需要时打开配置文件或 SSH 设置终端；代理已在运行时直接沿用。与 **Launch App at Login** 同时勾选即可在登录后自动连接；CLI 自动启动不受此设置影响。
 
 ### 3. 使用代理
 
@@ -122,7 +122,7 @@ unset ALL_PROXY all_proxy
 
 `check` 的 `valid` 应为 `true`；`status` 的 `phase` 为 `running` 表示转发就绪。`start` 默认等待最多 20 秒，返回时仍可能是 `connecting` / `reconnecting`，后台会继续重试。`trust my-proxy` 可设置指定主机；省略名称则按顺序尝试，首个成功后退出。
 
-后台启动后可关闭终端，或选择 **Exit: Keep proxy running** 退出托盘，代理会继续运行。使用 **Stop proxy** 或 CLI 的 `stop` 同时停止 SSH 隧道和 HTTP 代理。调试用 `start --foreground`，按 Ctrl+C 停止。
+后台启动后可关闭终端，或选择 **Exit app: Keep proxy running** 退出托盘，代理会继续运行。使用 **Stop proxy** 或 CLI 的 `stop` 同时停止 SSH 隧道和 HTTP 代理。调试用 `start --foreground`，按 Ctrl+C 停止。
 
 命令前加 Windows 的 `.\ssh_proxy_cli.exe` 或 macOS/Linux 的 `./ssh_proxy_cli`：
 
@@ -139,7 +139,7 @@ unset ALL_PROXY all_proxy
 | `--help` / `<command> --help` | 总览 / 单个命令帮助，`-h` 为短选项 |
 | `-v` / `--version` | 查看版本 |
 
-`--help` 在各命令旁列出专用选项；服务命令单独分组，详情见 `ssh_proxy_cli service --help`。长选项使用两个连字符，如 `--foreground`；带值选项支持空格或 `=`，如 `--wait 30` 和 `--wait=30`。
+`--help` 在各命令旁列出专用选项；登录启动命令单独分组，详情见 `ssh_proxy_cli autostart --help`。长选项使用两个连字符，如 `--foreground`；带值选项支持空格或 `=`，如 `--wait 30` 和 `--wait=30`。
 
 普通 `status`、`check` 输出 JSON，没有 `--json` 选项。`status --proxy_http` 返回 `http://...`，`status --proxy_socks` 返回 `socks5h://...`；只有 `phase` 为 `running` 才输出 URL，否则无输出且退出码为 0。`check` 报告 `valid: false` 时仍可返回退出码 0，自动化请读取 JSON。`start/restart --wait SECONDS` 仅改变命令等待就绪的时间；`trust --log FILE` 用于托盘记录设置诊断，通常无需手动指定。
 
@@ -194,31 +194,29 @@ bash ./scripts/Claude.sh
 
 脚本优先自动查找已安装的桌面应用：Windows 查找 Codex Store 包及 Claude 应用包或常见用户安装目录；macOS 在 `/Applications`、`~/Applications` 查找。找不到时使用脚本顶部的 `CODEX_APP` 或 `CLAUDE_APP`，默认为空字符串；可在脚本内填写备用可执行文件路径（macOS 也支持 `.app` 路径），无需设置环境变量。仍找不到时会报错。macOS 桌面输出保存在 `logs/codex_*.txt` / `logs/claude_*.txt`。脚本需留在原来的 `scripts/` 目录。
 
-### 7. 可选系统服务
+### 7. 无需托盘的登录自动启动
 
-需要系统自动运行代理时才安装服务，普通后台使用无需服务。所有系统均以当前用户注册。先完成 `trust`、确认免交互认证可用，再停止已有代理并安装：
+使用 CLI 可在当前用户登录后自动运行代理，无需管理员权限、账户密码或 sudo：
 
 ```powershell
-# Windows：以自己的账户打开管理员 PowerShell
-.\ssh_proxy_cli.exe stop
-.\ssh_proxy_cli.exe service install
-.\ssh_proxy_cli.exe start
-.\ssh_proxy_cli.exe service status
+# Windows
+.\ssh_proxy_cli.exe autostart enable
+.\ssh_proxy_cli.exe autostart status
+.\ssh_proxy_cli.exe autostart disable
 ```
 
 ```bash
-# macOS / Linux：当前用户，不使用 sudo
-./ssh_proxy_cli stop
-./ssh_proxy_cli service install
-./ssh_proxy_cli start
-./ssh_proxy_cli service status
+# macOS / Linux
+./ssh_proxy_cli autostart enable
+./ssh_proxy_cli autostart status
+./ssh_proxy_cli autostart disable
 ```
 
-`service install` 注册并启用以后的自动启动，不立即连接。仍用普通 `start/stop/restart` 控制当前代理；`service enable/disable` 修改自动启动，`service status` 查看服务，`service uninstall` 停止并移除服务。更多信息用 `service --help` 查看。
+`enable` 只设置以后登录时启动，不立即连接；`disable` 不停止当前代理。仍用 `start/stop/restart` 控制代理。与托盘的登录启动互相独立，两者同时启动不会创建重复代理。移动目录前禁用，移动后重新启用。
 
-Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问当前 Windows 账户密码，供系统服务管理器保存并用于服务登录，不写入项目文件。账户需“作为服务登录”权限和密钥访问权限。Windows 服务在开机后启动；macOS 在登录时启动；Linux 使用 systemd 用户服务，在用户管理器启动时运行。
+启用时会检查免交互 SSH 登录；离线或认证失败只给出警告，仍保存设置。请准备密钥或 ssh-agent。Linux 需要 systemd 用户会话；使用 agent 时需让用户管理器能访问它，例如 `systemctl --user import-environment SSH_AUTH_SOCK`。Windows 登录时会短暂出现控制台。程序不会在登录前启动，也不会在崩溃后由系统自动重启。
 
-服务环境必须能访问免交互 SSH 凭据。Linux 如需继承 agent，执行 `systemctl --user import-environment SSH_AUTH_SOCK` 并确保密钥已加载。macOS 禁用服务后，手动启动前需先 `service enable`。托盘登录启动与代理服务自动启动互相独立。
+`status` 的 `autostart` 表示是否已注册；它不检测任务管理器等系统界面中的额外禁用。启动失败或异常退出可从 `status` 的 `last_error` 和对应代理日志查看，再运行 `start` 恢复。托盘观察到代理异常退出时会提示并打开代理日志；正常停止和过去的故障不会重复弹窗。
 
 ---
 
@@ -226,11 +224,11 @@ Windows 的 install/uninstall/enable/disable 需管理员权限；安装询问�
 
 ### Read before use
 
-- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before upgrading or moving, disable **Launch App at Login** and uninstall any registered OS service; re-enable or reinstall afterward.
+- **Upgrade or move:** Stop the proxy and exit the tray first. Back up `config.toml`, `ssh_config` and custom scripts. Preserve your settings and logs during upgrades; do not overwrite them with ZIP defaults. Before upgrading or moving, disable **Launch App at Login** and run `autostart disable`; re-enable afterward.
 - **Extract the whole ZIP into a writable, permanent folder:** Keep the app, CLI, configuration and `scripts/` together; do not move the macOS `.app` alone. Open `ssh_proxy_app` on Windows/macOS; use the CLI on Linux.
 - **Prepare SSH first:** Local OpenSSH and server-side TCP forwarding are required. Background connections need noninteractive key authentication; load passphrase-protected keys into `ssh-agent`. Verify the server fingerprint on first connection. See [ssh_config](ssh_config) for setup instructions.
 - **Wait for readiness:** Wait for `running` in the menu before configuring clients. Defaults are `http://127.0.0.1:8181` for HTTP/HTTPS and `socks5h://127.0.0.1:1081` for SOCKS5. System proxy settings are not changed automatically. Fully quit existing Codex/Claude desktop instances before using their launchers.
-- **Choose whether to keep the proxy when exiting:** **Exit: Stop proxy** stops it and closes the tray; **Exit: Keep proxy running** closes only the tray. With no proxy running, choose **Exit app**. **Launch App at Login** opens only the tray; to connect when the tray starts, also check **Start Proxy When App Launches**, or install an OS service to run without the tray.
+- **Choose whether to keep the proxy when exiting:** **Exit app: Stop proxy** stops it and closes the tray; **Exit app: Keep proxy running** closes only the tray. With no proxy running, choose **Exit app**. **Launch App at Login** opens only the tray; to connect when the tray starts, also check **Start Proxy When App Launches**, or use CLI `autostart enable` to run without the tray.
 - **Read the log when something fails:** The app shows the error and opens the current run log; you can also choose **Open Current Log**. Run logs are under `logs/` in the extracted folder.
 
 SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. Windows and macOS have a tray/menu-bar app; Windows, macOS and Linux all have a CLI. The server only needs SSH TCP forwarding enabled, with no HTTP proxy installation.
@@ -277,13 +275,13 @@ Save the file, then right-click the icon and choose **Start proxy**.
 
 Each menu start first checks silently: with a trusted host and working noninteractive login, the proxy starts without opening any window. Only when that check fails does an SSH setup terminal open (a native console on Windows, Terminal on macOS, which may require Automation permission); verify the fingerprint and log in as prompted. After the terminal closes, the silent check runs again and the proxy starts only if it passes; a password login alone is not enough, so set up keys or an agent. Failure or cancellation shows the reason and opens this app run's log; the proxy stays stopped until you correct the problem and choose **Start proxy** again.
 
-Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. **Exit: Stop proxy** stops the proxy before closing the tray; a stop failure shows an error and keeps the app open. **Exit: Keep proxy running** closes only the tray. With no proxy running, **Exit app** closes immediately and the stop-and-exit option is disabled.
+Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. **Exit app: Stop proxy** stops the proxy before closing the tray; a stop failure shows an error and keeps the app open. **Exit app: Keep proxy running** closes only the tray. With no proxy running, **Exit app** closes immediately and the stop-and-exit option is disabled.
 
 The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs and logs open as text (Windows falls back to Notepad if no text editor is registered); the folder opens in the file manager. On macOS, opening configs/logs needs no Accessibility permission. Allow Automation when SSH setup needs to control Terminal; if previously denied, change it in System Settings → Privacy & Security → Automation. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs.
 
 **Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup (a very long installation path may make it appear as Windows PowerShell). On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
 
-**Start Proxy When App Launches** starts the proxy whenever the tray starts, using the same flow as **Start proxy**: it opens the config file or an SSH setup terminal when needed and reuses a proxy that is already running. Check it together with **Launch App at Login** to connect automatically after sign-in. OS services ignore this setting.
+**Start Proxy When App Launches** starts the proxy whenever the tray starts, using the same flow as **Start proxy**: it opens the config file or an SSH setup terminal when needed and reuses a proxy that is already running. Check it together with **Launch App at Login** to connect automatically after sign-in. CLI autostart ignores this setting.
 
 ### 3. Use the proxy
 
@@ -342,7 +340,7 @@ Open a terminal in the extracted folder and, on first use, run:
 
 Check that `check` reports `valid: true` and `status` reports `phase: running` for ready forwarding. `start` waits up to 20 seconds by default; it can return while still `connecting` / `reconnecting`, with background retries continuing. Use `trust my-proxy` for one host; without a name it tries hosts until one succeeds.
 
-After a background start, you may close the terminal or choose **Exit: Keep proxy running** in the tray; the proxy keeps running. Use **Stop proxy** or CLI `stop` to stop both SSH and HTTP forwarding. For debugging, use `start --foreground`; Ctrl+C stops it.
+After a background start, you may close the terminal or choose **Exit app: Keep proxy running** in the tray; the proxy keeps running. Use **Stop proxy** or CLI `stop` to stop both SSH and HTTP forwarding. For debugging, use `start --foreground`; Ctrl+C stops it.
 
 Prefix commands with `.\ssh_proxy_cli.exe` on Windows or `./ssh_proxy_cli` on macOS/Linux:
 
@@ -359,7 +357,7 @@ Prefix commands with `.\ssh_proxy_cli.exe` on Windows or `./ssh_proxy_cli` on ma
 | `--help` / `<command> --help` | Overview / command-specific help; `-h` is the short form |
 | `-v` / `--version` | Print the version |
 
-`--help` lists each command's own flags and groups service commands separately; use `ssh_proxy_cli service --help` for service details. Long options use two dashes, such as `--foreground`. Options with values accept a space or `=`, such as `--wait 30` and `--wait=30`.
+`--help` lists each command's own flags and groups login startup commands separately; use `ssh_proxy_cli autostart --help` for details. Long options use two dashes, such as `--foreground`. Options with values accept a space or `=`, such as `--wait 30` and `--wait=30`.
 
 Plain `status` and `check` output JSON, with no `--json` switch. `status --proxy_http` returns `http://...`; `status --proxy_socks` returns `socks5h://...`. These print a URL only for `phase: running`, otherwise nothing with exit code 0. `check` can exit 0 with `valid: false`, so automation must read its JSON. `start/restart --wait SECONDS` changes only the command's readiness wait. `trust --log FILE` records setup diagnostics for the tray and is normally unnecessary by hand.
 
@@ -414,29 +412,26 @@ Start the proxy before launching an app. Each script defaults `SSH_PROXY_URL` to
 
 Scripts first find the installed desktop app automatically: Windows searches the Codex Store package and the Claude app package or common per-user installations; macOS searches `/Applications` and `~/Applications`. If none is found, they use `CODEX_APP` or `CLAUDE_APP` at the top of the script, which defaults to an empty string. Edit it inside the script to supply a fallback executable path (or macOS `.app` path); no environment setup is needed. If no app is available, the script reports an error. macOS desktop output goes to `logs/codex_*.txt` / `logs/claude_*.txt`. Keep launchers in their original `scripts/` folder.
 
-### 7. Optional OS service
+### 7. Login startup without the tray
 
-Install a service when you want the OS to run the proxy automatically; ordinary background use needs none. Registration uses the current user everywhere. Complete `trust`, confirm noninteractive authentication, then stop the existing proxy and install:
+The CLI can start the proxy when the current user signs in, without administrator access, an account password or sudo:
 
 ```powershell
-# Windows: elevated PowerShell under your own account
-.\ssh_proxy_cli.exe stop
-.\ssh_proxy_cli.exe service install
-.\ssh_proxy_cli.exe start
-.\ssh_proxy_cli.exe service status
+# Windows
+.\ssh_proxy_cli.exe autostart enable
+.\ssh_proxy_cli.exe autostart status
+.\ssh_proxy_cli.exe autostart disable
 ```
 
 ```bash
-# macOS / Linux: current user, without sudo
-./ssh_proxy_cli stop
-./ssh_proxy_cli service install
-./ssh_proxy_cli start
-./ssh_proxy_cli service status
+# macOS / Linux
+./ssh_proxy_cli autostart enable
+./ssh_proxy_cli autostart status
+./ssh_proxy_cli autostart disable
 ```
 
-`service install` registers and enables future automatic startup without connecting now. Use ordinary `start/stop/restart` to control the current proxy; `service enable/disable` changes automatic startup, `service status` inspects the service, and `service uninstall` stops and removes it. See `service --help` for details.
+`enable` configures future logins without connecting now; `disable` leaves the current proxy running. Use `start/stop/restart` to control it. CLI and app login startup are independent; simultaneous starts share one proxy. Disable startup before moving the folder, then enable it again.
 
-Windows install/uninstall/enable/disable require elevation. Installation asks for your Windows account password so the Service Control Manager can store it for service logon; it is not written to project files. The account needs “Log on as a service” and key access. Windows starts the service after boot; macOS at login; Linux uses a systemd user service, started with the user manager.
+Enable checks unattended SSH login. Offline or authentication failures produce a warning but still save registration. Prepare SSH keys or ssh-agent. Linux requires a systemd user session; make the agent accessible to the user manager when needed, for example with `systemctl --user import-environment SSH_AUTH_SOCK`. Windows briefly shows a console at login. Startup before login and automatic restart after crashes are not supported.
 
-The service environment needs noninteractive SSH credentials. On Linux, use `systemctl --user import-environment SSH_AUTH_SOCK` if you need the current agent, and ensure keys are loaded. On macOS, run `service enable` before manually starting a disabled service. Tray login startup and proxy-service startup are independent.
-
+The `autostart` field in `status` reports registration; it does not detect additional disabling through OS interfaces such as Task Manager. Failed starts and unexpected exits appear in `last_error`, with the proxy log path. Use `start` to recover. The tray reports unexpected exits it observes and opens the proxy log; normal stops and old failures do not repeatedly trigger alerts.

@@ -83,6 +83,10 @@ func (d *fakeDesktop) RunScript(_ context.Context, script ui.Script) error {
 	return nil
 }
 func (d *fakeDesktop) ShowError(err error) { d.messages = append(d.messages, err.Error()) }
+func (d *fakeDesktop) ShowProxyError(err error, path string) {
+	d.ShowError(err)
+	d.opened = append(d.opened, path)
+}
 
 type fakeView struct {
 	items   []ui.Item
@@ -150,6 +154,45 @@ func TestTrayControllerReportsEachProblemOnce(t *testing.T) {
 	}
 	if view.tooltip != "SSH Proxy — running" || view.item(ui.ToggleProxy).Label != "Stop proxy" {
 		t.Fatalf("menu not rendered from status: %q %+v", view.tooltip, view.items)
+	}
+}
+
+func TestTrayControllerUncleanStops(t *testing.T) {
+	ctx := context.Background()
+	for _, phase := range []control.Phase{control.PhaseRunning, control.PhaseConnecting, control.PhaseReconnecting} {
+		t.Run(string(phase), func(t *testing.T) {
+			backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped, UncleanExit: true, LastError: "old failure", Log: "old.txt"}}
+			c, desktop, _ := newController(backend)
+			c.Refresh(ctx)
+			c.Refresh(ctx)
+			if len(desktop.messages) != 0 {
+				t.Fatal("old failure alerted", desktop.messages)
+			}
+			backend.status = control.Status{Phase: phase, PID: 7}
+			c.Refresh(ctx)
+			backend.status = control.Status{Phase: control.PhaseStopped, UncleanExit: true, LastError: "unexpected stop", Log: "proxy.txt"}
+			c.Refresh(ctx)
+			c.Refresh(ctx)
+			if !slices.Equal(desktop.messages, []string{"unexpected stop"}) || !slices.Equal(desktop.opened, []string{"proxy.txt"}) {
+				t.Fatal(desktop)
+			}
+			backend.status = control.Status{Phase: phase, PID: 8}
+			c.Refresh(ctx)
+			backend.status = control.Status{Phase: control.PhaseStopped}
+			c.Refresh(ctx)
+			if len(desktop.messages) != 1 {
+				t.Fatal("normal external stop alerted", desktop.messages)
+			}
+		})
+	}
+}
+
+func TestTrayControllerLoginRaceDoesNotOpenSetup(t *testing.T) {
+	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, logins: []error{errLoginFailed}}
+	backend.onLogin = func() { backend.status = control.Status{Phase: control.PhaseConnecting, PID: 7} }
+	desktop, calls := startProxy(t, backend)
+	if !slices.Equal(calls, []string{"check", "login"}) || len(desktop.messages) != 0 {
+		t.Fatal(calls, desktop.messages)
 	}
 }
 

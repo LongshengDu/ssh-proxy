@@ -33,6 +33,10 @@ func TestMain(m *testing.M) {
 			os.Exit(1)
 		}
 	}
+	if err := testutil.CleanupTestLogins(); err != nil {
+		println(err.Error())
+		os.Exit(1)
+	}
 	code := m.Run()
 	if unlock != nil {
 		unlock()

@@ -3,7 +3,6 @@
 package platform
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -28,7 +27,7 @@ func LockInstance(id string) (func(), error) {
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("another instance holds this configuration lock")
+		return nil, ErrAlreadyRunning
 	}
 	return func() { lock.Close() }, nil
 }

@@ -127,7 +127,7 @@ func TestStatusProxyURLs(t *testing.T) {
 
 // Removed or duplicate commands stay rejected before any configuration,
 // OS registration or lifecycle side effect. App management belongs to the tray;
-// service lifecycle uses the ordinary start, stop and restart commands.
+// proxy autostart is independent of app startup.
 func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
 	runtime := t.TempDir()
 	t.Setenv("SSH_PROXY_RUNTIME", runtime)
@@ -145,9 +145,12 @@ func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
 		{[]string{"help"}, `unknown command "help"`},
 		{[]string{"version"}, `unknown command "version"`},
 		{[]string{"completion"}, `unknown command "completion"`},
-		{[]string{"service", "start"}, `unknown command "start" for "ssh_proxy_cli service"`},
-		{[]string{"service", "stop"}, `unknown command "stop" for "ssh_proxy_cli service"`},
-		{[]string{"service", "restart"}, `unknown command "restart" for "ssh_proxy_cli service"`},
+		{[]string{"service", "install"}, `unknown command "service"`},
+		{[]string{"service", "status"}, `unknown command "service"`},
+		{[]string{"_service"}, `unknown command "_service"`},
+		{[]string{"service", "start"}, `unknown command "service"`},
+		{[]string{"service", "stop"}, `unknown command "service"`},
+		{[]string{"service", "restart"}, `unknown command "service"`},
 	} {
 		t.Run(strings.Join(tc.args, "-"), func(t *testing.T) {
 			err := cli.Run(tc.args)

@@ -119,7 +119,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	call("start", "--wait", "15")
 	testutil.WaitFor(t, func() bool { return strings.Count(testutil.ReadFile(log), "Proxy status: running") >= 2 })
 	active := status()
-	testutil.NativeClick(t, pid, "Exit: Keep proxy running")
+	testutil.NativeClick(t, pid, "Exit app: Keep proxy running")
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 		currentLog := testutil.TrayLog(dir)
 		return currentLog != log && strings.Contains(testutil.ReadFile(currentLog), "Proxy status: running")
 	})
-	testutil.NativeClick(t, app.Process.Pid, "Exit: Stop proxy")
+	testutil.NativeClick(t, app.Process.Pid, "Exit app: Stop proxy")
 	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(app.Process.Pid) })
 	if err := app.Wait(); err != nil {
 		t.Fatal(err)

@@ -19,7 +19,10 @@ func LockInstance(id string) (func(), error) {
 		if h != 0 {
 			windows.CloseHandle(h)
 		}
-		return nil, fmt.Errorf("another instance holds this configuration lock: %w", err)
+		if errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+			return nil, ErrAlreadyRunning
+		}
+		return nil, fmt.Errorf("configuration lock: %w", err)
 	}
 	return func() { windows.CloseHandle(h) }, nil
 }

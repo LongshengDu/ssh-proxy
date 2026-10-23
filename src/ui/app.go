@@ -55,5 +55,8 @@ func Run(args []string) (runErr error) {
 	if _, err := os.Stat(backend); err != nil {
 		return fmt.Errorf("backend missing: %w", err)
 	}
+	if err := RepairStartup(p.ID, exe); err != nil {
+		return fmt.Errorf("repair login startup: %w", err)
+	}
 	return run(p, backend, logger, writer)
 }

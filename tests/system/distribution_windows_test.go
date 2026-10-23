@@ -101,9 +101,9 @@ func TestTrayWindowsMenu(t *testing.T) {
 		}
 		exit := "Exit app"
 		if running {
-			exit = "Exit: Keep proxy running"
+			exit = "Exit app: Keep proxy running"
 		}
-		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit: Stop proxy", exit}
+		want := []string{phase, ssh, socks, http, "", toggle, "", "Run: Claude", "Run: Codex", "", "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "", "Open Current Log", "Open Installed Location", "", "Exit app: Stop proxy", exit}
 		testutil.ExpectMenu(t, tray.Process.Pid, toggle, false, false)
 		testutil.ExpectMenu(t, tray.Process.Pid, "Launch App at Login", false, wantStartup)
 		testutil.ExpectMenu(t, tray.Process.Pid, http, true, false)
@@ -127,7 +127,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 		if byLabel[toggle].Checked {
 			t.Fatal("proxy action has a checkbox")
 		}
-		if byLabel["Exit: Stop proxy"].Disabled == running || byLabel[exit].Disabled {
+		if byLabel["Exit app: Stop proxy"].Disabled == running || byLabel[exit].Disabled {
 			t.Fatal("exit choices do not match the proxy state")
 		}
 		for _, label := range []string{"Run: Claude", "Run: Codex"} {
@@ -150,16 +150,7 @@ func TestTrayWindowsMenu(t *testing.T) {
 	})
 	testutil.NativeClick(t, tray.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && enabled })
-	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\SSHProxy\`+p.ID, registry.QUERY_VALUE)
-	if err != nil {
-		t.Fatal(err)
-	}
-	registered, _, err := key.GetStringValue("Executable")
-	key.Close()
-	if err != nil || registered != filepath.Join(dir, "ssh_proxy_app.exe") {
-		t.Fatal("login must launch only the app", registered, err)
-	}
-	key, err = registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE)
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE)
 	if err != nil {
 		t.Fatal(err)
 	}

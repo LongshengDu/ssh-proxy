@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a command in a visible terminal and record its output and completion under build/test-results/.
 
-Windows opens a new PowerShell console that stays open for review. Other hosts run in the current terminal.
+Windows opens a new PowerShell console that closes when the command finishes. Other hosts run in the current terminal.
 Example: python scripts/visible.py --name unit -- python scripts/run_unit_tests.py
 """
 
@@ -57,8 +57,8 @@ def launch(name, command, wait):
     if os.name != "nt":
         return child(report)
     quote = lambda value: "'" + str(value).replace("'", "''") + "'"
-    script = f"& {quote(sys.executable)} {quote(Path(__file__).resolve())} --child {quote(report)}"
-    terminal = subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-NoExit", "-Command", script],
+    script = f"& {quote(sys.executable)} {quote(Path(__file__).resolve())} --child {quote(report)}; exit $LASTEXITCODE"
+    terminal = subprocess.Popen(["powershell.exe", "-NoLogo", "-NoProfile", "-Command", script],
                                 cwd=ROOT, creationflags=subprocess.CREATE_NEW_CONSOLE)
     print(f"Started in a new window: {name}\nReport: {report}", flush=True)
     if not wait:

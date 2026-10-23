@@ -4,6 +4,7 @@ package supervisor
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -222,42 +225,60 @@ func (s *Supervisor) supervise(ctx context.Context) {
 
 // Run runs the supervisor in this process until it is stopped.
 func Run(p config.Paths, foreground bool) error {
-	return RunContext(context.Background(), p, foreground, false)
+	return RunContext(context.Background(), p, foreground)
 }
 
-// RunContext also serves OS services, which mark their status as service-owned.
-func RunContext(parent context.Context, p config.Paths, foreground, service bool) (runErr error) {
+// RunContext owns the installation lock through shutdown and diagnostic publication.
+func RunContext(parent context.Context, p config.Paths, foreground bool) (runErr error) {
 	unlock, err := platform.LockInstance(p.ID)
 	if err != nil {
 		return err
 	}
 	defer unlock()
-	var logger *log.Logger
-	var writer *logs.RunLog
-	if inherited := os.Getenv("SSH_PROXY_RUN_LOG"); inherited != "" {
-		logger, writer, err = logs.NewLog(inherited, foreground)
-	} else {
-		logger, writer, err = logs.NewRunLog(p, "logs", foreground)
+	if err := os.MkdirAll(p.Runtime, 0700); err != nil {
+		return err
 	}
+	logger, writer, err := logs.NewRunLog(p, "logs", foreground)
 	if err != nil {
 		return err
 	}
 	p.Log = writer.Name()
 	defer writer.Close()
+	if err := debug.SetCrashOutput(writer.File, debug.CrashOptions{}); err != nil {
+		logger.Printf("Crash logging: %v", err)
+	}
+	defer debug.SetCrashOutput(nil, debug.CrashOptions{})
+	started := false
 	defer func() {
+		if caught := recover(); caught != nil {
+			runErr = fmt.Errorf("panic: %v", caught)
+			logger.Printf("%v\n%s", runErr, debug.Stack())
+		}
 		if runErr != nil {
 			logger.Printf("Error: %v", runErr)
+			if err := control.WriteExit(p, runErr, !started); err != nil {
+				logger.Printf("Cannot record exit: %v", err)
+			}
+			runErr = fmt.Errorf("%w\nLog: %s", runErr, p.Log)
+		} else {
+			if err := os.Remove(p.State); err != nil && !os.IsNotExist(err) {
+				logger.Printf("Cannot remove state: %v", err)
+			}
 		}
 	}()
+	// Tell the launcher which log belongs to this child, then release its
+	// bootstrap handles so it can remove the temporary file while we run.
+	if os.Getenv("SSH_PROXY_BOOTSTRAP") == "1" {
+		fmt.Fprintln(os.Stderr, "Log:", p.Log)
+		os.Stdout.Close()
+		os.Stderr.Close()
+	}
 	logger.Printf("Starting ssh_proxy_cli %s; pid=%d; config=%s", config.Version, os.Getpid(), p.Config)
 	c, err := config.LoadConfig(p.Config)
 	if err != nil {
 		return err
 	}
 	writer.SetLimit(c.Logging.MaxSizeMB)
-	if err = os.MkdirAll(p.Runtime, 0700); err != nil {
-		return err
-	}
 	// Verify SOCKS is free before starting SSH. The HTTP listener remains reserved.
 	check, err := net.Listen("tcp", c.SocksAddr())
 	if err != nil {
@@ -280,107 +301,146 @@ func RunContext(parent context.Context, p config.Paths, foreground, service bool
 		return err
 	}
 	defer httpBridge.SetReady(false)
-	s := &Supervisor{cfg: c, paths: p, logger: logger, bridge: httpBridge, status: control.Status{Service: service, Phase: control.PhaseStarting, PID: os.Getpid(), Config: p.Config, Started: time.Now(), SOCKS: c.SocksAddr(), HTTP: c.HTTPAddr(), Log: p.Log}}
+	s := &Supervisor{cfg: c, paths: p, logger: logger, bridge: httpBridge, status: control.Status{Phase: control.PhaseStarting, PID: os.Getpid(), Config: p.Config, Started: time.Now(), SOCKS: c.SocksAddr(), HTTP: c.HTTPAddr(), Log: p.Log}}
 	ctx, stopSignal := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stopSignal()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(context.Canceled)
 	state, err := control.NewState(p, controlListener.Addr().String())
 	if err != nil {
 		return err
 	}
-	controlServer := &http.Server{Handler: control.ControlHandler(state.Token, s.snapshot, cancel), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+	controlServer := &http.Server{Handler: control.ControlHandler(state.Token, s.snapshot, func() { cancel(context.Canceled) }), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
 	proxyServer := &http.Server{Handler: httpBridge, ReadHeaderTimeout: 15 * time.Second, IdleTimeout: 90 * time.Second, ErrorLog: logger, BaseContext: func(net.Listener) context.Context { return ctx }}
 	defer controlServer.Close()
 	defer proxyServer.Close()
 	go func() {
 		if err := controlServer.Serve(controlListener); err != nil && err != http.ErrServerClosed {
 			logger.Printf("Control server error: %v", err)
-			cancel()
+			cancel(fmt.Errorf("control server: %w", err))
 		}
 	}()
 	go func() {
 		if err := proxyServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
 			logger.Printf("HTTP server error: %v", err)
-			cancel()
+			cancel(fmt.Errorf("HTTP server: %w", err))
 		}
 	}()
 	if err = control.WriteState(p, state); err != nil {
 		return err
 	}
-	defer os.Remove(p.State)
+	started = true
 	s.supervise(ctx)
 	s.update(func(st *control.Status) { st.Phase = control.PhaseStopping; st.SSHPID = 0 })
 	httpBridge.SetReady(false)
 	logger.Print("Stopped; SSH child and proxy listeners closed")
-	return nil
+	if cause := context.Cause(ctx); cause != nil {
+		if errors.Is(cause, context.Canceled) {
+			return nil
+		}
+		return cause
+	}
+	return fmt.Errorf("supervisor returned without a stop request")
 }
 
-// StartBackground starts a detached _run supervisor and waits for readiness.
+// RecordStartFailure records a failure before the supervisor owned diagnostics.
+// If another supervisor owns the install, this caller must not touch its files.
+// A supplied Log reuses a child's log; an empty Log creates the sole failure log.
+func RecordStartFailure(p config.Paths, failure error) error {
+	unlock, err := platform.LockInstance(p.ID)
+	if err != nil {
+		return failure
+	}
+	defer unlock()
+	if err := os.MkdirAll(p.Runtime, 0700); err != nil {
+		return errors.Join(failure, err)
+	}
+	var logger *log.Logger
+	var writer *logs.RunLog
+	if p.Log == "" {
+		logger, writer, err = logs.NewRunLog(p, "logs", false)
+	} else {
+		logger, writer, err = logs.NewLog(p.Log, false)
+	}
+	if err != nil {
+		return errors.Join(failure, err)
+	}
+	defer writer.Close()
+	p.Log = writer.Name()
+	logger.Printf("Start failed: %v", failure)
+	err = control.WriteExit(p, failure, true)
+	return fmt.Errorf("%w\nLog: %s", errors.Join(failure, err), p.Log)
+}
+
+// StartBackground starts a detached _run. Only the winning child creates a run
+// log; losing starters join its control API rather than reporting a false error.
 func StartBackground(p config.Paths, wait time.Duration) error {
 	if _, err := control.Call(p, "GET", "/status"); err == nil {
 		return nil
 	}
+	p.Log = ""
 	if err := os.MkdirAll(p.Runtime, 0700); err != nil {
-		return err
+		return RecordStartFailure(p, err)
 	}
-	_, file, err := logs.NewRunLog(p, "logs", false)
+	bootstrap, err := os.CreateTemp(p.Runtime, "bootstrap-*.txt")
 	if err != nil {
-		return err
+		return RecordStartFailure(p, err)
 	}
-	defer file.Close()
-	p.Log = file.Name()
+	defer func() { bootstrap.Close(); os.Remove(bootstrap.Name()) }()
 	exe, err := os.Executable()
 	if err != nil {
-		return err
+		return RecordStartFailure(p, err)
 	}
 	cmd, err := platform.StartDetached(func() *exec.Cmd {
 		cmd := exec.Command(exe, "_run")
-		cmd.Env = append(os.Environ(), "SSH_PROXY_RUN_LOG="+p.Log)
-		// Bootstrap output goes straight to the run log's file; the supervisor outlives this command.
-		cmd.Stdout, cmd.Stderr = file.File, file.File
+		cmd.Env = append(os.Environ(), "SSH_PROXY_BOOTSTRAP=1")
+		cmd.Stdout, cmd.Stderr = bootstrap, bootstrap
 		return cmd
 	})
 	if err != nil {
-		return err
+		return RecordStartFailure(p, err)
 	}
-	pid := cmd.Process.Pid
-	// Wait reaps an early exit. Polling the PID cannot see it on Unix, where an unreaped child stays a zombie.
-	exited := make(chan struct{})
-	go func() { _ = cmd.Wait(); close(exited) }()
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
 	deadline := time.Now().Add(wait)
-	var last *control.Status
-	for time.Now().Before(deadline) {
+	for {
+		select {
+		case exitErr := <-exited:
+			var child *exec.ExitError
+			if errors.As(exitErr, &child) && child.ExitCode() == platform.AlreadyRunningExitCode {
+				exited = nil // Another supervisor won. Wait for its API below.
+			} else {
+				state, readErr := control.ReadState(p)
+				if readErr == nil && state.PID == cmd.Process.Pid && state.Exit != nil {
+					return fmt.Errorf("%s\nLog: %s", state.Exit.Error, state.Log)
+				}
+				data, _ := os.ReadFile(bootstrap.Name())
+				for _, line := range strings.Split(string(data), "\n") {
+					if strings.HasPrefix(line, "Log: ") {
+						p.Log = strings.TrimSpace(strings.TrimPrefix(line, "Log: "))
+					}
+				}
+				return RecordStartFailure(p, fmt.Errorf("supervisor exited during startup (%v): %s", exitErr, strings.TrimSpace(string(data))))
+			}
+		default:
+		}
 		if st, err := control.Call(p, "GET", "/status"); err == nil {
-			last = &st
-			if st.Phase == control.PhaseRunning {
+			if st.Phase == control.PhaseRunning || time.Now().After(deadline) {
 				return nil
 			}
 		}
-		select {
-		case <-exited:
-			data, _ := os.ReadFile(p.Log)
-			return fmt.Errorf("supervisor exited during startup: %s\nLog: %s", stringsTrim(data), p.Log)
-		case <-time.After(200 * time.Millisecond):
+		if time.Now().After(deadline) {
+			return fmt.Errorf("proxy has not exposed its control API yet; use status or inspect %s", p.Logs)
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	if last != nil {
-		return nil
-	}
-	return fmt.Errorf("supervisor pid %d has not exposed its control API; inspect %s", pid, p.Log)
-}
-func stringsTrim(data []byte) string {
-	if len(data) == 0 {
-		return "no bootstrap details"
-	}
-	return string(data)
 }
 
 // StopBackground asks the running supervisor to stop and waits for its lock.
 func StopBackground(p config.Paths) error {
 	if _, err := control.Call(p, "GET", "/status"); err != nil {
 		// A stale state file alone is not authority to kill an arbitrary PID.
-		if state, readErr := control.ReadState(p); readErr == nil && platform.ProcessAlive(state.PID) {
+		if state, readErr := control.ReadState(p); readErr == nil && state.Exit == nil && platform.ProcessAlive(state.PID) {
 			return fmt.Errorf("control API unavailable for pid %d; no process was killed; inspect %s", state.PID, p.Log)
 		}
 		return nil
