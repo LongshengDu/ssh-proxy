@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,11 +21,11 @@ import (
 	"ssh-proxy/src/platform"
 )
 
-// The byte number is cumulative across cuts, excluding marker lines. Followers
-// can recover their position even when several cuts happen between polls.
-const truncatedMarker = "--- Earlier lines removed: log reached logging.max_size_mb; continuing from byte %d of this run ---\n"
+// Each cut rewrites the first line with its time, so logs --follow notices every
+// cut, even when the file grows back past its position between two polls.
+const truncatedMarker = "--- Earlier lines removed at %s: log reached logging.max_size_mb ---\n"
 
-var truncatedLine = regexp.MustCompile(`^--- Earlier lines removed: log reached logging\.max_size_mb; continuing from byte (\d+) of this run ---$`)
+const cutNotice = "--- The log was cut by logging.max_size_mb; lines written meanwhile may not be shown ---\n"
 
 // Match only application run logs, including the original untimestamped names.
 var runLogName = regexp.MustCompile(`^(logs|tray)_[0-9a-f]{16}(?:_[0-9]{8}_[0-9]{6}\.[0-9]{9}_[0-9]+)?\.txt$`)
@@ -122,21 +121,21 @@ func (l *RunLog) truncate(size int64) error {
 		return err
 	}
 	defer file.Close()
-	head, _ := firstLine(file)
 	keep := min(size, l.limit/2)
 	tail := make([]byte, keep)
 	n, err := file.ReadAt(tail, size-keep)
 	if err != nil && err != io.EOF {
 		return err
 	}
-	tail, start := tail[:n], size-keep
+	tail = tail[:n]
 	if i := bytes.IndexByte(tail, '\n'); i >= 0 && keep < size {
-		tail, start = tail[i+1:], start+int64(i+1)
+		tail = tail[i+1:]
 	}
 	if err := file.Truncate(0); err != nil {
 		return err
 	}
-	_, err = file.WriteAt(append([]byte(fmt.Sprintf(truncatedMarker, logOffset(head)+start)), tail...), 0)
+	marker := fmt.Sprintf(truncatedMarker, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = file.WriteAt(append([]byte(marker), tail...), 0)
 	return err
 }
 
@@ -246,27 +245,15 @@ func Show(ctx context.Context, path string, lines int, follow bool) error {
 	}
 }
 
-// logOffset maps a physical file position to its position in the original run.
-func logOffset(head string) int64 {
-	match := truncatedLine.FindStringSubmatch(head)
-	if match == nil {
-		return 0
-	}
-	start, err := strconv.ParseInt(match[1], 10, 64)
-	if err != nil {
-		return 0
-	}
-	return start - int64(len(head)+1)
-}
-
 type logCursor struct {
 	info   os.FileInfo
 	head   string
-	offset int64
+	offset int64 // -1 right after a cut: continue from the end once the cut is written.
 }
 
-// Read a bounded snapshot before printing anything. An in-place cut during the
-// read changes the cumulative marker; discard that snapshot and retry next poll.
+// Read a bounded snapshot before printing anything. A cut changes the first
+// line: print a notice, then continue from the end at the next poll, after the
+// cut has finished rewriting the file.
 func (c *logCursor) read(path string, lines int) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -278,19 +265,18 @@ func (c *logCursor) read(path string, lines int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !complete && c.info != nil && info.Size() < c.offset {
+	if !complete && c.info != nil && (info.Size() < c.offset || c.offset < 0) {
 		return nil, nil // Between truncate and rewrite; keep the old cursor.
 	}
-	offset, missed := int64(0), false
+	offset := int64(0)
 	if c.info != nil && os.SameFile(c.info, info) {
+		if head != c.head || info.Size() < c.offset {
+			*c = logCursor{info: info, head: head, offset: -1}
+			return []byte(cutNotice), nil
+		}
 		offset = c.offset
-		if head != c.head && truncatedLine.MatchString(head) {
-			offset += logOffset(c.head) - logOffset(head)
-			body := int64(len(head) + 1)
-			missed = offset < body
-			offset = max(body, offset)
-		} else if info.Size() < offset {
-			offset = 0 // External truncation without our marker.
+		if offset < 0 {
+			offset = info.Size()
 		}
 	}
 	var data []byte
@@ -314,9 +300,6 @@ func (c *logCursor) read(path string, lines int) ([]byte, error) {
 		return nil, err
 	}
 	*c = logCursor{info: info, head: head, offset: info.Size()}
-	if missed {
-		data = append([]byte("--- Lines were removed by logging.max_size_mb before they could be shown ---\n"), data...)
-	}
 	return data, nil
 }
 

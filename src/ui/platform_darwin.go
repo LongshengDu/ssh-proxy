@@ -58,9 +58,12 @@ repeat
     end tell
     delay 0.2
 end repeat
-tell application "Terminal"
-    if exists setupWindow then close setupWindow saving no
-end tell
+-- A failed setup leaves its window open so its messages stay readable.
+if exitCode is "0" then
+    tell application "Terminal"
+        if exists setupWindow then close setupWindow saving no
+    end tell
+end if
 return exitCode
 end run`, command, result).CombinedOutput()
 	if err != nil {

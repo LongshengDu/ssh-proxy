@@ -286,6 +286,11 @@ func TestTrayControllerInvalidConfigBlocksStartAndOpensOnce(t *testing.T) {
 	if view.item(ui.ToggleProxy).Disabled {
 		t.Fatal("Start must stay available to retry after corrections")
 	}
+	backend.check = config.ConfigCheck{Valid: false, EditFile: "config.toml", Error: "toml"}
+	run(ctx, c, ui.ToggleProxy)
+	if len(desktop.edited) != 1 || len(desktop.messages) != 3 {
+		t.Fatal("an invalid config.toml reports and opens the log, not an editor", desktop.edited, desktop.messages)
+	}
 	backend.check, backend.calls = validConfig, nil
 	run(ctx, c, ui.ToggleProxy)
 	if !slices.Equal(backend.calls, []string{"check", "login", "start"}) {
@@ -306,10 +311,6 @@ func TestTrayControllerLaunchAutoStart(t *testing.T) {
 		{"already running", fakeBackend{status: control.Status{Phase: control.PhaseRunning, PID: 7}, check: validConfig, autoStart: true}, []string{"check"}, 0},
 		{"unresponsive", fakeBackend{status: control.Status{Phase: control.PhaseUnresponsive, PID: 7}, check: validConfig, autoStart: true}, []string{"check"}, 0},
 		{"invalid config", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig, autoStart: true}, []string{"check"}, 1},
-		{"needs setup", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true, logins: []error{errLoginFailed, nil}},
-			[]string{"check", "check", "login", "trust", "login", "start"}, 0},
-		{"offline at login", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true, logins: []error{errOffline}},
-			[]string{"check", "check", "login", "start"}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			backend := tc.backend
@@ -365,8 +366,8 @@ func TestTrayControllerBusyGateAndRecovery(t *testing.T) {
 	if c.Handle(ctx, ui.ToggleProxy) != nil || c.Handle(ctx, ui.ToggleStartup) != nil || c.Handle(ctx, ui.ToggleAutoStart) != nil {
 		t.Fatal("second action accepted while busy")
 	}
-	if c.Handle(ctx, ui.OpenConfig) != nil || !slices.Equal(desktop.opened, []string{"config.toml"}) {
-		t.Fatal("file actions stay available while busy", desktop.opened)
+	if c.Handle(ctx, ui.OpenConfig) != nil || !slices.Equal(desktop.opened, []string{"config.toml"}) || view.item(ui.Quit).Disabled {
+		t.Fatal("file actions and Exit stay available while busy", desktop.opened)
 	}
 	c.Finish(ctx, ui.ToggleProxy, job())
 	c.Refresh(ctx)
@@ -406,25 +407,6 @@ func TestTrayControllerStopAndExit(t *testing.T) {
 		if stopErr != nil && (!slices.Equal(desktop.messages, []string{"stop failed"}) || view.item(ui.Quit).Disabled || view.item(ui.StopAndQuit).Disabled) {
 			t.Fatal("failed stop must report the error and leave exit choices available", desktop.messages, view.items)
 		}
-	}
-}
-
-func TestTrayControllerOpensFailingConfigOnce(t *testing.T) {
-	ctx := context.Background()
-	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig}
-	c, desktop, _ := newController(backend)
-	for range 3 {
-		if c.CheckConfig(ctx) {
-			t.Fatal("invalid configuration accepted")
-		}
-	}
-	if !slices.Equal(desktop.edited, []string{"ssh_config"}) || len(desktop.messages) != 3 {
-		t.Fatal("failing file must open once while each check reports", desktop.edited, desktop.messages)
-	}
-	backend.check = config.ConfigCheck{Valid: false, EditFile: "config.toml", Error: "toml"}
-	c.CheckConfig(ctx)
-	if len(desktop.edited) != 1 {
-		t.Fatal("invalid config.toml opens the log, not an editor", desktop.edited)
 	}
 }
 

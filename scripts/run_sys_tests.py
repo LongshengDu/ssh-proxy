@@ -20,7 +20,7 @@ import build as b
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build-dir", type=Path, help="Built os-arch folder (default: build/<current-os>-<arch>)")
+    parser.add_argument("--build-dir", type=Path, help="Built folder (default: build/ssh-proxy-<os>-<arch> for this host)")
     parser.add_argument("--go", help="Go executable (otherwise discover/bootstrap)")
     parser.add_argument("--test", metavar="NAME", help="Run one named top-level test in the selected scope")
     selection = parser.add_mutually_exclusive_group()
@@ -158,7 +158,7 @@ def main(argv=None):
     if sys.platform == "darwin" and args.scope != "cli":
         use_macos_venv(sys.argv[1:] if argv is None else argv)
     target = b.host_target()
-    directory = (args.build_dir or b.BUILD / target).resolve()
+    directory = (args.build_dir or b.BUILD / b.install_folder(target)).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     report = b.BUILD / "test-results" / ("system-" + stamp)
     report.mkdir(parents=True)

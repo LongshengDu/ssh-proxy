@@ -7,15 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"ssh-proxy/src/config"
 	"ssh-proxy/tests/helpers"
 )
 
 // Start Proxy When App Launches (app.json) starts the proxy through the same flow as Start:
-// missing hosts open ssh_config once and start nothing, an untrusted host opens
-// setup at launch, a working login starts silently, and a running proxy is reused.
+// an untrusted host opens setup at launch, a working login starts silently, and
+// a running proxy is reused.
 func TestTrayStartsProxyAtLaunch(t *testing.T) {
 	testutil.NativeDesktop(t)
 	dir := testutil.IsolatedBuild(t)
@@ -49,22 +48,11 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 		}
 	}
 
-	// No SSH server yet: only open ssh_config, without an error dialog or the log; never start SSH setup.
-	testutil.WriteFile(t, sshPath, "# Add your hosts\n")
-	app, log := launch()
-	testutil.NativeOpened(t, sshPath)
-	testutil.ExpectNoDialog(t, app.Process.Pid)
-	time.Sleep(2300 * time.Millisecond)
-	if strings.Contains(testutil.ReadFile(log), "Starting the proxy at app launch") || testutil.StatusCLI(t, dir).Phase != "stopped" {
-		t.Fatal("invalid configuration must not start the proxy")
-	}
-	exit(app)
-
 	// Untrusted host: the launch opens interactive setup, then starts.
 	testutil.WriteFile(t, sshPath, hosts)
 	testutil.WriteFile(t, f.Trust, "")
 	before := testutil.NativeTerminals(t)
-	app, log = launch()
+	app, log := launch()
 	testutil.NativeAcceptHost(t, app.Process.Pid, before, f.Fingerprint)
 	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "running" })
 	testutil.NativeTerminalsClosed(t, before)

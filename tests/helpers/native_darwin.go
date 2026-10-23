@@ -237,6 +237,19 @@ tell application "Terminal" to get id of every window`)
 	}
 	return result
 }
+
+// NativeCloseOpenedTerminal closes the Terminal window opened since before,
+// which a failed setup leaves open for the user to read.
+func NativeCloseOpenedTerminal(t *testing.T, before map[string]bool) {
+	t.Helper()
+	for id := range NativeTerminals(t) {
+		if !before[id] {
+			apple(t, `tell application "Terminal" to close window id `+id+` saving no`)
+			return
+		}
+	}
+	t.Fatal("the failed setup closed its terminal window")
+}
 func NativeTerminalsClosed(t *testing.T, before map[string]bool) {
 	t.Helper()
 	WaitFor(t, func() bool {

@@ -82,40 +82,16 @@ func TestNativeSSHConfigIncludesAndCommand(t *testing.T) {
 	if !strings.Contains(second, "user fallback\n") {
 		t.Fatal("Host fallback ignored")
 	}
-
-	trust := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHTrust)
-	if trust.Dir != filepath.Dir(sshPath) {
-		t.Fatal("trust uses different working directory")
-	}
-	trust.Args = trust.Args[:len(trust.Args)-1] // Remove remote 'exit' for -G inspection.
-	trustSettings := testutil.EffectiveSSH(t, trust)
-	if !strings.Contains(trustSettings, "clearallforwardings yes\n") || strings.Contains(trustSettings, "dynamicforward ") ||
-		!strings.Contains(trustSettings, "batchmode no\n") || !strings.Contains(trustSettings, "stdinnull yes\n") {
-		t.Fatal("trust must be interactive without opening listeners")
-	}
-	check := config.SSHCommand(cfg, cfg.Endpoints[0], config.SSHCheck)
-	if check.Args[len(check.Args)-1] != "exit" {
-		t.Fatal("login check must run the remote exit command", check.Args)
-	}
-	check.Args = check.Args[:len(check.Args)-1]
-	checkSettings := testutil.EffectiveSSH(t, check)
-	for _, want := range []string{"clearallforwardings yes", "batchmode yes", "stricthostkeychecking true", "stdinnull yes"} {
-		if !strings.Contains(checkSettings, want+"\n") {
-			t.Fatalf("silent login check must be noninteractive and strict: missing %q", want)
-		}
-	}
-	if strings.Contains(checkSettings, "dynamicforward ") {
-		t.Fatal("silent login check must not open listeners")
-	}
 }
 
-func TestSharedSSHOptionsFromTOML(t *testing.T) {
-	path, _ := testutil.Config(t, "Host proxy-primary\n HostName first.example.invalid\n User tester\n Port 2345\n RemoteCommand unwanted-command\n RequestTTY force\n ForwardAgent yes\n")
-	template := string(testutil.ConfigTemplate(t))
+// Every mode keeps the user's host trust, applies the TOML SSH settings and the
+// managed overrides, and only the tunnel opens a SOCKS listener.
+func TestManagedSSHModes(t *testing.T) {
+	path, sshPath := testutil.Config(t, "Host proxy-primary\n HostName first.example.invalid\n User tester\n RemoteCommand unwanted-command\n RequestTTY force\n ForwardAgent yes\n")
 	configured := strings.NewReplacer("connect_timeout_seconds = 10", "connect_timeout_seconds = 12",
 		"connection_attempts = 1", "connection_attempts = 2",
 		"server_alive_interval_seconds = 15", "server_alive_interval_seconds = 20",
-		"server_alive_count_max = 3", "server_alive_count_max = 4").Replace(template)
+		"server_alive_count_max = 3", "server_alive_count_max = 4").Replace(string(testutil.ConfigTemplate(t)))
 	if err := os.WriteFile(path, []byte(configured), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -123,48 +99,47 @@ func TestSharedSSHOptionsFromTOML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	check := func(c *config.Config, trust bool, settings []string) {
-		t.Helper()
-		cmd := config.SSHCommand(c, c.Endpoints[0], sshMode(trust))
-		if trust {
-			cmd.Args = cmd.Args[:len(cmd.Args)-1]
+	native := testutil.EffectiveSSH(t, exec.Command(cfg.SSH.Executable, "-F", sshPath, cfg.Endpoints[0]))
+	shared := []string{"connecttimeout 12", "connectionattempts 2", "serveraliveinterval 20", "serveralivecountmax 4",
+		"tcpkeepalive yes", "forwardagent no", "requesttty false"}
+	for _, line := range strings.Split(native, "\n") {
+		if strings.HasPrefix(line, "userknownhostsfile ") || strings.HasPrefix(line, "globalknownhostsfile ") {
+			shared = append(shared, line)
 		}
-		output := testutil.EffectiveSSH(t, cmd)
-		if strings.Contains(output, "remotecommand ") {
-			t.Error("a user RemoteCommand must be disabled for the managed tunnel")
-		}
-		for _, want := range settings {
-			if !strings.Contains(output, want+"\n") {
-				t.Errorf("missing effective SSH setting %q", want)
+	}
+	for _, tc := range []struct {
+		mode config.SSHMode
+		want []string
+	}{
+		{config.SSHTunnel, []string{"batchmode yes", "stricthostkeychecking true", "exitonforwardfailure yes", "dynamicforward [127.0.0.1]:1081"}},
+		{config.SSHTrust, []string{"batchmode no", "stricthostkeychecking ask", "clearallforwardings yes", "stdinnull yes"}},
+		{config.SSHCheck, []string{"batchmode yes", "stricthostkeychecking true", "clearallforwardings yes", "stdinnull yes"}},
+	} {
+		cmd := config.SSHCommand(cfg, cfg.Endpoints[0], tc.mode)
+		for _, arg := range cmd.Args {
+			if strings.Contains(strings.ToLower(arg), "knownhostsfile") {
+				t.Fatal("application must not override native host trust", arg)
 			}
 		}
-	}
-	settings := []string{"connecttimeout 12", "connectionattempts 2", "serveraliveinterval 20", "serveralivecountmax 4",
-		"tcpkeepalive yes", "forwardagent no", "requesttty false"}
-	check(cfg, false, append(settings, "stricthostkeychecking true", "batchmode yes", "exitonforwardfailure yes"))
-	check(cfg, true, append(settings, "stricthostkeychecking ask", "batchmode no", "clearallforwardings yes"))
-	// Existing TOML files without these fields get the template's defaults when
-	// a command prepares the configuration; LoadConfig has no defaults of its own.
-	for _, line := range strings.Split(configured, "\n") {
-		if strings.HasPrefix(line, "connect_timeout_seconds =") ||
-			strings.HasPrefix(line, "connection_attempts =") || strings.HasPrefix(line, "server_alive_") {
-			configured = strings.Replace(configured, line+"\n", "", 1)
+		if tc.mode != config.SSHTunnel {
+			if cmd.Args[len(cmd.Args)-1] != "exit" {
+				t.Fatal("login must run the remote exit command", cmd.Args)
+			}
+			cmd.Args = cmd.Args[:len(cmd.Args)-1] // Remove remote 'exit' for -G inspection.
+		}
+		output := testutil.EffectiveSSH(t, cmd)
+		for _, want := range append(tc.want, shared...) {
+			if !strings.Contains(output, want+"\n") {
+				t.Errorf("mode %d: missing effective SSH setting %q", tc.mode, want)
+			}
+		}
+		if strings.Contains(output, "remotecommand ") || (tc.mode != config.SSHTunnel && strings.Contains(output, "dynamicforward ")) {
+			t.Errorf("mode %d: a user RemoteCommand or a login listener remained", tc.mode)
 		}
 	}
-	if err = os.WriteFile(path, []byte(configured), 0600); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "known_hosts")); !os.IsNotExist(err) {
+		t.Fatal("application created its own trust file")
 	}
-	if _, err = config.LoadConfig(path); err == nil {
-		t.Fatal("missing settings must not fall back to built-in defaults")
-	}
-	if err = config.EnsureConfig(path); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err = config.LoadConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	check(cfg, false, []string{"connecttimeout 10", "connectionattempts 1", "serveraliveinterval 15", "serveralivecountmax 3"})
 }
 
 func TestSSHAliasDiscovery(t *testing.T) {
@@ -183,37 +158,6 @@ func TestSSHAliasDiscovery(t *testing.T) {
 		if _, err := config.LoadConfig(path); err == nil {
 			t.Fatalf("expected no valid candidate: %q", content)
 		}
-	}
-}
-
-func TestNativeDefaultHostTrust(t *testing.T) {
-	path, sshPath := testutil.Config(t, "Host proxy-primary\n HostName example.invalid\n User tester\n")
-	cfg, err := config.LoadConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	native := testutil.EffectiveSSH(t, exec.Command(cfg.SSH.Executable, "-F", sshPath, cfg.Endpoints[0]))
-	for _, mode := range []config.SSHMode{config.SSHTunnel, config.SSHTrust, config.SSHCheck} {
-		cmd := config.SSHCommand(cfg, cfg.Endpoints[0], mode)
-		for _, arg := range cmd.Args {
-			if strings.Contains(strings.ToLower(arg), "knownhostsfile") {
-				t.Fatal("application must not override native host trust", arg)
-			}
-		}
-		if mode != config.SSHTunnel {
-			cmd.Args = cmd.Args[:len(cmd.Args)-1]
-		}
-		managed := testutil.EffectiveSSH(t, cmd)
-		for _, line := range strings.Split(native, "\n") {
-			if strings.HasPrefix(line, "userknownhostsfile ") || strings.HasPrefix(line, "globalknownhostsfile ") {
-				if !strings.Contains(managed, line+"\n") {
-					t.Fatalf("native trust changed: %s", line)
-				}
-			}
-		}
-	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "known_hosts")); !os.IsNotExist(err) {
-		t.Fatal("application created its own trust file")
 	}
 }
 
@@ -306,11 +250,4 @@ func TestDefaultPathsAndMissingConfig(t *testing.T) {
 	if err != nil || absent != alternate {
 		t.Fatal(absent, err)
 	}
-}
-
-func sshMode(trust bool) config.SSHMode {
-	if trust {
-		return config.SSHTrust
-	}
-	return config.SSHTunnel
 }

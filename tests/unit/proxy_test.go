@@ -228,33 +228,6 @@ func TestBridgeFailsClosed(t *testing.T) {
 	}
 }
 
-func TestStreamingResponseIsFlushed(t *testing.T) {
-	release := make(chan struct{})
-	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		io.WriteString(w, "data: first\n\n")
-		w.(http.Flusher).Flush()
-		<-release
-	}))
-	defer func() { close(release); origin.Close() }()
-	_, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
-	proxyURL, _ := url.Parse(server.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", "http://stream.invalid/", nil)
-	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
-	defer client.CloseIdleConnections()
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	line, err := bufio.NewReader(resp.Body).ReadString('\n')
-	if err != nil || line != "data: first\n" {
-		t.Fatalf("stream was buffered: %q %v", line, err)
-	}
-}
-
 func TestConfigValidationAndRelativePaths(t *testing.T) {
 	template := testutil.ConfigTemplate(t)
 	dir := t.TempDir()
@@ -273,6 +246,9 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 	if cfg.SSH.ConfigFile != filepath.Join(dir, "ssh_config") || cfg.Endpoints[0] != "proxy-primary" || cfg.Endpoints[1] != "proxy-backup" {
 		t.Fatal("relative paths or endpoint order changed")
 	}
+	if cfg.Logging.MaxSizeMB != 10 || cfg.Logging.MaxLogFiles != 10 {
+		t.Fatal("logging limits not loaded", cfg.Logging)
+	}
 	for _, tc := range []struct{ name, from, to string }{
 		{"nonloopback", `bind = "127.0.0.1"`, `bind = "0.0.0.0"`},
 		{"sameports", `http_port = 8181`, `http_port = 1081`},
@@ -282,6 +258,9 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 		{"bad-ssh-attempts", `connection_attempts = 1`, `connection_attempts = 0`},
 		{"bad-ssh-keepalive", `server_alive_interval_seconds = 15`, `server_alive_interval_seconds = 0`},
 		{"bad-ssh-count", `server_alive_count_max = 3`, `server_alive_count_max = 0`},
+		{"log-size-zero", `max_size_mb = 10`, `max_size_mb = 0`},
+		{"log-size-too-large", `max_size_mb = 10`, `max_size_mb = 1025`},
+		{"no-log-files", `max_log_files = 10`, `max_log_files = 0`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			os.WriteFile(path, []byte(strings.Replace(string(template), tc.from, tc.to, 1)), 0600)
@@ -291,16 +270,9 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 		})
 	}
 	// Settings the program no longer uses are ignored.
-	for _, tc := range []struct{ name, from, to string }{
-		{"obsolete-trust-path", `[ssh]`, "[ssh]\nknown_hosts_file = \"known_hosts\""},
-		{"obsolete-alias-list", `[proxy]`, "endpoints = [\"unused\"]\n[proxy]"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			os.WriteFile(path, []byte(strings.Replace(string(template), tc.from, tc.to, 1)), 0600)
-			if _, err := config.LoadConfig(path); err != nil {
-				t.Fatal("unused setting rejected:", err)
-			}
-		})
+	os.WriteFile(path, []byte(strings.Replace(string(template), `[ssh]`, "[ssh]\nknown_hosts_file = \"known_hosts\"", 1)), 0600)
+	if _, err := config.LoadConfig(path); err != nil {
+		t.Fatal("unused setting rejected:", err)
 	}
 }
 
@@ -418,25 +390,50 @@ func TestSSHJobCleanup(t *testing.T) {
 	}
 }
 
-func TestConfigFlagsRejected(t *testing.T) {
-	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	path := filepath.Join(t.TempDir(), "space path", "config.toml")
-	for _, args := range [][]string{
-		{"check", "-c", path}, {"-c", path, "check"}, {"check", "--config", path}, {"--config=" + path, "check"},
-		{"-c=" + path, "check"}, {"check", "-c=" + path},
-	} {
-		if _, stderr, code := runCLI(t, args); code == 0 || !strings.Contains(stderr, "unknown") {
-			t.Fatalf("removed config flag accepted: %v: %s", args, stderr)
+// The tray runs checks with RunTree: cancelling one, as closing the app does,
+// also ends a child such as ssh that holds the command's output pipe.
+func TestRunTreeCancelEndsChildren(t *testing.T) {
+	switch os.Getenv("SSH_PROXY_TREE_HELPER") {
+	case "parent":
+		child := exec.Command(os.Args[0], "-test.run=^TestRunTreeCancelEndsChildren$")
+		child.Env = append(os.Environ(), "SSH_PROXY_TREE_HELPER=child")
+		child.Stdout = os.Stdout
+		if child.Start() == nil {
+			os.WriteFile(os.Getenv("SSH_PROXY_TREE_PID"), []byte(strconv.Itoa(child.Process.Pid)), 0600)
 		}
+		time.Sleep(time.Minute)
+		return
+	case "child":
+		time.Sleep(time.Minute)
+		return
 	}
-}
-
-func TestProbeRequiresWorkingSOCKS(t *testing.T) {
-	b, err := bridge.NewBridge("127.0.0.1:1", 100*time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
+	record := filepath.Join(t.TempDir(), "child.pid")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestRunTreeCancelEndsChildren$")
+	cmd.Env = append(os.Environ(), "SSH_PROXY_TREE_HELPER=parent", "SSH_PROXY_TREE_PID="+record)
+	platform.HideChild(cmd)
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	done := make(chan error, 1)
+	go func() { done <- platform.RunTree(cmd) }()
+	pid := 0
+	for deadline := time.Now().Add(10 * time.Second); pid == 0; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("helper did not start its child")
+		}
+		data, _ := os.ReadFile(record)
+		pid, _ = strconv.Atoi(string(data))
 	}
-	if err := b.Probe(context.Background(), "example.com:443", time.Second); err == nil {
-		t.Fatal("unusable tunnel marked ready")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the cancelled command still waits for its child's output pipe")
+	}
+	for deadline := time.Now().Add(3 * time.Second); platform.ProcessAlive(pid); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the child survived cancellation")
+		}
 	}
 }

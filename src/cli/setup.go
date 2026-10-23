@@ -22,7 +22,10 @@ func setupLogin(cfg *config.Config, alias string, ssh func(*exec.Cmd) error, out
 		fmt.Fprintf(out, "%s already logs in without prompts.\n", alias)
 		return nil
 	}
-	key, found := config.ChooseIdentity(cfg.IdentityFiles(alias), func(path string) bool { _, err := os.Stat(path); return err == nil })
+	key, found, err := config.ChooseIdentity(cfg.IdentityFiles(alias), func(path string) bool { _, err := os.Stat(path); return err == nil })
+	if err != nil {
+		return err
+	}
 	if !found {
 		if err := createKey(cfg, key, out); err != nil {
 			fmt.Fprintf(out, "Cannot create an SSH key: %v\n", err)

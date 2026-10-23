@@ -8,7 +8,7 @@
 - When system tests fails, only fix the failed one and run the failed one after fix.
 - Use native tools only: no WSL, no cgo, and no macOS application builds during Windows development unless explicitly requested.
 - Keep `.version` unchanged unless the user requests a version change.
-- When your tray, proxy or another program is running from `build/<os>-<arch>/`, build into another folder (`--out build/scratch`) and test it with `--build-dir`.
+- When your tray, proxy or another program is running from `build/ssh-proxy-<os>-<arch>/`, build into another folder (`--out build/scratch`) and test it with `--build-dir`.
 
 # Repository rules
 

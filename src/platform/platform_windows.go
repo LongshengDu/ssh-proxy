@@ -7,10 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+// CacheDir holds runtime state, %LOCALAPPDATA% on Windows.
+func CacheDir() (string, error) { return os.UserCacheDir() }
 
 func LockInstance(id string) (func(), error) {
 	h, err := windows.CreateMutex(nil, false, lockName(id))
@@ -114,6 +118,32 @@ func ContainChild(cmd *exec.Cmd) (func(), error) {
 		return nil, err
 	}
 	return func() { windows.CloseHandle(job) }, nil
+}
+
+// RunTree runs cmd, which comes from exec.CommandContext, in a job that ends
+// every process cmd started once cmd exits or is cancelled. A child such as ssh
+// then cannot outlive cmd or keep its output pipe open.
+func RunTree(cmd *exec.Cmd) error {
+	cmd.WaitDelay = time.Second
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	job, err := ContainChild(cmd)
+	if err != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		return err
+	}
+	defer job()
+	return cmd.Wait()
+}
+
+// OwnsConsole reports whether this process is alone on its console: a window
+// opened just for it, which closes when it exits.
+func OwnsConsole() bool {
+	var processes [2]uint32
+	count, _, _ := windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleProcessList").Call(uintptr(unsafe.Pointer(&processes[0])), uintptr(len(processes)))
+	return count == 1
 }
 
 func ProcessAlive(pid int) bool {

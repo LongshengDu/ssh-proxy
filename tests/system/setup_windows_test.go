@@ -18,8 +18,9 @@ import (
 	"ssh-proxy/tests/helpers"
 )
 
-// A logged login session must leave native SSH's input/output on real console
-// handles while native -E appends diagnostics to the same run log.
+// A logged login session leaves native SSH's input/output on real console
+// handles, where OpenSSH's own messages stay; the log gets login's own lines.
+// A login that fails in a console of its own waits for Enter before it closes.
 func TestTrustLoggingPreservesConsole(t *testing.T) {
 	config, _ := testutil.Config(t, "Host first target\n HostName fixture.invalid\n User tester\n")
 	data, err := os.ReadFile(testutil.CLIPath(testutil.SystemBuild(t)))
@@ -42,26 +43,37 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
 	t.Setenv("SSH_PROXY_TEST_SSH_SUCCESS", "target")
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", record)
-	line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine([]string{cli, "login", "--log", log}))
-	if err != nil {
-		t.Fatal(err)
+	t.Setenv("USERPROFILE", t.TempDir()) // A failed setup looks for keys; never use the developer's.
+	login := func(args ...string) windows.ProcessInformation {
+		t.Helper()
+		line, err := windows.UTF16PtrFromString(windows.ComposeCommandLine(append([]string{cli, "login", "--log", log}, args...)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		startup := windows.StartupInfo{Flags: windows.STARTF_USESHOWWINDOW, ShowWindow: windows.SW_HIDE}
+		startup.Cb = uint32(unsafe.Sizeof(startup))
+		var process windows.ProcessInformation
+		if err := windows.CreateProcess(nil, line, nil, nil, false, windows.CREATE_NEW_CONSOLE, nil, nil, &startup, &process); err != nil {
+			t.Fatal(err)
+		}
+		windows.CloseHandle(process.Thread)
+		t.Cleanup(func() { windows.TerminateProcess(process.Process, 1); windows.CloseHandle(process.Process) })
+		return process
 	}
-	startup := windows.StartupInfo{Flags: windows.STARTF_USESHOWWINDOW, ShowWindow: windows.SW_HIDE}
-	startup.Cb = uint32(unsafe.Sizeof(startup))
-	var process windows.ProcessInformation
-	if err := windows.CreateProcess(nil, line, nil, nil, false, windows.CREATE_NEW_CONSOLE, nil, nil, &startup, &process); err != nil {
-		t.Fatal(err)
+	exitCode := func(process windows.Handle) uint32 {
+		t.Helper()
+		state, err := windows.WaitForSingleObject(process, 15000)
+		if err != nil || state != windows.WAIT_OBJECT_0 {
+			t.Fatalf("login did not finish: %d: %v", state, err)
+		}
+		var code uint32
+		if err := windows.GetExitCodeProcess(process, &code); err != nil {
+			t.Fatal(err)
+		}
+		return code
 	}
-	windows.CloseHandle(process.Thread)
-	defer windows.CloseHandle(process.Process)
-	state, err := windows.WaitForSingleObject(process.Process, 15000)
-	if err != nil || state != windows.WAIT_OBJECT_0 {
-		windows.TerminateProcess(process.Process, 1)
-		t.Fatalf("login did not finish: %d: %v", state, err)
-	}
-	var code uint32
-	if err := windows.GetExitCodeProcess(process.Process, &code); err != nil || code != 0 {
-		t.Fatalf("login failed: %d: %v", code, err)
+	if code := exitCode(login().Process); code != 0 {
+		t.Fatalf("login failed: %d", code)
 	}
 	data, err = os.ReadFile(record)
 	var terminal []bool
@@ -69,8 +81,16 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 		t.Fatalf("SSH must receive console stdin/stdout/stderr with --log: %s (%v)", data, err)
 	}
 	data, err = os.ReadFile(log)
-	if err != nil || !strings.Contains(string(data), "SSH login for target") || !strings.Contains(string(data), "fixture SSH diagnostic") {
-		t.Fatalf("setup diagnostics were not logged: %s (%v)", data, err)
+	if err != nil || !strings.Contains(string(data), "SSH login for target") || strings.Contains(string(data), "fixture SSH diagnostic") {
+		t.Fatalf("the log must get login's lines and the console OpenSSH's: %s (%v)", data, err)
+	}
+	failed := login("first")
+	testutil.WaitFor(t, func() bool {
+		return strings.Contains(testutil.ConsoleText(failed.ProcessId), "Press Enter to close this window.")
+	})
+	testutil.ConsoleType(t, failed.ProcessId, "\r")
+	if code := exitCode(failed.Process); code != 1 {
+		t.Fatalf("failed login exited with %d, want 1", code)
 	}
 }
 

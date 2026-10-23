@@ -3,6 +3,7 @@
 # Fully quit Codex before running it so the new process receives these settings.
 set -euo pipefail
 SSH_PROXY_URL='http://127.0.0.1:8181'
+# Upgrades replace this script: set the fallback below in a renamed copy.
 CODEX_APP='' # Fallback desktop executable or .app if automatic discovery finds nothing.
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -21,7 +22,7 @@ if [[ -d "$app/Contents" ]]; then
     app="$app/Contents/MacOS/$executable"
 fi
 if [[ -z "$app" || ! -x "$app" ]]; then
-    echo 'Codex desktop app not found. Install it or set CODEX_APP in this script to its executable or .app.' >&2
+    echo 'Codex desktop app not found. Install it or set CODEX_APP in a renamed copy of this script to its executable or .app.' >&2
     exit 1
 fi
 

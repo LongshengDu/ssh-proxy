@@ -146,11 +146,12 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 		t.Fatal("failed SSH login returned success")
 	}
 	// SSH runs in the SSH config directory; a caller-relative log path must
-	// still refer to the caller's directory when passed to native ssh -E.
+	// still refer to the caller's directory when a silent check passes it to
+	// native ssh -E.
 	caller := t.TempDir()
 	t.Chdir(caller)
 	t.Setenv("SSH_PROXY_TEST_TERMINAL_RECORD", filepath.Join(caller, "handles.json"))
-	if err := call("login", "--log", "setup/session.txt", "second"); err != nil {
+	if err := call("login", "--check", "--log", "setup/session.txt", "second"); err != nil {
 		t.Fatal(err)
 	}
 	data, err = os.ReadFile(filepath.Join(caller, "setup/session.txt"))

@@ -1,15 +1,12 @@
 package tests
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -170,8 +167,8 @@ func TestRunLogWithoutLimitNeverTruncates(t *testing.T) {
 	}
 }
 
-// logs --follow must continue right after the last line it showed when the size
-// limit cuts the file between two polls: nothing skipped, nothing repeated.
+// When the size limit cuts the log while logs --follow runs, it prints a notice
+// and keeps following the lines written after the cut.
 func TestLogsFollowContinuesAfterSizeLimitCut(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "run.txt")
 	logger, writer, err := logs.NewLog(path, false)
@@ -180,57 +177,59 @@ func TestLogsFollowContinuesAfterSizeLimitCut(t *testing.T) {
 	}
 	defer writer.Close()
 	writer.SetLimit(1)
-	payload := strings.Repeat("x", 200)
-	line := 0
-	write := func(count int) {
-		for range count {
-			line++
-			logger.Printf("line %06d %s", line, payload)
-		}
-	}
-	write(2500)
-	shownFrom := line // Show prints only the last existing line.
+	logger.Print("before the cut")
 	reader, pipe, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	saved := os.Stdout
 	os.Stdout = pipe
-	var output bytes.Buffer
-	copied := make(chan struct{})
-	go func() { io.Copy(&output, reader); close(copied) }()
+	defer func() { os.Stdout = saved }()
+	var mu sync.Mutex
+	var output strings.Builder
+	go func() {
+		buffer := make([]byte, 4096)
+		for {
+			n, err := reader.Read(buffer)
+			mu.Lock()
+			output.Write(buffer[:n])
+			mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	shown := func() string { mu.Lock(); defer mu.Unlock(); return output.String() }
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- logs.Show(ctx, path, 1, true) }()
-	time.Sleep(700 * time.Millisecond)
-	write(100) // Followed normally.
-	time.Sleep(700 * time.Millisecond)
-	write(2500) // Crosses 1 MB, so the file is cut between two polls.
-	time.Sleep(1300 * time.Millisecond)
-	cancel()
-	err = <-done
-	os.Stdout = saved
-	pipe.Close()
-	<-copied
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(path); !strings.HasPrefix(string(data), "--- Earlier lines removed") {
-		t.Fatal("the test did not cut the log")
-	}
-	var shown []int
-	for _, match := range regexp.MustCompile(`line (\d{6}) `).FindAllStringSubmatch(output.String(), -1) {
-		number, _ := strconv.Atoi(match[1])
-		shown = append(shown, number)
-	}
-	for i, number := range shown {
-		if number != shownFrom+i {
-			t.Fatalf("followed output skipped or repeated lines at %d: got line %d, want %d", i, number, shownFrom+i)
+	waitFor := func(ready func() bool) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); !ready(); time.Sleep(20 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("follow output so far: %q", shown())
+			}
 		}
 	}
-	if len(shown) != line-shownFrom+1 || strings.Contains(output.String(), "before they could be shown") {
-		t.Fatalf("followed %d lines, want %d", len(shown), line-shownFrom+1)
+	waitFor(func() bool { return strings.Contains(shown(), "before the cut") })
+	payload := strings.Repeat("x", 1000)
+	for i := 0; i < 1200; i++ {
+		logger.Printf("%04d %s", i, payload) // Crosses 1 MB, so the file is cut.
 	}
+	waitFor(func() bool { return strings.Contains(shown(), "--- The log was cut") })
+	// Lines written while the cut settles may be skipped; later ones are shown.
+	line := 0
+	waitFor(func() bool {
+		line++
+		logger.Printf("after the cut %d", line)
+		return strings.Contains(shown(), "after the cut")
+	})
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	pipe.Close()
 }
 
 func TestRunLogSizeLimit(t *testing.T) {
@@ -271,60 +270,5 @@ func TestRunLogSizeLimit(t *testing.T) {
 	text := string(data)
 	if !strings.Contains(text, "02999 ") || !strings.Contains(text, "\nchild output\n") || !strings.HasSuffix(text, "last line\n") || strings.Contains(text, " 00000 x") {
 		t.Fatal("truncation must keep the newest lines and drop the oldest")
-	}
-}
-
-func TestLogSizeAndRemovedSettings(t *testing.T) {
-	// Removed settings are unused entries: ignored, not errors.
-	for _, tc := range []struct{ name, from, to, want string }{
-		{"size-zero", "max_size_mb = 10", "max_size_mb = 0", "logging.max_size_mb"},
-		{"size-too-large", "max_size_mb = 10", "max_size_mb = 1025", "logging.max_size_mb"},
-		{"size-valid", "max_size_mb = 10", "max_size_mb = 5", ""},
-		{"removed-backups", "max_size_mb = 10", "max_size_mb = 5\nbackups = 3", ""},
-		{"removed-health-target", "[health]", "[health]\ntarget = \"legacy.example:443\"", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
-			template := string(testutil.ConfigTemplate(t))
-			if !strings.Contains(template, tc.from) {
-				t.Fatal("default config changed:", tc.from)
-			}
-			text := strings.Replace(template, tc.from, tc.to, 1)
-			if err := os.WriteFile(path, []byte(text), 0600); err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := config.LoadConfig(path)
-			size := 10
-			if strings.Contains(tc.to, "max_size_mb = 5") {
-				size = 5
-			}
-			if tc.want == "" {
-				if err != nil || cfg.Logging.MaxSizeMB != size {
-					t.Fatal("size limit not loaded", err)
-				}
-			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("want error %q, got %v", tc.want, err)
-			}
-		})
-	}
-}
-
-func TestLogRetentionConfig(t *testing.T) {
-	for _, limit := range []int{-1, 0, 1, 10} {
-		t.Run(fmt.Sprint(limit), func(t *testing.T) {
-			path, _ := testutil.Config(t, "Host test\n HostName example.invalid\n User tester\n")
-			text := strings.Replace(string(testutil.ConfigTemplate(t)), "max_log_files = 10", fmt.Sprintf("max_log_files = %d", limit), 1)
-			if err := os.WriteFile(path, []byte(text), 0600); err != nil {
-				t.Fatal(err)
-			}
-			cfg, err := config.LoadConfig(path)
-			if limit < 1 {
-				if err == nil || !strings.Contains(err.Error(), "logging.max_log_files") {
-					t.Fatal("invalid limit accepted", err)
-				}
-			} else if err != nil || cfg.Logging.MaxLogFiles != limit {
-				t.Fatal("limit not loaded", err)
-			}
-		})
 	}
 }

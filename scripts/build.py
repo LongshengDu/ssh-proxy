@@ -29,7 +29,7 @@ ARCHES = ("amd64", "arm64")
 TARGETS = {f"{goos}-{arch}": (goos, arch) for goos in SYSTEMS for arch in ARCHES}
 PUBLIC = tuple(sorted(path.relative_to(DEFAULTS).as_posix() for path in DEFAULTS.rglob("*") if path.is_file()))
 # support/ holds generated metadata beside the *.in config templates.
-COMMON = (*PUBLIC, ".version", "support/THIRD_PARTY_NOTICES.txt", "support/BUILDINFO.txt", "support/SHA256SUMS")
+COMMON = (*PUBLIC, ".version", "support/LICENSE.txt", "support/THIRD_PARTY_NOTICES.txt", "support/BUILDINFO.txt", "support/SHA256SUMS")
 MAC_APP = "ssh-proxy-app.app/Contents/MacOS/ssh-proxy-app"
 MAC_PLIST = "ssh-proxy-app.app/Contents/Info.plist"
 MAC_ICON = "ssh-proxy-app.app/Contents/Resources/icon.icns"
@@ -146,18 +146,24 @@ def ensure_go(host, env, explicit=None):
 
 
 def ensure_ssh(host, env):
-    if host.startswith("windows"):
-        # Prefer Windows OpenSSH over other ssh.exe builds on PATH, such as Git for Windows' MSYS ssh.
-        native = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "OpenSSH"
-        if not (native / "ssh.exe").is_file() and not shutil.which("ssh", path=env["PATH"]):
-            print("Installing Windows OpenSSH Client (Windows requires an elevated terminal).", flush=True)
-            run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-                 "$ErrorActionPreference = 'Stop'; Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0"], env)
-        if (native / "ssh.exe").is_file():
-            env["PATH"] = str(native) + os.pathsep + env["PATH"]
-    if shutil.which("ssh", path=env["PATH"]):
-        return
-    raise RuntimeError("Native OpenSSH is missing. Install your OS OpenSSH client (Linux: openssh-client/openssh-clients) and retry; Windows installation needs an elevated terminal.")
+    """Put the first native OpenSSH 8.7+ on PATH first for the tests. On Windows, a
+    newer client on PATH wins over System32's, and Git for Windows' MSYS ssh never does."""
+    windows = host.startswith("windows")
+    name = "ssh.exe" if windows else "ssh"
+    candidates = [Path(folder.strip('"')) / name for folder in env["PATH"].split(os.pathsep) if folder]
+    if windows:
+        candidates.append(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "OpenSSH" / name)
+    for candidate in candidates:
+        try:
+            result = subprocess.run([candidate, "-V"], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        match = re.search(r"OpenSSH_(for_Windows_)?(\d+)\.(\d+)", result.stderr + result.stdout)
+        if match and (match[1] or not windows) and (int(match[2]), int(match[3])) >= (8, 7):
+            env["PATH"] = str(candidate.parent) + os.pathsep + env["PATH"]
+            return
+    raise RuntimeError("Tests need native OpenSSH 8.7 or newer on PATH (Windows: a current Windows or Win32-OpenSSH; "
+                       "Linux: openssh-client/openssh-clients).")
 
 
 def environment(target):
@@ -255,28 +261,40 @@ def check_release_folder(output, target):
                            f"Release into an empty --out instead. Unexpected: {', '.join(extra)}")
 
 
+def install_folder(target):
+    """The build folder, the ZIP's name and its root folder: ssh-proxy-<os>-<arch>.
+    No version, so unzipping a new release over an installation keeps its path."""
+    return f"ssh-proxy-{target}"
+
+
+def release_zip(out, target):
+    return out / f"{install_folder(target)}.zip"
+
+
 def package(target, staging, out):
-    """ZIP only the public payload, with one os-arch directory at its root."""
-    archive = out / f"{target}.zip"
+    """ZIP only the public payload under its install folder, and write its checksum
+    beside it: sha256sum -c <zip>.sha256."""
+    archive = release_zip(out, target)
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
         for name in payload_names(target):
             path = staging / name
             if path.is_symlink() or not path.is_file():
                 raise RuntimeError(f"Expected regular payload file: {path}")
-            info = zipfile.ZipInfo(f"{target}/{name}")
+            info = zipfile.ZipInfo(f"{install_folder(target)}/{name}")
             info.create_system = 3
             executable = name.endswith((".exe", ".sh")) or "/MacOS/" in name or name == "ssh-proxy-cli"
             info.external_attr = (stat.S_IFREG | (0o755 if executable else 0o644)) << 16
             bundle.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
-        info = zipfile.ZipInfo(f"{target}/logs/")
+        info = zipfile.ZipInfo(f"{install_folder(target)}/logs/")
         info.create_system = 3
         info.external_attr = (stat.S_IFDIR | 0o755) << 16 | 0x10
         bundle.writestr(info, b"")
+    Path(f"{archive}.sha256").write_text(f"{digest(archive)}  {archive.name}\n", encoding="utf-8", newline="\n")
     print(f"Release ZIP: {archive}", flush=True)
 
 
 def build_target(go, env, target, out, release=False):
-    output = out / target
+    output = out / install_folder(target)
     with tempfile.TemporaryDirectory(prefix="package-", dir=BUILD / ".tmp") as temporary:
         staging = Path(temporary) / target
         binaries = compile_apps(go, env, target, staging)
@@ -289,6 +307,7 @@ def build_target(go, env, target, out, release=False):
         (staging / "support").mkdir(exist_ok=True)
         (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8", newline="\n")
         build_info = {path: run([go, "version", "-m", path], env, capture=True) for path in binaries}
+        (staging / "support" / "LICENSE.txt").write_bytes((ROOT / "LICENSE").read_bytes().replace(b"\r\n", b"\n"))
         (staging / "support" / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8", newline="\n")
         metadata = "\n".join(text.replace(str(path), path.name) for path, text in build_info.items())
         (staging / "support" / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8", newline="\n")
@@ -304,7 +323,9 @@ def build_target(go, env, target, out, release=False):
             shutil.copy2(staging / name, destination)
         (output / "logs").mkdir(exist_ok=True)
         if release:
-            (out / f"{target}.zip").unlink(missing_ok=True)  # Never leave an older ZIP behind a failed check.
+            # Never leave an older ZIP behind a failed check.
+            release_zip(out, target).unlink(missing_ok=True)
+            Path(f"{release_zip(out, target)}.sha256").unlink(missing_ok=True)
             check_release_folder(output, target)
             package(target, staging, out)
     print(f"Build folder: {output}", flush=True)
@@ -312,8 +333,8 @@ def build_target(go, env, target, out, release=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--release", action="store_true", help="Also create <out>/<os>-<arch>.zip")
-    parser.add_argument("--out", type=Path, help="Output parent directory (default: build/)")
+    parser.add_argument("--release", action="store_true", help="Also create <out>/ssh-proxy-<os>-<arch>.zip and its .sha256")
+    parser.add_argument("--out", type=Path, help="Parent of the ssh-proxy-<os>-<arch> folder (default: build/)")
     parser.add_argument("--os", choices=SYSTEMS, help="Target OS (default: current)")
     parser.add_argument("--arch", choices=ARCHES, help="Target architecture (default: current)")
     parser.add_argument("--go", help="Explicit Go executable (otherwise discover or download)")
@@ -324,9 +345,7 @@ def main(argv=None):
     out = (args.out or BUILD).resolve()
     host_env = environment(host)
     go = ensure_go(host, host_env, args.go)
-    ensure_ssh(host, host_env)
     env = environment(target)
-    env["PATH"] = host_env["PATH"]
     cgo = run([go, "list", "-deps", "-f", "{{if .CgoFiles}}{{.ImportPath}}: {{.CgoFiles}}{{end}}", "./src/cmd/..."], env, capture=True)
     if cgo:
         raise RuntimeError("Unexpected cgo dependencies: " + cgo)

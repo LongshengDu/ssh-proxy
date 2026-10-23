@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"ssh-proxy/src/bridge"
-	"ssh-proxy/src/cli"
 	"ssh-proxy/src/config"
 	"ssh-proxy/src/control"
 	"ssh-proxy/tests/helpers"
@@ -127,52 +126,5 @@ func TestStatusProxyURLs(t *testing.T) {
 				t.Fatalf("plain status changed: exit=%d stdout=%q stderr=%q", code, out, stderr)
 			}
 		})
-	}
-}
-
-// Removed or duplicate commands stay rejected before any configuration,
-// OS registration or lifecycle side effect. App management belongs to the tray;
-// proxy autostart is independent of app startup.
-func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
-	runtime := t.TempDir()
-	t.Setenv("SSH_PROXY_RUNTIME", runtime)
-	for _, tc := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"tray"}, `unknown command "tray"`},
-		{[]string{"tray", "--hidden"}, `unknown command "tray"`},
-		{[]string{"trust"}, `unknown command "trust"`},
-		{[]string{"startup"}, `unknown command "startup"`},
-		{[]string{"startup", "enable"}, `unknown command "startup"`},
-		{[]string{"startup", "disable"}, `unknown command "startup"`},
-		{[]string{"startup", "status"}, `unknown command "startup"`},
-		{[]string{"help"}, `unknown command "help"`},
-		{[]string{"version"}, `unknown command "version"`},
-		{[]string{"completion"}, `unknown command "completion"`},
-		{[]string{"service", "install"}, `unknown command "service"`},
-		{[]string{"service", "status"}, `unknown command "service"`},
-		{[]string{"_service"}, `unknown command "_service"`},
-		{[]string{"service", "start"}, `unknown command "service"`},
-		{[]string{"service", "stop"}, `unknown command "service"`},
-		{[]string{"service", "restart"}, `unknown command "service"`},
-		// status and check always print JSON; the other commands print text.
-		{[]string{"status", "--json"}, "unknown flag: --json"},
-		{[]string{"check", "--json"}, "unknown flag: --json"},
-		{[]string{"start", "--json"}, "unknown flag: --json"},
-		{[]string{"stop", "--json"}, "unknown flag: --json"},
-		{[]string{"logs", "--json"}, "unknown flag: --json"},
-		{[]string{"login", "--json"}, "unknown flag: --json"},
-		{[]string{"autostart", "status", "--json"}, "unknown flag: --json"},
-	} {
-		t.Run(strings.Join(tc.args, "-"), func(t *testing.T) {
-			err := cli.Run(tc.args)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("want %q, got %v", tc.want, err)
-			}
-		})
-	}
-	if entries, err := os.ReadDir(runtime); err != nil || len(entries) != 0 {
-		t.Fatalf("rejected commands wrote runtime state: %v %v", entries, err)
 	}
 }

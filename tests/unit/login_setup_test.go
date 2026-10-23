@@ -14,7 +14,8 @@ import (
 
 // login uses an existing key, or creates one where OpenSSH looks without an
 // IdentityFile line; a key path the user configured is respected, even when
-// its name is one of OpenSSH's default names.
+// its name is one of OpenSSH's default names. A path with tokens that ssh -G
+// leaves unexpanded (want "") is refused.
 func TestChooseIdentity(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -34,11 +35,13 @@ func TestChooseIdentity(t *testing.T) {
 		{"configured default name elsewhere", []string{filepath.Join(ssh, "keys", "id_rsa")}, "", filepath.Join(ssh, "keys", "id_rsa"), false},
 		{"configured default path", []string{filepath.Join(ssh, "id_rsa")}, "", filepath.Join(ssh, "id_rsa"), false},
 		{"nothing listed", nil, "", filepath.Join(ssh, "id_ed25519"), false},
+		{"percent token", []string{filepath.Join(ssh, "%r_%h")}, "", "", false},
+		{"environment variable", []string{filepath.Join("${HOME}", "key")}, "", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, found := config.ChooseIdentity(tc.files, func(path string) bool { return path == tc.existing })
-			if got != tc.want || found != tc.found {
-				t.Fatalf("got %s %v, want %s %v", got, found, tc.want, tc.found)
+			got, found, err := config.ChooseIdentity(tc.files, func(path string) bool { return path == tc.existing })
+			if got != tc.want || found != tc.found || (err != nil) != (tc.want == "") {
+				t.Fatalf("got %s %v %v, want %s %v", got, found, err, tc.want, tc.found)
 			}
 		})
 	}

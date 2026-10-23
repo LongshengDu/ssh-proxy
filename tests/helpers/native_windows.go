@@ -75,7 +75,6 @@ func NativeDesktop(t *testing.T) {
 // only after verifying our loopback server's fingerprint. No global keystrokes.
 func NativeAcceptHost(t *testing.T, appPID int, _ map[string]bool, fingerprint string) {
 	t.Helper()
-	kernel := windows.NewLazySystemDLL("kernel32.dll")
 	var consolePID uint32
 	WaitFor(t, func() bool {
 		snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
@@ -88,21 +87,7 @@ func NativeAcceptHost(t *testing.T, appPID int, _ map[string]bool, fingerprint s
 			if entry.ParentProcessID != uint32(appPID) {
 				continue
 			}
-			kernel.NewProc("FreeConsole").Call()
-			ok, _, _ := kernel.NewProc("AttachConsole").Call(uintptr(entry.ProcessID))
-			if ok == 0 {
-				continue
-			}
-			name, _ := windows.UTF16PtrFromString("CONOUT$")
-			handle, err := windows.CreateFile(name, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
-			var text [32768]uint16
-			var count uint32
-			if err == nil {
-				kernel.NewProc("ReadConsoleOutputCharacterW").Call(uintptr(handle), uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)), 0, uintptr(unsafe.Pointer(&count)))
-				windows.CloseHandle(handle)
-			}
-			kernel.NewProc("FreeConsole").Call()
-			content := syscall.UTF16ToString(text[:count])
+			content := ConsoleText(entry.ProcessID)
 			if strings.Contains(strings.Join(strings.Fields(content), ""), fingerprint) && strings.Contains(content, "yes/no") {
 				consolePID = entry.ProcessID
 				return true
@@ -110,8 +95,37 @@ func NativeAcceptHost(t *testing.T, appPID int, _ map[string]bool, fingerprint s
 		}
 		return false
 	})
-	if ok, _, err := kernel.NewProc("AttachConsole").Call(uintptr(consolePID)); ok == 0 {
-		t.Fatal("attach test SSH console", err)
+	ConsoleType(t, consolePID, "yes\r")
+}
+
+// ConsoleText reads the screen of the console that process pid uses.
+func ConsoleText(pid uint32) string {
+	kernel := windows.NewLazySystemDLL("kernel32.dll")
+	kernel.NewProc("FreeConsole").Call()
+	defer kernel.NewProc("FreeConsole").Call()
+	if ok, _, _ := kernel.NewProc("AttachConsole").Call(uintptr(pid)); ok == 0 {
+		return ""
+	}
+	name, _ := windows.UTF16PtrFromString("CONOUT$")
+	handle, err := windows.CreateFile(name, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
+	if err != nil {
+		return ""
+	}
+	defer windows.CloseHandle(handle)
+	var text [32768]uint16
+	var count uint32
+	kernel.NewProc("ReadConsoleOutputCharacterW").Call(uintptr(handle), uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)), 0, uintptr(unsafe.Pointer(&count)))
+	return syscall.UTF16ToString(text[:count])
+}
+
+// ConsoleType writes keys, such as "yes\r", as key events to the console that
+// process pid uses.
+func ConsoleType(t *testing.T, pid uint32, keys string) {
+	t.Helper()
+	kernel := windows.NewLazySystemDLL("kernel32.dll")
+	kernel.NewProc("FreeConsole").Call()
+	if ok, _, err := kernel.NewProc("AttachConsole").Call(uintptr(pid)); ok == 0 {
+		t.Fatal("attach test console", err)
 	}
 	defer kernel.NewProc("FreeConsole").Call()
 	name, _ := windows.UTF16PtrFromString("CONIN$")
@@ -128,7 +142,7 @@ func NativeAcceptHost(t *testing.T, appPID int, _ map[string]bool, fingerprint s
 		Control                     uint32
 	}
 	var input []keyEvent
-	for _, char := range "yes\r" {
+	for _, char := range keys {
 		key := keyEvent{Kind: 1, Down: 1, Repeat: 1, Char: uint16(char)}
 		if char == '\r' {
 			key.Virtual = win.VK_RETURN
@@ -139,7 +153,7 @@ func NativeAcceptHost(t *testing.T, appPID int, _ map[string]bool, fingerprint s
 	}
 	var written uint32
 	if ok, _, err := kernel.NewProc("WriteConsoleInputW").Call(uintptr(handle), uintptr(unsafe.Pointer(&input[0])), uintptr(len(input)), uintptr(unsafe.Pointer(&written))); ok == 0 || written != uint32(len(input)) {
-		t.Fatal("write host-key confirmation to test console", written, err)
+		t.Fatal("write keys to test console", written, err)
 	}
 }
 
@@ -264,6 +278,20 @@ func NativeTerminals(t *testing.T) map[string]bool {
 		}
 	}
 	return result
+}
+
+// NativeCloseOpenedTerminal closes the console window opened since before,
+// which a failed setup leaves open for the user to read.
+func NativeCloseOpenedTerminal(t *testing.T, before map[string]bool) {
+	t.Helper()
+	for id := range NativeTerminals(t) {
+		if !before[id] {
+			hwnd, _ := strconv.ParseUint(id, 10, 64)
+			win.PostMessage(win.HWND(hwnd), win.WM_CLOSE, 0, 0)
+			return
+		}
+	}
+	t.Fatal("the failed setup closed its terminal window")
 }
 func NativeTerminalsClosed(t *testing.T, before map[string]bool) {
 	t.Helper()

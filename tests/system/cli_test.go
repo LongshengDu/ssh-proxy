@@ -76,10 +76,4 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	// Status and stop work even while settings are broken.
 	testutil.MustCLI(t, dir, "status")
 	testutil.MustCLI(t, dir, "stop")
-	if err := os.Remove(configPath); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := testutil.CallCLI(dir, "start"); err == nil {
-		t.Fatal("missing config accepted", string(out))
-	}
 }

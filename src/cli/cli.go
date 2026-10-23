@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"ssh-proxy/src/bridge"
 	"ssh-proxy/src/config"
@@ -121,7 +123,8 @@ func Run(args []string) error {
 		}
 	}
 	// Commands that read the configuration first create missing files from
-	// support/*.in and bring config.toml up to date; status, stop and logs don't.
+	// support/*.in and bring config.toml up to date; status, stop, logs and
+	// autostart disable/status don't.
 	setup := func(do func(config.Paths) error) func(config.Paths) error {
 		return func(p config.Paths) error {
 			if err := config.EnsureConfig(p.Config); err != nil {
@@ -237,7 +240,7 @@ server. Finally it checks that login works without prompts. Working logins exit
 0 at once. If the server refuses password login, send the printed public key to
 your administrator. --check only checks and changes nothing.`}
 	check := loginCmd.Flags().Bool("check", false, "Check unattended login only: no prompts or new host keys; the tray runs it before each start")
-	logPath := loginCmd.Flags().String("log", "", "Append SSH diagnostics to `FILE` (used by the tray)")
+	logPath := loginCmd.Flags().String("log", "", "Also append login messages to `FILE` (used by the tray)")
 	loginCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return run(setup(func(p config.Paths) error { return login(p, strings.Join(args, ""), *check, *logPath) }))(cmd, args)
 	}
@@ -251,8 +254,11 @@ at login. Status reports registration; changes made in OS startup settings may
 not be reflected. Disable before moving the installation folder.`}
 	for _, sub := range [][2]string{{"enable", "Start the proxy at future logins"}, {"disable", "Remove login startup; leave the proxy running"}, {"status", "Show login registration and outdated entries"}} {
 		action := sub[0]
-		autostartCmd.AddCommand(&cobra.Command{Use: action, Short: sub[1], Args: cobra.NoArgs,
-			RunE: run(setup(func(p config.Paths) error { return autostart(p, action) }))})
+		do := func(p config.Paths) error { return autostart(p, action) }
+		if action == "enable" {
+			do = setup(do) // Only enable reads the configuration.
+		}
+		autostartCmd.AddCommand(&cobra.Command{Use: action, Short: sub[1], Args: cobra.NoArgs, RunE: run(do)})
 	}
 	root.AddCommand(startCommand("start", "Start the proxy in the background", false),
 		startCommand("restart", "Restart with the current configuration", true),
@@ -358,9 +364,10 @@ func login(p config.Paths, endpoint string, check bool, logPath string) error {
 		}
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		// Keep all interactive handles on the terminal. Native OpenSSH can
-		// append diagnostics itself, without Go interposing a console pipe.
-		if logPath != "" {
+		// Keep all interactive handles on the terminal, where OpenSSH's own
+		// messages, such as a refused password, stay visible. A silent check has
+		// no reader, so native OpenSSH appends its diagnostics to the log instead.
+		if logPath != "" && check {
 			cmd.Args = append(cmd.Args[:1], append([]string{"-E", logPath}, cmd.Args[1:]...)...)
 		}
 		return cmd.Run()
@@ -386,8 +393,14 @@ func login(p config.Paths, endpoint string, check bool, logPath string) error {
 		}
 		return nil
 	}
+	err = errors.Join(failures...)
 	if len(failures) == 0 {
-		return fmt.Errorf("endpoint not found: %s", endpoint)
+		err = fmt.Errorf("endpoint not found: %s", endpoint)
 	}
-	return errors.Join(failures...)
+	if !check && platform.OwnsConsole() && term.IsTerminal(int(os.Stdin.Fd())) {
+		// The tray's setup window closes when login exits; keep the reasons above readable.
+		fmt.Fprint(os.Stderr, "Press Enter to close this window.")
+		bufio.NewReader(os.Stdin).ReadString('\n')
+	}
+	return err
 }

@@ -436,3 +436,96 @@ func TestProbeAllowsOneUnavailableTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A client that gives up on an idle or streaming response ends the upstream
+// request too, instead of leaving it open through the tunnel.
+func TestClientCancellationClosesUpstream(t *testing.T) {
+	ended := make(chan struct{})
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+		close(ended)
+	}))
+	t.Cleanup(origin.Close) // Runs after the fixture closes the tunnel, which ends a stuck handler.
+	_, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
+	proxyURL, _ := url.Parse(server.URL)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+	defer client.CloseIdleConnections()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", "http://idle.invalid/", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	cancel()
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the cancelled client left the upstream request open")
+	}
+}
+
+// A SOCKS dial that completes after the tunnel was replaced belongs to the old
+// SSH child; the bridge rejects it instead of handing it to the client.
+func TestDialCompletingAfterFailoverIsRejected(t *testing.T) {
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "old tunnel") }))
+	t.Cleanup(origin.Close)
+	socks, _ := testutil.FakeSOCKS(t, strings.TrimPrefix(origin.URL, "http://"))
+	// Hold the SOCKS connection until the test has replaced the tunnel.
+	gate, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { gate.Close() })
+	dialing, release := make(chan struct{}), make(chan struct{})
+	go func() {
+		client, err := gate.Accept()
+		if err != nil {
+			return
+		}
+		defer client.Close()
+		close(dialing)
+		<-release
+		upstream, err := net.Dial("tcp", socks)
+		if err != nil {
+			return
+		}
+		defer upstream.Close()
+		go io.Copy(upstream, client)
+		io.Copy(client, upstream)
+	}()
+	b, err := bridge.NewBridge(gate.Addr().String(), 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.SetReady(true)
+	server := httptest.NewServer(b)
+	t.Cleanup(func() { b.SetReady(false); server.Close() })
+	proxyURL, _ := url.Parse(server.URL)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 5 * time.Second}
+	defer client.CloseIdleConnections()
+	status := make(chan int, 1)
+	go func() {
+		resp, err := client.Get("http://failover.invalid/")
+		if err != nil {
+			status <- 0
+			return
+		}
+		resp.Body.Close()
+		status <- resp.StatusCode
+	}()
+	select {
+	case <-dialing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request did not reach SOCKS")
+	}
+	b.SetReady(false)
+	b.SetReady(true)
+	close(release)
+	if got := <-status; got != http.StatusBadGateway {
+		t.Fatalf("a dial from the replaced tunnel was used: status %d, want 502", got)
+	}
+}

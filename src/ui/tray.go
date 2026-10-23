@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -273,7 +274,17 @@ func commandBackend(parent context.Context, backend string, args ...string) ([]b
 	defer cancel()
 	cmd := exec.CommandContext(ctx, backend, args...)
 	platform.HideChild(cmd)
-	out, err := cmd.CombinedOutput()
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	var err error
+	if args[0] == "start" {
+		err = cmd.Run() // The detached supervisor must outlive this command.
+	} else {
+		// Closing the app or a timeout also ends a check's ssh child, which would
+		// otherwise keep running and hold the output pipe open.
+		err = platform.RunTree(cmd)
+	}
+	out := output.Bytes()
 	slog.Info("CLI command", "args", args, "output", strings.TrimSpace(string(out)))
 	if err != nil {
 		return nil, fmt.Errorf("ssh-proxy-cli %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))

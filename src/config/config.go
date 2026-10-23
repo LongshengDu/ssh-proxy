@@ -134,12 +134,9 @@ func PathsForExecutable(exe string) (Paths, error) {
 	}
 	hash := sha256.Sum256([]byte(identity))
 	id := hex.EncodeToString(hash[:8])
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
-		base, err = os.UserCacheDir()
-		if err != nil {
-			return Paths{}, err
-		}
+	base, err := platform.CacheDir()
+	if err != nil {
+		return Paths{}, err
 	}
 	runtimeDir := filepath.Join(base, "ssh-proxy", id)
 	if override := os.Getenv("SSH_PROXY_RUNTIME"); override != "" {
@@ -426,10 +423,20 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 func (c *Config) IdentityFiles(alias string) []string { return c.resolved[alias].identityFiles }
 
 // ChooseIdentity returns the first existing key, or where login setup should create
-// one. Without an IdentityFile line, OpenSSH lists its default keys, including
+// one. ssh -G leaves %tokens and ${variables} in IdentityFile unexpanded, so login
+// cannot tell which file such a path means and refuses it.
+func ChooseIdentity(files []string, exists func(string) bool) (path string, found bool, err error) {
+	path, found = chooseIdentity(files, exists)
+	if strings.Contains(path, "%") || strings.Contains(path, "${") {
+		return "", false, fmt.Errorf("IdentityFile %s uses %%tokens or ${variables} that login cannot resolve; use a literal path in ssh_config, or create the key and add it to the server yourself", path)
+	}
+	return path, found, nil
+}
+
+// Without an IdentityFile line, OpenSSH lists its default keys, including
 // ~/.ssh/id_ed25519, which is created then. Otherwise OpenSSH tries only the
 // configured keys, so the first one is created, whatever its name.
-func ChooseIdentity(files []string, exists func(string) bool) (path string, found bool) {
+func chooseIdentity(files []string, exists func(string) bool) (string, bool) {
 	for _, file := range files {
 		if exists(file) {
 			return file, true

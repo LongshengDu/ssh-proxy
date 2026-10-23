@@ -121,7 +121,7 @@ Flags:
       --check      Check unattended login only: no prompts or new host
                    keys; the tray runs it before each start
   -h, --help       help for login
-      --log FILE   Append SSH diagnostics to FILE (used by the tray)
+      --log FILE   Also append login messages to FILE (used by the tray)
 --- stderr
 === ssh-proxy-cli logs --help
 exit 0
@@ -442,6 +442,71 @@ exit 1
 --- stdout
 --- stderr
 Error: unknown command "_service" for "ssh-proxy-cli"
+=== ssh-proxy-cli tray
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "tray" for "ssh-proxy-cli"
+=== ssh-proxy-cli startup enable
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "startup" for "ssh-proxy-cli"
+
+Did you mean this?
+	start
+	status
+
+=== ssh-proxy-cli completion
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "completion" for "ssh-proxy-cli"
+=== ssh-proxy-cli service install
+exit 1
+--- stdout
+--- stderr
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli check --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli start --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli stop --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli logs --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli login --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli autostart status --json
+exit 1
+--- stdout
+--- stderr
+Error: unknown flag: --json
+=== ssh-proxy-cli autostart status
+exit 0
+--- stdout
+Proxy autostart: disabled
+--- stderr
+=== ssh-proxy-cli autostart disable
+exit 0
+--- stdout
+Proxy autostart: disabled
+--- stderr
 === ssh-proxy-cli logs -lines 0
 exit 1
 --- stdout

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"ssh-proxy/src/cli"
+	"ssh-proxy/src/config"
 )
 
 // Expected CLI output: every help topic and the error text and exit code of
@@ -41,35 +41,16 @@ var cliOutputCases = [][]string{
 	{"service", "bogus"}, {"autostart", "status", "extra"}, {"autostart", "bogus"},
 	{"service", "install", "--user", "other"}, {"service", "install", "extra"},
 	{"_run", "extra"}, {"_service", "extra"},
+	// Removed or duplicate commands stay rejected; app management belongs to the tray.
+	{"tray"}, {"startup", "enable"}, {"completion"}, {"service", "install"},
+	// status and check always print JSON; the other commands print text.
+	{"check", "--json"}, {"start", "--json"}, {"stop", "--json"}, {"logs", "--json"}, {"login", "--json"},
+	{"autostart", "status", "--json"},
+	// Login registration that needs no configuration; this test binary's install is never registered.
+	{"autostart", "status"}, {"autostart", "disable"},
 	// Long options take two dashes, with a space or = before the value; one dash is rejected.
 	{"logs", "-lines", "0"}, {"start", "-foreground", "-wait", "0"}, {"start", "--wait=0"}, {"logs", "-f", "--lines=0"},
 	{"-config", "other.toml", "status"},
-}
-
-func TestCLIEquivalentOutput(t *testing.T) {
-	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	groups := [][][]string{
-		{{}, {"-h"}, {"--help"}},
-		{{"autostart"}, {"autostart", "-h"}, {"autostart", "--help"}, {"autostart", "bogus", "--help"}},
-		{{"start", "--help"}, {"start", "--wait", "0", "--help"}},
-		{{"stop", "--help"}, {"stop", "extra", "--help"}},
-		{{"-v"}, {"--version"}},
-	}
-	for _, name := range []string{"start", "restart", "stop", "status", "logs", "test", "check", "login", "autostart enable", "autostart disable", "autostart status"} {
-		command := strings.Fields(name)
-		groups = append(groups, [][]string{append(command, "--help"), append(slices.Clone(command), "-h")})
-	}
-	for _, group := range groups {
-		out, errText, code := runCLI(t, group[0])
-		for _, args := range group[1:] {
-			t.Run(strings.Join(args, " "), func(t *testing.T) {
-				gotOut, gotErr, gotCode := runCLI(t, args)
-				if gotOut != out || gotErr != errText || gotCode != code {
-					t.Fatalf("output differs from %v: exit=%d stdout=%q stderr=%q", group[0], gotCode, gotOut, gotErr)
-				}
-			})
-		}
-	}
 }
 
 // runCLI mirrors src/cmd/ssh-proxy-cli/main.go with captured standard streams.
@@ -101,7 +82,8 @@ func runCLI(t *testing.T, args []string) (stdout, stderr string, code int) {
 }
 
 func TestCLIExpectedOutput(t *testing.T) {
-	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
+	runtime := t.TempDir()
+	t.Setenv("SSH_PROXY_RUNTIME", runtime)
 	var got strings.Builder
 	for _, args := range cliOutputCases {
 		stdout, stderr, code := runCLI(t, args)
@@ -111,6 +93,17 @@ func TestCLIExpectedOutput(t *testing.T) {
 			}
 		}
 		fmt.Fprintf(&got, "=== ssh-proxy-cli %s\nexit %d\n--- stdout\n%s--- stderr\n%s", strings.Join(args, " "), code, stdout, stderr)
+	}
+	// None of these commands may write runtime state or create the configuration.
+	p, err := config.PathsFor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(runtime); err != nil || len(entries) != 0 {
+		t.Fatalf("runtime state written: %v %v", entries, err)
+	}
+	if _, err := os.Stat(p.Config); !os.IsNotExist(err) {
+		t.Fatal("config.toml created", err)
 	}
 	path := filepath.Join("testdata", "cli", "expected.txt")
 	if os.Getenv("SSH_PROXY_UPDATE_EXPECTED") == "1" {

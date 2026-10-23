@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -161,6 +162,11 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				testutil.NativeDismiss(t, pid)
 				testutil.NativeOpened(t, testutil.TrayLog(dir))
 				testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
+				if tc.trustExit != "0" && runtime.GOOS == "darwin" {
+					// A failed setup keeps its window open for the user to read. On
+					// Windows the real CLI waits for Enter; this stand-in does not.
+					testutil.NativeCloseOpenedTerminal(t, before)
+				}
 				testutil.NativeTerminalsClosed(t, before)
 			}
 			testutil.NativeClick(t, pid, "Exit app")
@@ -173,7 +179,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 
 func TestTrayRecoveryErrors(t *testing.T) {
 	testutil.NativeDesktop(t)
-	for _, scenario := range []string{"bad config", "missing CLI", "empty SSH", "missing SSH", "--backend", "--smoke-test"} {
+	for _, scenario := range []string{"bad config", "missing CLI", "missing SSH", "an argument"} {
 		t.Run(scenario, func(t *testing.T) {
 			dir := testutil.IsolatedBuild(t)
 			suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
@@ -191,11 +197,8 @@ func TestTrayRecoveryErrors(t *testing.T) {
 					t.Fatal(err)
 				}
 				reason = "backend missing"
-			case "empty SSH":
-				testutil.WriteFile(t, servers, "# hosts\n")
-				reason = "add your hosts"
-			case "--backend", "--smoke-test":
-				args = []string{scenario}
+			case "an argument":
+				args = []string{"--backend"}
 				reason = "takes no command-line arguments"
 			}
 			app := testutil.StartApp(t, dir, args...)
@@ -203,13 +206,13 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			// The tray creates its run log first thing; wait for it before using its path.
 			testutil.WaitFor(t, func() bool { return testutil.TrayLog(dir) != "" })
 			log := testutil.TrayLog(dir)
-			if strings.HasSuffix(scenario, "SSH") {
-				// Unfinished SSH setup only opens the SSH file (created from the
-				// template if missing); no error dialog or log, but the reason is logged.
+			if scenario == "missing SSH" {
+				// Unfinished SSH setup only opens the SSH file, created from the
+				// template; no error dialog or log, but the reason is logged.
 				testutil.NativeOpened(t, servers)
 				testutil.ExpectNoDialog(t, pid)
 				testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), reason) })
-				if scenario == "missing SSH" && !strings.Contains(testutil.ReadFile(servers), "Why did this file open?") {
+				if !strings.Contains(testutil.ReadFile(servers), "Why did this file open?") {
 					t.Fatal("a missing SSH file must start from the template")
 				}
 			} else {
@@ -222,18 +225,6 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			}
 			startupFailure := scenario == "missing CLI" || len(args) != 0
 			if !startupFailure {
-				if scenario == "bad config" {
-					p, err := config.PathsForExecutable(testutil.CLIPath(dir))
-					if err != nil {
-						t.Fatal(err)
-					}
-					t.Cleanup(func() { ui.SetStartup(p.ID, "", false) })
-					for _, enabled := range []bool{true, false} {
-						testutil.NativeClick(t, pid, "Launch App at Login")
-						testutil.WaitFor(t, func() bool { got, err := ui.StartupEnabled(p.ID); return err == nil && got == enabled })
-						time.Sleep(300 * time.Millisecond)
-					}
-				}
 				testutil.NativeClick(t, pid, "Exit app")
 			}
 			err := app.Wait()

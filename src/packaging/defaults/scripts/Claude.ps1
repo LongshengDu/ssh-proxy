@@ -2,6 +2,7 @@
 # Fully quit Claude before running it so the new process receives these settings.
 $ErrorActionPreference = 'Stop'
 $SSH_PROXY_URL = 'http://127.0.0.1:8181'
+# Upgrades replace this script: set the fallback below in a renamed copy.
 $CLAUDE_APP = '' # Fallback desktop executable if automatic discovery finds nothing.
 
 # Locate the packaged app or an older per-user desktop installation.
@@ -13,7 +14,7 @@ $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Claude\Claude.exe'
 if ($CLAUDE_APP) { $candidates += $CLAUDE_APP }
 $app = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 if (-not $app) {
-    throw 'Claude desktop app not found. Install it or set CLAUDE_APP in this script to its executable (not the Claude Code CLI).'
+    throw 'Claude desktop app not found. Install it or set CLAUDE_APP in a renamed copy of this script to its executable (not the Claude Code CLI).'
 }
 
 # Use the running proxy's URL when available; otherwise keep the default.

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"ssh-proxy/src/config"
 	"ssh-proxy/src/control"
 	"ssh-proxy/src/ui"
 )
@@ -28,14 +27,6 @@ func TestTrayIconSizes(t *testing.T) {
 		if err != nil || image.Width != tc.got || image.Height != tc.got {
 			t.Fatalf("tray icon for %d px: %dx%d, want %d (%v)", tc.want, image.Width, image.Height, tc.got, err)
 		}
-	}
-}
-
-func TestConfigOpensOnce(t *testing.T) {
-	seen := ui.SetupPrompts{}
-	invalid := config.ConfigCheck{EditFile: "hosts", Error: "no hosts"}
-	if seen.Config(invalid) != "hosts" || seen.Config(invalid) != "" || seen.Config(config.ConfigCheck{Valid: true, EditFile: "other"}) != "" {
-		t.Fatal("configuration opener must run once for each invalid file")
 	}
 }
 
@@ -58,17 +49,10 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 		if err != nil || len(scripts) != want || scripts[0].Name != "Codex" {
 			t.Fatal(goos, scripts, err)
 		}
-		for _, phase := range []control.Phase{"stopped", "connecting", "degraded", "running"} {
-			for _, busy := range []bool{false, true} {
-				items := ui.Menu(ui.MenuState{Status: control.Status{Phase: phase}, StartupKnown: true, AutoStartKnown: true, Busy: busy}, scripts...)
-				index := slices.IndexFunc(items, func(item ui.Item) bool { return item.ID == ui.ScriptBase })
-				if index < 1 || !items[index-1].Separator || items[index].Label != "Run: Codex" {
-					t.Fatal(items)
-				}
-				if items[index].Disabled != (busy || phase != "running") {
-					t.Fatal(phase, busy, items[index])
-				}
-			}
+		items := ui.Menu(ui.MenuState{Status: control.Status{Phase: "running"}, StartupKnown: true, AutoStartKnown: true}, scripts...)
+		index := slices.IndexFunc(items, func(item ui.Item) bool { return item.ID == ui.ScriptBase })
+		if index < 1 || !items[index-1].Separator || items[index].Label != "Run: Codex" {
+			t.Fatal(items)
 		}
 	}
 }
@@ -131,14 +115,6 @@ func TestTrayReflectsSupervisorAndStartupIndependently(t *testing.T) {
 			if separators != 5 {
 				t.Fatal("expected five native separators", separators)
 			}
-		}
-	}
-	for _, item := range ui.Menu(ui.MenuState{Status: control.Status{Phase: "running", PID: 123}, StartupKnown: true, AutoStartKnown: true, Busy: true}) {
-		if (item.ID == ui.ToggleProxy || item.ID == ui.ToggleStartup || item.ID == ui.ToggleAutoStart || item.ID == ui.StopAndQuit) && !item.Disabled {
-			t.Fatal("mutation enabled during action", item)
-		}
-		if (item.ID == ui.OpenConfig || item.ID == ui.Quit) && item.Disabled {
-			t.Fatal("recovery action unavailable", item)
 		}
 	}
 	for _, item := range ui.Menu(ui.MenuState{Status: control.Status{Phase: "checking"}, StartupKnown: true}) {

@@ -8,13 +8,26 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/gofrs/flock"
 )
 
+// CacheDir holds runtime state and locks. Linux uses ~/.cache rather than
+// XDG_CACHE_HOME, which a login shell may set but the systemd user manager,
+// which runs autostart, does not see.
+func CacheDir() (string, error) {
+	if runtime.GOOS == "linux" {
+		home, err := os.UserHomeDir()
+		return filepath.Join(home, ".cache"), err
+	}
+	return os.UserCacheDir()
+}
+
 func LockInstance(id string) (func(), error) {
-	base, err := os.UserCacheDir()
+	base, err := CacheDir()
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +97,22 @@ func ContainChild(cmd *exec.Cmd) (func(), error) {
 	return func() { cmd.Process.Signal(syscall.SIGTERM) }, nil
 }
 func ProcessAlive(pid int) bool { return pid > 0 && syscall.Kill(pid, 0) == nil }
+
+// RunTree runs cmd, which comes from exec.CommandContext, in its own process
+// group and ends the whole group when cmd is cancelled. A child such as ssh
+// then cannot outlive cmd or keep its output pipe open.
+func RunTree(cmd *exec.Cmd) error {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
+	return cmd.Run()
+}
+
+// OwnsConsole is false: only Windows closes a console window when its process exits.
+func OwnsConsole() bool { return false }
 
 type parentLease struct{ reader, writer *os.File }
 

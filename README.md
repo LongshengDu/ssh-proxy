@@ -2,6 +2,8 @@
 
 **Using SSH Proxy?** See the [中文使用指南 / English guide](src/packaging/defaults/README.md).
 
+---
+
 SSH Proxy runs local HTTP/HTTPS and SOCKS5 proxies through native OpenSSH. It ships two programs as a portable ZIP:
 
 - **`ssh-proxy-cli`** (Windows, macOS, Linux) owns the proxy.
@@ -61,17 +63,17 @@ Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `b
 
 `config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Invalid values are rejected; settings the program doesn't use are ignored. Defaults live only in the template: `EnsureConfig` adds missing settings before any command loads the file, so `LoadConfig` has no built-in defaults. See the [template](src/packaging/defaults/support/config.toml.in).
 
-Packages ship only the templates `support/config.toml.in` and `support/ssh_config.in`, never the user's files, so unzipping a new version over an installation keeps the user's settings. Before any command that reads the configuration (`check`, `start`/`restart`, `login`, `test`, `autostart`, `_run`; the tray's launch `check` included), `config.EnsureConfig` runs silently (`src/config/templates.go`): it copies every `support/NAME.in` to `NAME` when `NAME` is missing, and merges an existing `config.toml` with the template, adding new settings and keeping every existing entry, including unused or invalid ones (validation reports invalid values). It rewrites the file only when settings were added, and comments are then lost; a uniquely named temporary file lets the tray and CLI autostart upgrade at the same moment. Invalid TOML is left for validation to report. `status`, `stop` and `logs` never touch files. `support/` is part of every installation: a missing template stops the command with an error asking to extract the full release again. Tests that build an install folder add the templates with `testutil.Support`.
+Packages ship only the templates `support/config.toml.in` and `support/ssh_config.in`, never the user's files, so unzipping a new version over an installation keeps the user's settings. Before any command that reads the configuration (`check`, `start`/`restart`, `login`, `test`, `autostart enable`, `_run`; the tray's launch `check` included), `config.EnsureConfig` runs silently (`src/config/templates.go`): it copies every `support/NAME.in` to `NAME` when `NAME` is missing, and merges an existing `config.toml` with the template, adding new settings and keeping every existing entry, including unused or invalid ones (validation reports invalid values). It rewrites the file only when settings were added, and comments are then lost; a uniquely named temporary file lets the tray and CLI autostart upgrade at the same moment. Invalid TOML is left for validation to report. `status`, `stop`, `logs` and `autostart disable`/`status` never touch files. `support/` is part of every installation: a missing template stops the command with an error asking to extract the full release again. Tests that build an install folder add the templates with `testutil.Support`.
 
 Endpoints are the concrete `Host` aliases declared in the selected SSH config, in first-appearance order without duplicates. Wildcards, exclusions and `Match` add no targets. `Include` can supply settings, but its aliases are not enumerated as targets. Native `ssh -G` resolves effective settings, including `ProxyJump` and authentication; do not reimplement it.
 
 Managed tunnels enforce batch authentication, strict host-key checking, no TTY or agent forwarding, no authentication forking or multiplexing, and `ExitOnForwardFailure`. One matching `DynamicForward` is reused; conflicting or multiple forwards and `ClearAllForwardings yes` are rejected. Host trust uses OpenSSH's default files.
 
-`login` is a guided setup that skips steps already done (`src/cli/setup.go`): if unattended login already works it exits 0; otherwise it uses the first existing key from `ssh -G`'s `identityfile` list, or creates one without a passphrase (a configured custom path, else OpenSSH's default `~/.ssh/id_ed25519`, so no `IdentityFile` is needed), using `ssh-keygen` beside the configured `ssh`. It then logs in interactively, without forwarding, and appends the public key's type and data to the remote `~/.ssh/authorized_keys` unless present (POSIX shell assumed; nothing from the key comment reaches the remote command). It checks unattended login again, offers `ssh-add` for a passphrase-protected key, and on failure prints the public key for the administrator. It never stores passwords, and only OpenSSH prompts, so the tray's setup terminal runs the same `login`. `login --check` only verifies the tunnel's unattended authentication policy and changes nothing. `--log FILE` appends diagnostics without piping terminal input.
+`login` is a guided setup that skips steps already done (`src/cli/setup.go`): if unattended login already works it exits 0; otherwise it uses the first existing key from `ssh -G`'s `identityfile` list (a path with `%` tokens or `${}` variables, which `ssh -G` leaves unexpanded, is refused), or creates one without a passphrase (a configured custom path, else OpenSSH's default `~/.ssh/id_ed25519`, so no `IdentityFile` is needed), using `ssh-keygen` beside the configured `ssh`. It then logs in interactively, without forwarding, and appends the public key's type and data to the remote `~/.ssh/authorized_keys` unless present (POSIX shell assumed; nothing from the key comment reaches the remote command). It checks unattended login again, offers `ssh-add` for a passphrase-protected key, and on failure prints the public key for the administrator. It never stores passwords, and only OpenSSH prompts, so the tray's setup terminal runs the same `login`. `login --check` only verifies the tunnel's unattended authentication policy and changes nothing. `--log FILE` also appends login's own messages, without piping terminal input; OpenSSH's messages stay on the terminal, except that `--check` has `ssh -E` append them to the file. A login that fails in a Windows console of its own, such as the tray's setup window, waits for Enter before the window closes.
 
 ### One supervisor per install
 
-The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh-proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates unit tests; each system test copies the build to its own folder, which gives it its own identity, so system tests can run in parallel.
+The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh-proxy\<id>` on Windows; on Linux `~/.cache` even when `XDG_CACHE_HOME` is set, because the systemd user manager that runs autostart may not see it). `SSH_PROXY_RUNTIME` isolates unit tests; each system test copies the build to its own folder, which gives it its own identity, so system tests can run in parallel.
 
 All entry points use the same supervisor. Background `start` launches detached `_run`; foreground starts run in the calling terminal. Only the instance-lock holder creates the run log and publishes state. Concurrent background starters join the winner through its control API; a losing `_run` exits with code 10 without creating a log. A duplicate foreground start fails without touching live state. `restart` validates configuration before stopping anything.
 
@@ -124,13 +126,13 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
   - No elevation, stored password, pre-login start or OS restart policy.
 - **Windows long-path fallback:** a Run command over 260 characters becomes a hidden PowerShell launcher that reads its own key (`HKCU\Software\SSHProxy\CLI-<id>` or `App-<id>`). The key is deleted when unused.
 - **Repair:** the app rewrites an old-format app entry at the same location when it starts.
-- **Folder moves change `<id>`,** so users disable both entries before moving and enable them again afterwards. Registration doesn't detect disabling in OS settings, for example Task Manager.
+- **Folder moves change `<id>`,** so users disable any enabled login startup entries before moving and enable them again afterwards. Registration doesn't detect disabling in OS settings, for example Task Manager.
 
 ### Tray
 
 The app takes no arguments and locates the adjacent CLI, including from its macOS bundle. Its controller polls about every two seconds, serializes actions, and changes native menu items only when their values change. The status rows show SSH host:port, SOCKS5 and HTTP addresses.
 
-Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH server yet, as on first launch) only opens `ssh_config` at launch and on every Start, starting a missing file from `support/ssh_config.in`. It shows no error dialog or log; the template's first lines explain why it opened. Other invalid configs show the error dialog and open the failing file once per run. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup opens only when OpenSSH reports `Permission denied` or `Host key verification failed`; any other failure, such as a network or VPN that is not up yet, starts the proxy, which keeps retrying. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
+Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH server yet, as on first launch) only opens `ssh_config` at launch and on every Start, starting a missing file from `support/ssh_config.in`. It shows no error dialog or log; the template's first lines explain why it opened. Other invalid configs show the error dialog and open the failing file once per run. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup opens only when OpenSSH reports `Permission denied` or `Host key verification failed`; any other failure, such as a network or VPN that is not up yet, starts the proxy, which keeps retrying. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. A failed setup keeps its window open: the Windows console waits for Enter, and macOS leaves the Terminal window. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently. The tray runs its CLI commands other than `start` contained (a Windows job, a macOS process group), so closing the app also ends a check's `ssh`; `start` stays uncontained because its supervisor must survive.
 
 **Start Proxy When App Launches** reuses that flow. Its `start_proxy_on_launch` setting lives in `app.json` beside the TOML, defaults to false when absent, and is rewritten as a whole file. CLI autostart ignores it. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keep-proxy-running exits only the tray.
 
@@ -141,14 +143,14 @@ Configs and logs open as text regardless of extension: Windows uses the `.txt` a
 ### Logs
 
 - **One file per run:** each tray or proxy run writes one continuous file in `logs/`. Retention keeps `max_log_files` per kind (tray, proxy) across identities, never deletes a file still in use, and ignores unrelated files. The instance lock is taken before the log is created.
-- **Size limit:** above `max_size_mb`, the owner removes the older half in place and marks the cut. Truncation is held while `login` or `ssh -E` append. The cut marker carries a cumulative byte offset, so `logs --follow` never skips or repeats retained text.
+- **Size limit:** above `max_size_mb`, the owner removes the older half in place and marks the cut. Truncation is held while `login` or `ssh -E` append. The cut marker records the cut time, so `logs --follow` notices every cut, prints a notice and continues from the end; lines written during the cut may not be shown.
 - **Unreadable TOML:** config failures are still logged, using the default limits.
 
 ## Build and release
 
 Requirements:
 
-- Python 3.10+ and OpenSSH 8.7+.
+- Python 3.10+. Tests also need native OpenSSH 8.7+: the runners put the first such `ssh` first on `PATH` (on Windows, a newer install wins over System32's, and Git's MSYS `ssh` is skipped).
 - No C compiler. Building and testing need no pip packages; `requirements.txt` serves only macOS app tests and icon rendering.
 - `build.py` uses a Go version that satisfies [go.mod](go.mod), or downloads one into `.build-tools` with SHA-256 verification.
 
@@ -162,17 +164,17 @@ Targets:
 `--os` accepts `windows`, `darwin` or `linux`; `--arch` accepts `amd64` or `arm64`. Both default to the build host.
 
 ```sh
-python scripts/build.py                                   # build/<os>-<arch>/
-python scripts/build.py --out build/scratch               # while build/<os>-<arch> is running
-python scripts/build.py --release --out build/release     # clean folder: build/release/<os>-<arch>/ + .zip
+python scripts/build.py                                   # build/ssh-proxy-<os>-<arch>/
+python scripts/build.py --out build/scratch               # while build/ssh-proxy-<os>-<arch> is running
+python scripts/build.py --release --out build/release     # clean folder: build/release/ssh-proxy-<os>-<arch>/, .zip and .sha256
 python scripts/build.py --release --os linux --arch arm64 --out ./packages
 ```
 
-- **Every build** writes the whole payload into `<out>/<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
-- **`--release`** also creates `<out>/<os>-<arch>.zip`, but first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--out`, for example `build/release`.
+- **Every build** writes the whole payload into `<out>/ssh-proxy-<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
+- **`--release`** also creates `<out>/ssh-proxy-<os>-<arch>.zip`, whose root folder has the same name, and its `.sha256` (`sha256sum -c`). Names carry no version, so unzipping a new release over an installation keeps its folder. The release first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--out`, for example `build/release`.
 - **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
 - **Versioning:** [.version](.version) is the only version source; change it only on request.
-- **Packaging** generates `support/BUILDINFO.txt`, `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Text files use LF.
+- **Packaging** copies [LICENSE](LICENSE) to `support/LICENSE.txt` and generates `support/BUILDINFO.txt`, `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Text files use LF.
 - **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing: the app icon at each size, and a manifest that makes the app per-monitor DPI-aware so its tray icon and dialogs stay sharp at any display scaling.
 - **macOS:** the `.app` stays beside the CLI and configs, and its plist declares macOS 13.
 - **Signing:** packages are unsigned and not notarized.
@@ -200,7 +202,7 @@ python scripts/visible.py --name retry -- python scripts/run_sys_tests.py --app-
 
 - **Unit runner:** checks modules and formatting, runs `go vet` and staticcheck for Windows, macOS and Linux, then runs the host's unit tests.
 - **CLI output snapshot:** `tests/unit/testdata/cli/expected.txt` records each distinct help or error output. After an intended change, regenerate it with `SSH_PROXY_UPDATE_EXPECTED=1` and review the diff.
-- **System runner:** tests an existing build; use `--build-dir build/scratch/<os>-<arch>` for a separate one.
+- **System runner:** tests an existing build; use `--build-dir build/scratch/ssh-proxy-<os>-<arch>` for a separate one.
   - It tests the selected build’s binaries with current source defaults, not preserved files in an existing dev folder. Release packaging separately verifies default file contents and writes only the declared ZIP payload.
   - With no scope it runs everything the platform supports. `--app-only` needs the CLI too, and Linux has no app tests.
   - `--test NAME` reruns one top-level test, with its subtests; an unknown name fails. After a failure, fix and rerun only that test.
@@ -223,3 +225,7 @@ python3 -m venv build/venv
 build/venv/bin/python -m pip install -r requirements.txt
 build/venv/bin/python scripts/render_icons.py
 ```
+
+## License
+
+SSH Proxy is licensed under the [Apache License 2.0](LICENSE).
