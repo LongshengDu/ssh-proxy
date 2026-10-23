@@ -50,7 +50,7 @@ All builds use `CGO_ENABLED=0` and native tools (no WSL).
 | `src/logs` | Run logs, retention and size limits |
 | `src/ui` | Tray controller, menu, setup terminal, dialogs, app login item, scripts |
 | `src/packaging` | Public defaults: `support/config.toml.in` and `support/ssh_config.in`, user guide, launchers, `run_on_mac.sh`; executable resources |
-| `scripts` | `build.py`, `run_unit_tests.py`, `run_sys_tests.py`, `visible.py` |
+| `scripts` | `build.py`, `run_unit_tests.py`, `run_sys_tests.py`, `visible.py`, `render_icons.py` |
 | `tests/unit`, `tests/system`, `tests/helpers` | Flat test suites and shared fixtures |
 
 Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `bridge` support `control` and `supervisor`; `cli` coordinates them. Lower-level packages never import the CLI or UI. The tray uses `config`, `control`, `platform` and `logs`, invokes the CLI for validation, login setup and start/stop, and queries the authenticated control API in-process. Internal `_run` (supervisor) and `_ssh` (Unix guardian) modes reuse the CLI executable.
@@ -149,7 +149,7 @@ Configs and logs open as text regardless of extension: Windows uses the `.txt` a
 Requirements:
 
 - Python 3.10+ and OpenSSH 8.7+.
-- No C compiler or pip packages.
+- No C compiler. Building and testing need no pip packages; `requirements.txt` serves only macOS app tests and icon rendering.
 - `build.py` uses a Go version that satisfies [go.mod](go.mod), or downloads one into `.build-tools` with SHA-256 verification.
 
 Targets:
@@ -163,17 +163,17 @@ Targets:
 
 ```sh
 python scripts/build.py                                   # build/<os>-<arch>/
-python scripts/build.py --target-dir build/scratch        # while build/<os>-<arch> is running
-python scripts/build.py --release --target-dir build/release   # clean folder: build/release/<os>-<arch>/ + .zip
-python scripts/build.py --release --os linux --arch arm64 --target-dir ./packages
+python scripts/build.py --out build/scratch               # while build/<os>-<arch> is running
+python scripts/build.py --release --out build/release     # clean folder: build/release/<os>-<arch>/ + .zip
+python scripts/build.py --release --os linux --arch arm64 --out ./packages
 ```
 
-- **Every build** writes the whole payload into `<target-dir>/<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
-- **`--release`** also creates `<target-dir>/<os>-<arch>.zip`, but first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--target-dir`, for example `build/release`.
+- **Every build** writes the whole payload into `<out>/<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
+- **`--release`** also creates `<out>/<os>-<arch>.zip`, but first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--out`, for example `build/release`.
 - **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
 - **Versioning:** [.version](.version) is the only version source; change it only on request.
 - **Packaging** generates `support/BUILDINFO.txt`, `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Text files use LF.
-- **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing.
+- **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing: the app icon at each size, and a manifest that makes the app per-monitor DPI-aware so its tray icon and dialogs stay sharp at any display scaling.
 - **macOS:** the `.app` stays beside the CLI and configs, and its plist declares macOS 13.
 - **Signing:** packages are unsigned and not notarized.
 - **The builder never runs tests.**
@@ -216,9 +216,10 @@ python scripts/visible.py --name retry -- python scripts/run_sys_tests.py --app-
 ## Documentation and assets
 
 - **Where docs go:** design and build go here. Usage goes only in the [user guide](src/packaging/defaults/README.md), Chinese first and English second, with both updated for every user-visible change. Public defaults must not contain real hosts, usernames, keys or logs.
-- **Icon:** `src/ui/icon.svg` is the source; keep `icon.png` (tray, Windows via `src/packaging/windows-icon.json`) and `icon.icns` (macOS) in sync with it:
+- **Icon:** `scripts/render_icons.py` holds the design: a white paper windmill on a green-to-blue disc. Its colors keep at least 3.7:1 contrast on dark and light taskbars and behind the white windmill. The script writes `src/ui/icon.svg` and renders every icon at its exact size, drawing sizes up to 64 px on whole pixels so tray icons stay crisp: `src/ui/icons/icon-N.png` holds the Windows notification-area sizes for 100–350% scaling (the tray picks the size Windows reports), 44 px for the macOS menu bar's 22 pt at 2x, and the Windows app icon sizes listed in `src/packaging/windows-icon.json`; `src/ui/icon.icns` is the macOS app icon. After changing the design, install `requirements.txt` in a virtual environment and rerun it (on Windows use `build\venv\Scripts\python`):
 
 ```sh
-uv run --with resvg-py==0.5.0 python -c "from pathlib import Path; import resvg_py; p=Path('src/ui/icon.svg'); p.with_suffix('.png').write_bytes(resvg_py.svg_to_bytes(svg_path=str(p), skip_system_fonts=True))"
-uv run --with pillow==12.0.0 python -c "from PIL import Image; Image.open('src/ui/icon.png').save('src/ui/icon.icns', format='ICNS')"
+python3 -m venv build/venv
+build/venv/bin/python -m pip install -r requirements.txt
+build/venv/bin/python scripts/render_icons.py
 ```

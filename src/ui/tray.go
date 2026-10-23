@@ -4,7 +4,7 @@ package ui
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -26,8 +26,27 @@ import (
 	"ssh_proxy/src/platform"
 )
 
-//go:embed icon.png
-var icon []byte
+//go:embed icons
+var icons embed.FS
+
+// TrayIcon returns the icon rendered for size pixels, so the OS draws it
+// without rescaling. Lacking that size, it returns the smallest larger render,
+// or the largest one. scripts/render_icons.py renders the set from icon.svg.
+func TrayIcon(size int) []byte {
+	entries, _ := icons.ReadDir("icons")
+	best := 0
+	for _, entry := range entries {
+		var n int
+		if _, err := fmt.Sscanf(entry.Name(), "icon-%d.png", &n); err != nil {
+			continue
+		}
+		if best == 0 || (n >= size && (best < size || n < best)) || (best < size && n > best) {
+			best = n
+		}
+	}
+	data, _ := icons.ReadFile(fmt.Sprintf("icons/icon-%d.png", best))
+	return data
+}
 
 // run delegates the icon, native menu and event loop entirely to
 // gogpu/systray. One worker goroutine owns the Controller and serializes actions.
@@ -67,7 +86,7 @@ func run(p config.Paths, backend string, logger *log.Logger, writer *logs.RunLog
 		view.shown[item.ID] = item
 	}
 	view.tooltip = "SSH Proxy - right-click for status and controls"
-	tray.SetIcon(icon).SetTooltip(view.tooltip).SetMenu(menu).Show()
+	tray.SetIcon(TrayIcon(trayIconSize())).SetTooltip(view.tooltip).SetMenu(menu).Show()
 	defer tray.Remove()
 	// Bounds verifies that Shell_NotifyIcon succeeded; the library's fluent
 	// Show method intentionally does not return native initialization errors.

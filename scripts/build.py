@@ -252,12 +252,12 @@ def check_release_folder(output, target):
                    if (name := path.relative_to(output).as_posix()) not in (folders if path.is_dir() and not path.is_symlink() else allowed))
     if extra:
         raise RuntimeError(f"{output} holds files outside the release payload, so no ZIP was made. "
-                           f"Release into an empty --target-dir instead. Unexpected: {', '.join(extra)}")
+                           f"Release into an empty --out instead. Unexpected: {', '.join(extra)}")
 
 
-def package(target, staging, target_dir):
+def package(target, staging, out):
     """ZIP only the public payload, with one os-arch directory at its root."""
-    archive = target_dir / f"{target}.zip"
+    archive = out / f"{target}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
         for name in payload_names(target):
             path = staging / name
@@ -275,8 +275,8 @@ def package(target, staging, target_dir):
     print(f"Release ZIP: {archive}", flush=True)
 
 
-def build_target(go, env, target, target_dir, release=False):
-    output = target_dir / target
+def build_target(go, env, target, out, release=False):
+    output = out / target
     with tempfile.TemporaryDirectory(prefix="package-", dir=BUILD / ".tmp") as temporary:
         staging = Path(temporary) / target
         binaries = compile_apps(go, env, target, staging)
@@ -304,16 +304,16 @@ def build_target(go, env, target, target_dir, release=False):
             shutil.copy2(staging / name, destination)
         (output / "logs").mkdir(exist_ok=True)
         if release:
-            (target_dir / f"{target}.zip").unlink(missing_ok=True)  # Never leave an older ZIP behind a failed check.
+            (out / f"{target}.zip").unlink(missing_ok=True)  # Never leave an older ZIP behind a failed check.
             check_release_folder(output, target)
-            package(target, staging, target_dir)
+            package(target, staging, out)
     print(f"Build folder: {output}", flush=True)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--release", action="store_true", help="Also create <target-dir>/<os>-<arch>.zip")
-    parser.add_argument("--target-dir", type=Path, help="Output parent directory (default: build/)")
+    parser.add_argument("--release", action="store_true", help="Also create <out>/<os>-<arch>.zip")
+    parser.add_argument("--out", type=Path, help="Output parent directory (default: build/)")
     parser.add_argument("--os", choices=SYSTEMS, help="Target OS (default: current)")
     parser.add_argument("--arch", choices=ARCHES, help="Target architecture (default: current)")
     parser.add_argument("--go", help="Explicit Go executable (otherwise discover or download)")
@@ -321,7 +321,7 @@ def main(argv=None):
     host = host_target()
     host_os, host_arch = TARGETS[host]
     target = f"{args.os or host_os}-{args.arch or host_arch}"
-    target_dir = (args.target_dir or BUILD).resolve()
+    out = (args.out or BUILD).resolve()
     host_env = environment(host)
     go = ensure_go(host, host_env, args.go)
     ensure_ssh(host, host_env)
@@ -330,7 +330,7 @@ def main(argv=None):
     cgo = run([go, "list", "-deps", "-f", "{{if .CgoFiles}}{{.ImportPath}}: {{.CgoFiles}}{{end}}", "./src/cmd/..."], env, capture=True)
     if cgo:
         raise RuntimeError("Unexpected cgo dependencies: " + cgo)
-    build_target(go, env, target, target_dir, args.release)
+    build_target(go, env, target, out, args.release)
     return 0
 
 

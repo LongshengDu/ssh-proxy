@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// trayIconSize: the menu bar draws the icon at 22 points; 44 pixels stay sharp on Retina.
+func trayIconSize() int { return 44 }
+
 func defaultBackend(exe string) string {
 	// Installed folder/ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app
 	return filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "..", "..", "ssh_proxy_cli"))

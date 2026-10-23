@@ -8,7 +8,7 @@
 - When system tests fails, only fix the failed one and run the failed one after fix.
 - Use native tools only: no WSL, no cgo, and no macOS application builds during Windows development unless explicitly requested.
 - Keep `.version` unchanged unless the user requests a version change.
-- When your tray, proxy or another program is running from `build/<os>-<arch>/`, build into another folder (`--target-dir build/scratch`) and test it with `--build-dir`.
+- When your tray, proxy or another program is running from `build/<os>-<arch>/`, build into another folder (`--out build/scratch`) and test it with `--build-dir`.
 
 # Repository rules
 
@@ -19,4 +19,4 @@
 - Keep real hosts, usernames, keys and logs out of public defaults.
 - Update both language sections of `src/packaging/defaults/README.md` for user-visible changes. Do not add chat history, changing verification dates or a second version value to the READMEs.
 - Keep CLI flag descriptions/defaults in `src/cli/cli.go` synchronized with behavior and keep the `status`/`check` JSON contracts. After an intended help or error-text change, regenerate `tests/unit/testdata/cli/expected.txt` with `SSH_PROXY_UPDATE_EXPECTED=1` and review its diff.
-- `src/ui/icon.svg` is the canonical artwork; keep the PNG and ICNS in sync with it. 
+- The icon's design lives in `scripts/render_icons.py`; after changing it, rerun the script (packages from `requirements.txt`, see README) to rewrite `src/ui/icon.svg`, `src/ui/icons/` and `src/ui/icon.icns`.

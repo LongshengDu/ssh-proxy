@@ -1,7 +1,25 @@
 {
   "RT_GROUP_ICON": {
     "APP": {
-      "0000": "../ui/icon.png"
+      "0000": [
+        "../ui/icons/icon-256.png",
+        "../ui/icons/icon-64.png",
+        "../ui/icons/icon-48.png",
+        "../ui/icons/icon-40.png",
+        "../ui/icons/icon-32.png",
+        "../ui/icons/icon-24.png",
+        "../ui/icons/icon-20.png",
+        "../ui/icons/icon-16.png"
+      ]
+    }
+  },
+  "RT_MANIFEST": {
+    "#1": {
+      "0409": {
+        "minimum-os": "win10",
+        "execution-level": "as invoker",
+        "dpi-awareness": "per monitor v2"
+      }
     }
   }
 }

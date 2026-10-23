@@ -14,6 +14,16 @@ import (
 
 func defaultBackend(exe string) string { return filepath.Join(filepath.Dir(exe), "ssh_proxy_cli.exe") }
 
+// trayIconSize is the small-icon size the notification area draws. The app's
+// manifest declares DPI awareness, so this follows the display scaling.
+func trayIconSize() int {
+	size, _, _ := windows.NewLazySystemDLL("user32.dll").NewProc("GetSystemMetrics").Call(49) // SM_CXSMICON
+	if size == 0 {
+		return 16
+	}
+	return int(size)
+}
+
 // Configs and logs are text, regardless of their filename. Use the .txt editor
 // and fall back to Notepad instead of displaying an application picker.
 func openPath(path string) error {

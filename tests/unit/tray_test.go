@@ -3,6 +3,8 @@
 package tests
 
 import (
+	"bytes"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +15,21 @@ import (
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/ui"
 )
+
+// Each size a tray draws has its own render, so no OS rescales the icon:
+// Windows small icons for 100-350% scaling and the macOS menu bar at 2x.
+// Other sizes use the next larger render, or the largest.
+func TestTrayIconSizes(t *testing.T) {
+	for _, tc := range []struct{ want, got int }{
+		{16, 16}, {20, 20}, {24, 24}, {28, 28}, {32, 32}, {36, 36}, {40, 40}, {44, 44}, {48, 48}, {56, 56},
+		{18, 20}, {100, 256}, {1000, 256},
+	} {
+		image, err := png.DecodeConfig(bytes.NewReader(ui.TrayIcon(tc.want)))
+		if err != nil || image.Width != tc.got || image.Height != tc.got {
+			t.Fatalf("tray icon for %d px: %dx%d, want %d (%v)", tc.want, image.Width, image.Height, tc.got, err)
+		}
+	}
+}
 
 func TestConfigOpensOnce(t *testing.T) {
 	seen := ui.SetupPrompts{}
