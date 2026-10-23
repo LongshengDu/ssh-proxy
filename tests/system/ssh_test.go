@@ -27,6 +27,7 @@ import (
 )
 
 func TestCLIHTTPSStreamingAndWebSocket(t *testing.T) {
+	t.Parallel()
 	dir := testutil.IsolatedBuild(t)
 	f := testutil.LocalSSH(t, dir)
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
@@ -113,6 +114,7 @@ func TestCLIHTTPSStreamingAndWebSocket(t *testing.T) {
 }
 
 func TestCLITunnelLifecycleAndHealth(t *testing.T) {
+	t.Parallel()
 	dir := testutil.IsolatedBuild(t)
 	f := testutil.LocalSSH(t, dir)
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
@@ -173,6 +175,7 @@ func TestCLITunnelLifecycleAndHealth(t *testing.T) {
 }
 
 func TestCLIProbeFailoverForegroundAndCrashCleanup(t *testing.T) {
+	t.Parallel()
 	dir := testutil.IsolatedBuild(t)
 	f := testutil.LocalSSH(t, dir)
 	testutil.WriteFile(t, filepath.Join(dir, "config.toml"), strings.Replace(f.Config, "failover_on_probe_failure = false", "failover_on_probe_failure = true", 1))

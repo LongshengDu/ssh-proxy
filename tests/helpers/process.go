@@ -41,6 +41,14 @@ func RunProcess() bool {
 			os.Exit(2)
 		}
 		return true
+	case "askpass":
+		// OpenSSH's SSH_ASKPASS: confirm a new host key; answer any other prompt with the password.
+		if len(os.Args) > 1 && strings.Contains(os.Args[1], "continue connecting") {
+			fmt.Println("yes")
+		} else {
+			fmt.Println(os.Getenv("SSH_PROXY_TEST_PASSWORD"))
+		}
+		return true
 	case "trust":
 		os.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
 		if err := cli.Run(os.Args[1:]); err != nil {
@@ -108,12 +116,16 @@ func RunProcess() bool {
 			}{os.Args[1:], term.IsTerminal(int(os.Stdin.Fd())), term.IsTerminal(int(os.Stdout.Fd())), os.Getpid()})
 			file.Close()
 			// The silent check passes after an interactive setup exited 0, unless
-			// SSH_PROXY_TEST_CHECK is "never" (password-only login) or "always".
+			// SSH_PROXY_TEST_CHECK is "never" (password-only login) or "offline"
+			// (the server cannot be reached, which setup cannot fix).
 			trusted := os.Getenv("SSH_PROXY_TEST_RECORD") + ".trusted"
 			if os.Args[1] == "login" && slices.Contains(os.Args, "--check") {
 				_, err := os.Stat(trusted)
 				switch mode := os.Getenv("SSH_PROXY_TEST_CHECK"); {
-				case mode == "always", mode != "never" && err == nil:
+				case mode == "offline":
+					fmt.Fprintln(os.Stderr, "ssh: Could not resolve hostname fixture.invalid: Name or service not known")
+					os.Exit(255)
+				case mode != "never" && err == nil:
 					os.Exit(0)
 				}
 				fmt.Fprintln(os.Stderr, "fixture: Permission denied (publickey)")

@@ -21,6 +21,7 @@ import (
 
 // Real child-process logging, using only local closed ports and no SSH credentials.
 func TestProxyRunLogs(t *testing.T) {
+	t.Parallel()
 	dir := testutil.IsolatedBuild(t)
 	reserve := func() net.Listener {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -84,7 +85,7 @@ func TestProxyRunLogs(t *testing.T) {
 		t.Fatal("bootstrap failure split from run log")
 	}
 	socks.Close()
-	if out, err := call("start", "--wait", "10"); err != nil {
+	if out, err := call("start", "--wait", "1"); err != nil {
 		t.Fatalf("start retrying supervisor: %v: %s", err, out)
 	}
 	files(2)
@@ -93,7 +94,7 @@ func TestProxyRunLogs(t *testing.T) {
 	if err != nil || json.Unmarshal(out, &status) != nil || status.PID == 0 || status.Log == first {
 		t.Fatalf("current run not discoverable: %v: %s", err, out)
 	}
-	if out, err := call("start", "--wait", "10"); err != nil {
+	if out, err := call("start", "--wait", "1"); err != nil {
 		t.Fatalf("repeat start: %v: %s", err, out)
 	}
 	files(2)

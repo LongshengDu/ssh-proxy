@@ -156,6 +156,14 @@ func TestForbiddenCommandsRejectedBeforeOSAccess(t *testing.T) {
 		{[]string{"service", "start"}, `unknown command "service"`},
 		{[]string{"service", "stop"}, `unknown command "service"`},
 		{[]string{"service", "restart"}, `unknown command "service"`},
+		// status and check always print JSON; the other commands print text.
+		{[]string{"status", "--json"}, "unknown flag: --json"},
+		{[]string{"check", "--json"}, "unknown flag: --json"},
+		{[]string{"start", "--json"}, "unknown flag: --json"},
+		{[]string{"stop", "--json"}, "unknown flag: --json"},
+		{[]string{"logs", "--json"}, "unknown flag: --json"},
+		{[]string{"login", "--json"}, "unknown flag: --json"},
+		{[]string{"autostart", "status", "--json"}, "unknown flag: --json"},
 	} {
 		t.Run(strings.Join(tc.args, "-"), func(t *testing.T) {
 			err := cli.Run(tc.args)

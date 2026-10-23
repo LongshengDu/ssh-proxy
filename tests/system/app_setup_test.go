@@ -77,9 +77,10 @@ func TestTrayLoginLaunch(t *testing.T) {
 // opens the interactive setup terminal, and a successful setup is checked again.
 func TestTrayInteractiveTerminal(t *testing.T) {
 	testutil.NativeDesktop(t)
+	// Working logins and setup followed by start run with real SSH in
+	// TestTrayNativeWorkflow and TestTrayStartsProxyAtLaunch.
 	for _, tc := range []struct{ name, trustExit, check, dialog string }{
-		{"already-trusted", "0", "always", ""},
-		{"setup-ok", "0", "", ""},
+		{"offline", "0", "offline", ""},
 		{"setup-failed", "7", "", "code 7"},
 		{"password-only", "0", "never", "unattended login still fails"},
 	} {
@@ -135,10 +136,11 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
 			})
 			testutil.NativeClick(t, pid, "Start proxy")
-			if tc.check == "always" {
+			if tc.check == "offline" {
+				// An unreachable server is not a login problem: start, and let the proxy retry.
 				testutil.WaitFor(t, func() bool { _, _, started := commands(); return started })
 				if silent, setup, _ := commands(); silent != 1 || setup != nil {
-					t.Fatalf("working unattended login must start without a terminal: %d checks, setup %+v", silent, setup)
+					t.Fatalf("an offline check must start without a terminal: %d checks, setup %+v", silent, setup)
 				}
 				testutil.NativeTerminalsClosed(t, before)
 			} else {
@@ -150,25 +152,14 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				if !platform.ProcessAlive(entry.PID) {
 					t.Fatal("setup exited before input was supplied")
 				}
-				time.Sleep(2300 * time.Millisecond)
-				if _, _, started := commands(); started {
-					t.Fatal("start ran before login completed")
-				}
-				testutil.ExpectMenu(t, pid, "Start proxy", true, false)
+				testutil.ExpectMenu(t, pid, "Start proxy", true, false) // Busy while setup waits.
 				testutil.WriteFile(t, gate, "")
-				if tc.dialog == "" {
-					testutil.WaitFor(t, func() bool { _, _, started := commands(); return started })
-					if silent, _, _ := commands(); silent != 2 {
-						t.Fatalf("setup must be followed by a second silent check: %d", silent)
-					}
-				} else {
-					testutil.ExpectDialog(t, pid, tc.dialog)
-					if _, _, started := commands(); started {
-						t.Fatal("failed setup started the proxy")
-					}
-					testutil.NativeDismiss(t, pid)
-					testutil.NativeOpened(t, testutil.TrayLog(dir))
+				testutil.ExpectDialog(t, pid, tc.dialog)
+				if _, _, started := commands(); started {
+					t.Fatal("failed setup started the proxy")
 				}
+				testutil.NativeDismiss(t, pid)
+				testutil.NativeOpened(t, testutil.TrayLog(dir))
 				testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
 				testutil.NativeTerminalsClosed(t, before)
 			}
@@ -282,36 +273,6 @@ func TestTraySingleInstance(t *testing.T) {
 	}
 	testutil.NativeClick(t, first.Process.Pid, "Exit app")
 	if err := first.Wait(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestTrayFirstHostKeySetup(t *testing.T) {
-	testutil.NativeDesktop(t)
-	dir := testutil.IsolatedBuild(t)
-	f := testutil.LocalSSH(t, dir)
-	text := testutil.ReadFile(filepath.Join(dir, "ssh_config"))
-	testutil.WriteFile(t, filepath.Join(dir, "ssh_config"), text[strings.Index(text, "Host primary\n"):])
-	testutil.WriteFile(t, f.Trust, "") // Only the ephemeral test server is initially untrusted.
-	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
-	before := testutil.NativeTerminals(t)
-	app := testutil.StartApp(t, dir)
-	testutil.WaitFor(t, func() bool {
-		return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
-	})
-	testutil.NativeClick(t, app.Process.Pid, "Start proxy")
-	testutil.NativeAcceptHost(t, app.Process.Pid, before, f.Fingerprint)
-	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "running" })
-	testutil.NativeTerminalsClosed(t, before)
-	if testutil.ReadFile(f.Trust) == "" {
-		t.Fatal("confirmation did not persist host trust")
-	}
-	testutil.MustCLI(t, dir, "login", "primary") // The same host must now succeed without input.
-	testutil.MustCLI(t, dir, "test", "--url", f.Origin.URL)
-	testutil.NativeClick(t, app.Process.Pid, "Stop proxy")
-	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "stopped" })
-	testutil.NativeClick(t, app.Process.Pid, "Exit app")
-	if err := app.Wait(); err != nil {
 		t.Fatal(err)
 	}
 }

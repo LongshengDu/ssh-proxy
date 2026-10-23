@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,13 +48,18 @@ var cliOutputCases = [][]string{
 
 func TestCLIEquivalentOutput(t *testing.T) {
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	for _, group := range [][][]string{
+	groups := [][][]string{
 		{{}, {"-h"}, {"--help"}},
 		{{"autostart"}, {"autostart", "-h"}, {"autostart", "--help"}, {"autostart", "bogus", "--help"}},
 		{{"start", "--help"}, {"start", "--wait", "0", "--help"}},
 		{{"stop", "--help"}, {"stop", "extra", "--help"}},
 		{{"-v"}, {"--version"}},
-	} {
+	}
+	for _, name := range []string{"start", "restart", "stop", "status", "logs", "test", "check", "login", "autostart enable", "autostart disable", "autostart status"} {
+		command := strings.Fields(name)
+		groups = append(groups, [][]string{append(command, "--help"), append(slices.Clone(command), "-h")})
+	}
+	for _, group := range groups {
 		out, errText, code := runCLI(t, group[0])
 		for _, args := range group[1:] {
 			t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -99,6 +105,11 @@ func TestCLIExpectedOutput(t *testing.T) {
 	var got strings.Builder
 	for _, args := range cliOutputCases {
 		stdout, stderr, code := runCLI(t, args)
+		for _, line := range strings.Split(stdout, "\n") {
+			if len(line) > 80 || strings.ContainsAny(line, "\t\x1b") {
+				t.Fatalf("%v: help must fit 80 columns using plain spaces: %q", args, line)
+			}
+		}
 		fmt.Fprintf(&got, "=== ssh_proxy_cli %s\nexit %d\n--- stdout\n%s--- stderr\n%s", strings.Join(args, " "), code, stdout, stderr)
 	}
 	path := filepath.Join("testdata", "cli", "expected.txt")

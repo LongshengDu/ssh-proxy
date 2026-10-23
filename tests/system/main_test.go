@@ -24,6 +24,9 @@ func TestMain(m *testing.M) {
 		println("Run python scripts/run_sys_tests.py against a native development build.")
 		os.Exit(1)
 	}
+	// Each isolated build's unique path gives it its own runtime folder; an
+	// inherited override would make parallel tests share one.
+	os.Unsetenv("SSH_PROXY_RUNTIME")
 	var unlock func()
 	if runtime.GOOS != "linux" && os.Getenv("SSH_PROXY_SYS_SCOPE") != "cli" {
 		var err error

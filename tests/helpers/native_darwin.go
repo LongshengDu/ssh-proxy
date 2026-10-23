@@ -28,11 +28,6 @@ func NativeLoginLaunch(t *testing.T, id, executable string) {
 			t.Fatalf("LaunchAgent %s: %v %s", field, err, out)
 		}
 	}
-	// launchd does not inherit this test process's environment.
-	if out, err := exec.Command("/usr/bin/plutil", "-insert", "EnvironmentVariables", "-json",
-		`{"SSH_PROXY_RUNTIME":`+strconv.Quote(os.Getenv("SSH_PROXY_RUNTIME"))+`}`, path).CombinedOutput(); err != nil {
-		t.Fatalf("isolate login app runtime: %v %s", err, out)
-	}
 	domain := "gui/" + strconv.Itoa(os.Getuid())
 	t.Cleanup(func() { exec.Command("/bin/launchctl", "bootout", domain+"/"+label).Run() })
 	if out, err := exec.Command("/bin/launchctl", "bootstrap", domain, path).CombinedOutput(); err != nil {

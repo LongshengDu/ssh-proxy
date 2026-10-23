@@ -71,7 +71,7 @@ Managed tunnels enforce batch authentication, strict host-key checking, no TTY o
 
 ### One supervisor per install
 
-The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh_proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates tests.
+The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh_proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates unit tests; each system test copies the build to its own folder, which gives it its own identity, so system tests can run in parallel.
 
 All entry points use the same supervisor. Background `start` launches detached `_run`; foreground starts run in the calling terminal. Only the instance-lock holder creates the run log and publishes state. Concurrent background starters join the winner through its control API; a losing `_run` exits with code 10 without creating a log. A duplicate foreground start fails without touching live state. `restart` validates configuration before stopping anything.
 
@@ -209,7 +209,7 @@ python scripts/visible.py --name retry -- python scripts/run_sys_tests.py --app-
   - Autostart tests use isolated entries and launch them through launchd, systemd or the stored Windows Run command. Windows also needs one manual check with a real sign-in.
 - **Platform needs:**
   - **App tests:** an unlocked desktop and a default text editor.
-  - **macOS:** install `requirements.txt` in a virtual environment. From Terminal, run `python3 -m venv build/venv`, `source build/venv/bin/activate`, then `python -m pip install -r requirements.txt`. The runner requests Accessibility and Automation access to System Events, Terminal and TextEdit and waits for approval; allow the app to control Terminal too. Other default text editors must expose opened document names in their window titles.
+  - **macOS:** install `requirements.txt` in a virtual environment. From Terminal, run `python3 -m venv build/venv`, `source build/venv/bin/activate`, then `python -m pip install -r requirements.txt`. `visible.py` runs the tests in a Terminal window, so Terminal needs Accessibility, and Automation for System Events, Terminal and TextEdit; the app that calls `visible.py` (an agent or another terminal) needs Automation for Terminal. The runner requests these and waits for approval. When the calling Python lacks the packages, the runner switches to `build/venv/bin/python` itself. Other default text editors must expose opened document names in their window titles.
   - **Windows and Linux:** no Python packages. Linux autostart tests need a working systemd user session.
 - **Results:** output, JSON events and summaries are saved under `build/test-results/`. Every selected test must pass; only the unrequested live-endpoint test may skip. Native runs are required to validate each OS; Windows results do not certify macOS or Linux.
 

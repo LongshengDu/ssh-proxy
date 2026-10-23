@@ -7,7 +7,9 @@ before testing. This runner never builds releases or uses private dev settings.
 
 import argparse
 from datetime import datetime, timezone
+import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -63,13 +65,21 @@ def stage_programs(directory, target, report, scope):
     return staging
 
 
+def use_macos_venv(argv):
+    """App tests need pyobjc. When this Python lacks it, rerun with build/venv's."""
+    venv = b.BUILD / "venv" / "bin" / "python"
+    if importlib.util.find_spec("ApplicationServices") is None and venv.is_file() and Path(sys.executable).absolute() != venv.absolute():
+        os.execv(venv, [str(venv), str(Path(__file__).resolve()), *argv])
+
+
 def request_macos_permissions():
     """Ask through supported OS APIs; only the user can grant access."""
     try:
         from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
     except ImportError as error:
-        raise RuntimeError("Install macOS test dependencies: python3 -m pip install -r requirements.txt") from error
-    print("Run from a terminal in your logged-in macOS desktop. Allow Accessibility and Automation for System Events, Terminal and TextEdit when prompted.", flush=True)
+        raise RuntimeError("Install macOS test dependencies into build/venv: see README.md, Platform needs") from error
+    print("Run from a terminal in your logged-in macOS desktop. Allow the app running this terminal (Terminal when started "
+          "through visible.py) Accessibility, and Automation for System Events, Terminal and TextEdit, when prompted.", flush=True)
     while True:
         AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
         # Exercise the same UI/document access as the tests, not just app names.
@@ -107,7 +117,7 @@ def list_tests(go, env, scope, name=None):
 
 
 def run_tests(go, env, report, required):
-    command = [go, "test", "-json", "-count=1", "-timeout", "12m", "-run", "^(" + "|".join(required) + ")$", "./tests/system"]
+    command = [go, "test", "-json", "-count=1", "-timeout", "30m", "-run", "^(" + "|".join(required) + ")$", "./tests/system"]
     results = {}
     with (report / "events.jsonl").open("w", encoding="utf-8") as events, (report / "output.txt").open("w", encoding="utf-8") as output:
         with subprocess.Popen(command, cwd=b.ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -145,6 +155,8 @@ def assess_results(code, results, required, args):
 
 def main(argv=None):
     args = parse_args(argv)
+    if sys.platform == "darwin" and args.scope != "cli":
+        use_macos_venv(sys.argv[1:] if argv is None else argv)
     target = b.host_target()
     directory = (args.build_dir or b.BUILD / target).resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")

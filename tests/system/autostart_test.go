@@ -3,7 +3,6 @@
 package tests
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -12,20 +11,15 @@ import (
 )
 
 func TestProxyAutostart(t *testing.T) {
+	t.Parallel()
+	// OS launch managers do not inherit the test's environment; the isolated
+	// install path alone gives the registered proxy its own runtime folder.
 	dir := testutil.IsolatedBuild(t)
-	// OS launch managers do not inherit the test runner's environment. The
-	// installation identity itself isolates this run in the normal cache.
-	t.Setenv("SSH_PROXY_RUNTIME", "")
 	p, err := config.PathsForExecutable(testutil.CLIPath(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { testutil.CallCLI(dir, "stop"); p.AutostartEntry().Disable(); os.RemoveAll(p.Runtime) })
-	for _, args := range [][]string{{"service"}, {"service", "install"}, {"service", "start"}, {"_service"}} {
-		if out, err := testutil.CallCLI(dir, args...); err == nil || !strings.Contains(string(out), "unknown command") {
-			t.Fatal(args, err, string(out))
-		}
-	}
+	t.Cleanup(func() { testutil.CallCLI(dir, "stop"); p.AutostartEntry().Disable() })
 	if out, err := testutil.CallCLI(dir, "autostart", "enable"); err == nil {
 		t.Fatal("empty SSH config accepted", string(out))
 	}

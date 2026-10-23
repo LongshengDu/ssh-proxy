@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
 	"ssh_proxy/src/platform"
 )
@@ -31,13 +32,21 @@ func AppPath(dir string) string {
 	}
 	return filepath.Join(dir, "ssh_proxy_app.exe")
 }
+
+// IsolatedBuild copies the build to a unique folder. Its unique path gives it
+// its own installation identity, so its runtime folder, lock and login entries
+// are separate from the user's and other tests', and tests can run in parallel.
 func IsolatedBuild(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "app 中文-"+strconv.FormatInt(time.Now().UnixNano(), 36))
 	if err := os.CopyFS(dir, os.DirFS(SystemBuild(t))); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
+	p, err := config.PathsForExecutable(CLIPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(p.Runtime) })
 	t.Cleanup(func() {
 		if t.Failed() {
 			files, _ := filepath.Glob(filepath.Join(dir, "logs", "*.txt"))

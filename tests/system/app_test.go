@@ -59,12 +59,11 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	log := testutil.TrayLog(dir)
 	testutil.WriteFile(t, servers, sshText)
 	testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), "Proxy status: stopped") })
-	testutil.ExpectMenu(t, pid, "Start proxy", false, false)
-	testutil.ExpectMenu(t, pid, "Run: Fixture", true, false)
+	scripts := []string{"Claude", "Codex", "Fixture"} // The shipped launchers and this test's script.
+	testutil.ExpectMenuLayout(t, pid, scripts, nil, false)
 	for _, enabled := range []bool{true, false} {
 		testutil.NativeClick(t, pid, "Launch App at Login")
 		testutil.WaitFor(t, func() bool { got, err := ui.StartupEnabled(p.ID); return err == nil && got == enabled })
-		time.Sleep(250 * time.Millisecond)
 		testutil.ExpectMenu(t, pid, "Launch App at Login", false, enabled)
 	}
 	for _, item := range []struct{ label, path string }{{"Open SSH Config", servers}, {"Open App Config", configPath}, {"Open Current Log", log}, {"Open Installed Location", dir}} {
@@ -79,12 +78,8 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	if strings.Contains(testutil.ReadFile(log), "opening SSH setup terminal") {
 		t.Fatal("a working unattended login must start without a setup terminal")
 	}
-	testutil.ExpectMenu(t, pid, "Stop proxy", false, false)
 	st := status()
-	_, hostPort, _ := strings.Cut(st.Destination, "@")
-	testutil.ExpectMenu(t, pid, "SSH: "+hostPort, true, false)
-	testutil.ExpectMenu(t, pid, "SOCKS5: "+st.SOCKS, true, false)
-	testutil.ExpectMenu(t, pid, "HTTP: "+st.HTTP, true, false)
+	testutil.ExpectMenuLayout(t, pid, scripts, &st, false)
 	call("test", "--url", f.Origin.URL)
 	// Health failures while the proxy retries go to the tooltip and log, never a dialog.
 	f.Blocked.Store(true)
@@ -113,10 +108,7 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	testutil.NativeClick(t, pid, "Stop proxy")
 	testutil.WaitFor(t, func() bool { return status().Phase == "stopped" })
 	testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), "Proxy status: stopped") })
-	time.Sleep(2300 * time.Millisecond)
-	testutil.ExpectMenu(t, pid, "SSH: —", true, false)
-	testutil.ExpectMenu(t, pid, "HTTP: —", true, false)
-	testutil.ExpectMenu(t, pid, "Start proxy", false, false)
+	testutil.ExpectMenuLayout(t, pid, scripts, nil, false) // No stale host or addresses after stop.
 	// Starting from the CLI and exiting the tray must leave the same tunnel alive.
 	call("start", "--wait", "15")
 	testutil.WaitFor(t, func() bool { return strings.Count(testutil.ReadFile(log), "Proxy status: running") >= 2 })

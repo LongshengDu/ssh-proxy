@@ -77,6 +77,7 @@ func TestTrustLoggingPreservesConsole(t *testing.T) {
 // Terminals, IDEs and CI agents may run commands in a kill-on-close job. A
 // background start must leave that job so closing the host keeps the proxy.
 func TestCLIStartLeavesCallerJob(t *testing.T) {
+	t.Parallel()
 	dir := testutil.IsolatedBuild(t)
 	testutil.LocalSSH(t, dir)
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })

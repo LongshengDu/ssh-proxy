@@ -14,9 +14,11 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,11 +31,39 @@ import (
 // Only ephemeral loopback servers, keys and known_hosts are used.
 type SSHFixture struct {
 	Primary, Backup      *sshserver.Server
+	PrimaryPort          int
 	Blocked              atomic.Bool
 	SlowPort             atomic.Uint32
 	Origin               *httptest.Server
 	Config, Hosts, Trust string
 	Fingerprint          string
+
+	mu         sync.Mutex
+	authorized []ssh.PublicKey // Keys added by login's install command.
+}
+
+// FixturePassword logs in to the fixture servers, as a user's server password does.
+const FixturePassword = "fixture-password"
+
+// The public key in login's install command (config.AuthorizeKeyCommand).
+var installedKey = regexp.MustCompile(`'((?:ssh|ecdsa|sk)-[a-z0-9@.-]+ AAAA[A-Za-z0-9+/]+={0,2}) ssh_proxy'`)
+
+// Installed reports how many keys login's install command has added.
+func (f *SSHFixture) Installed() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.authorized)
+}
+
+func (f *SSHFixture) accepts(key sshserver.PublicKey, fixture ssh.PublicKey) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, allowed := range append([]ssh.PublicKey{fixture}, f.authorized...) {
+		if sshserver.KeysEqual(key, allowed) {
+			return true
+		}
+	}
+	return false
 }
 
 func FreePort(t *testing.T) int {
@@ -86,9 +116,20 @@ func LocalSSH(t *testing.T, dir string) *SSHFixture {
 		srv := &sshserver.Server{
 			HostSigners: []sshserver.Signer{signer},
 			PublicKeyHandler: func(_ sshserver.Context, key sshserver.PublicKey) bool {
-				return sshserver.KeysEqual(key, signer.PublicKey())
+				return f.accepts(key, signer.PublicKey())
 			},
-			Handler:         func(session sshserver.Session) { session.Exit(0) },
+			PasswordHandler: func(_ sshserver.Context, password string) bool { return password == FixturePassword },
+			// No shell runs here: login's install command authorizes its key directly.
+			Handler: func(session sshserver.Session) {
+				if match := installedKey.FindStringSubmatch(session.RawCommand()); match != nil {
+					if key, _, _, _, err := ssh.ParseAuthorizedKey([]byte(match[1])); err == nil {
+						f.mu.Lock()
+						f.authorized = append(f.authorized, key)
+						f.mu.Unlock()
+					}
+				}
+				session.Exit(0)
+			},
 			ChannelHandlers: map[string]sshserver.ChannelHandler{"session": sshserver.DefaultSessionHandler, "direct-tcpip": sshserver.DirectTCPIPHandler},
 			LocalPortForwardingCallback: func(_ sshserver.Context, host string, port uint32) bool {
 				if port == f.SlowPort.Load() {
@@ -103,6 +144,7 @@ func LocalSSH(t *testing.T, dir string) *SSHFixture {
 	}
 	var first, second int
 	f.Primary, first = serve(true)
+	f.PrimaryPort = first
 	f.Backup, second = serve(false)
 	f.Trust = filepath.Join(dir, "known_hosts")
 	for _, port := range []int{first, second} {

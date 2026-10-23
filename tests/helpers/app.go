@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"ssh_proxy/src/control"
 	"ssh_proxy/src/platform"
 )
 
@@ -74,6 +75,59 @@ func ExpectMenu(t *testing.T, pid int, label string, disabled, checked bool) {
 		}
 		return false
 	})
+}
+
+// ExpectMenuLayout compares the whole native menu with the documented layout:
+// item order, separators, disabled status rows and the choices that depend on
+// whether the proxy runs (running is nil while stopped). Start Proxy When App
+// Launches is expected at its default, unchecked.
+func ExpectMenuLayout(t *testing.T, pid int, scripts []string, running *control.Status, startup bool) {
+	t.Helper()
+	phase, toggle, ssh, socks, http, exit := "○ Stopped", "Start proxy", "SSH: —", "SOCKS5: —", "HTTP: —", "Exit app"
+	if running != nil {
+		_, hostPort, _ := strings.Cut(running.Destination, "@")
+		phase, toggle, ssh, socks, http, exit = "● Running", "Stop proxy", "SSH: "+hostPort, "SOCKS5: "+running.SOCKS, "HTTP: "+running.HTTP, "Exit app: Keep proxy running"
+	}
+	want := []string{phase, ssh, socks, http, "", toggle, ""}
+	for _, script := range scripts {
+		want = append(want, "Run: "+script)
+	}
+	if len(scripts) != 0 {
+		want = append(want, "")
+	}
+	want = append(want, "Launch App at Login", "Start Proxy When App Launches", "", "Open SSH Config", "Open App Config", "",
+		"Open Current Log", "Open Installed Location", "", "Exit app: Stop proxy", exit)
+	// Wait until the rows that change with the proxy state have settled.
+	ExpectMenu(t, pid, toggle, false, false)
+	ExpectMenu(t, pid, http, true, false)
+	ExpectMenu(t, pid, "Launch App at Login", false, startup)
+	items := NativeMenu(t, pid)
+	if len(items) != len(want) {
+		t.Fatalf("menu has %d items, want %d: %+v", len(items), len(want), items)
+	}
+	byLabel := map[string]NativeItem{}
+	for index, item := range items {
+		if item.Label != want[index] || item.Separator != (want[index] == "") {
+			t.Fatalf("menu item %d: got %+v, want %q", index, item, want[index])
+		}
+		byLabel[item.Label] = item
+	}
+	for _, label := range []string{phase, ssh, socks, http} {
+		if !byLabel[label].Disabled {
+			t.Fatal("status row is clickable:", label)
+		}
+	}
+	for _, script := range scripts {
+		if byLabel["Run: "+script].Disabled != (running == nil) {
+			t.Fatal("script availability does not match the proxy state:", script)
+		}
+	}
+	if byLabel[toggle].Checked || byLabel["Exit app: Stop proxy"].Disabled != (running == nil) || byLabel[exit].Disabled {
+		t.Fatalf("proxy and exit choices do not match the proxy state: %+v", items)
+	}
+	if byLabel["Start Proxy When App Launches"].Checked {
+		t.Fatal("Start Proxy When App Launches must default to off")
+	}
 }
 
 // ExpectNoDialog fails if the app shows an error dialog within two seconds.
