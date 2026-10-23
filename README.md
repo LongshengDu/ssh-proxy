@@ -121,7 +121,7 @@ Development builds preserve existing config, SSH file, scripts and README, addin
 
 ## Development and verification
 
-Run builds/tests in a visible native terminal and leave it open for review. The wrapper records output and completion under `build/test-results/`; closing its window before completion reports cancellation.
+All four Python scripts support Windows, macOS and Linux with Python 3.10+. Run them from the repository root in a visible native terminal and leave it open for review. `visible.py` opens PowerShell on Windows and uses the current terminal on macOS/Linux; it records output and completion under `build/test-results/`. Use `python3` instead of `python` on macOS/Linux if needed.
 
 ```sh
 python scripts/visible.py --name unit -- python scripts/run_unit_tests.py
@@ -140,11 +140,27 @@ Run system tests only when requested; the table identifies the relevant scope.
 | Packaging | Exercise the affected build/release path |
 | Scripts/docs only | Scoped checks; no application rebuild or Go suites |
 
-The unit runner verifies modules/formatting, runs vet/staticcheck for Windows/macOS/Linux, then executes host unit tests. Staticcheck is pinned in `go.mod` and cached under `build/.cache/bin`. The system runner tests existing binaries; use `--build-dir build/scratch/<os>-<arch>` for a separate build. No selection runs all platform-supported tests. App-only needs the CLI; Linux rejects app-only.
+The unit runner verifies modules/formatting, runs vet/staticcheck for Windows/macOS/Linux, then executes host unit tests. Staticcheck is pinned in `go.mod` and cached under `build/.cache/bin`. The system runner tests existing binaries; use `--build-dir build/scratch/<os>-<arch>` for a separate build. No selection runs all platform-supported tests. App-only needs the CLI; Linux runs CLI tests and rejects app-only. After a failure, rerun only that test through the same runner, for example:
+
+```sh
+python scripts/visible.py --name retry -- python scripts/run_sys_tests.py --app-only --test TestTrayNativeWorkflow
+```
+
+`--test NAME` selects one top-level test, including its subtests, and still performs platform permission checks and writes a result summary. A misspelled or out-of-scope name fails instead of reporting success with no tests.
 
 System tests use isolated configs/runtime paths, ephemeral SSH keys, local servers and native UI automation. They must not stop existing user proxies or modify user trust. `--live-config PATH` opts into real endpoint checks and is incompatible with app-only. Service registration and real credentials need separate native validation.
 
-App tests need an unlocked desktop and default text editor. macOS needs `python3 -m pip install -r requirements.txt`; the runner requests Accessibility/Automation permissions and waits for approval. Windows/Linux need no Python packages. Reports contain output, JSON events and a summary; every discovered test in scope must pass, with only the unrequested live test allowed to skip. Windows results and static checks do not certify macOS/Linux runtime behavior.
+App tests need an unlocked desktop and default text editor. On macOS, install the permission-request dependency once (a virtual environment avoids changing the system Python):
+
+```sh
+python3 -m venv build/venv
+source build/venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Then use the build/test commands above from Terminal, without sudo. Before app tests, the runner requests Accessibility and Automation for System Events, Terminal and TextEdit, opens System Settings when needed, and waits for you to grant access. Allow any SSH Proxy → Terminal prompt as well. The app opens configs/logs with `open -t`; opening text does not require UI automation. Tests use TextEdit automation to verify full document paths and close only their own documents, even when TextEdit was already running. Other default editors must expose document names in their window titles.
+
+Windows/Linux need no Python packages; Linux needs the native OpenSSH client and runs no tray automation. Reports contain output, JSON events and a summary; every selected test must pass, with only the unrequested live test allowed to skip. Run on each native OS to verify its behavior: Windows results and static checks do not certify macOS/Linux runtime behavior.
 
 CLI snapshots record each distinct help/error output once; equivalent invocations compare complete stdout, stderr and exit codes. Keep forbidden-command coverage. After intended output changes, regenerate with `SSH_PROXY_UPDATE_EXPECTED=1` and review the diff.
 

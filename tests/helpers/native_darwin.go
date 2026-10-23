@@ -189,7 +189,20 @@ func NativeOpened(t *testing.T, path string) {
 		quoted = append(quoted, strconv.Quote(title))
 	}
 	WaitFor(t, func() bool {
-		out := apple(t, `tell application "System Events"
+		// TextEdit may already be running and can open multiple files with the
+		// same name. Match the full path and close only our test document, not
+		// its window (which could also contain the user's tabs).
+		out := apple(t, `if application "TextEdit" is running then
+    tell application "TextEdit"
+        repeat with d in documents
+            if path of d is `+strconv.Quote(path)+` then
+                close d saving no
+                return "closed"
+            end if
+        end repeat
+    end tell
+end if
+tell application "System Events"
 set targetName to `+strconv.Quote(name)+`
 set existingProcesses to {`+desktopProcesses+`}
 set existingTitles to {`+strings.Join(quoted, ",")+`}

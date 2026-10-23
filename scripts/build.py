@@ -187,7 +187,8 @@ def app_plist(path, name, executable, identifier):
     with path.open("wb") as stream:
         plistlib.dump(dict(CFBundleName=name, CFBundleDisplayName=name, CFBundleExecutable=executable,
                           CFBundleIdentifier=identifier, CFBundleIconFile="icon.icns", CFBundlePackageType="APPL", CFBundleVersion=APP_VERSION,
-                          CFBundleShortVersionString=APP_VERSION, LSUIElement=True, LSMinimumSystemVersion="13.0"), stream)
+                          CFBundleShortVersionString=APP_VERSION, LSUIElement=True, LSMinimumSystemVersion="13.0",
+                          NSAppleEventsUsageDescription="SSH Proxy uses Terminal to set up SSH login and verify host keys."), stream)
 
 
 def compile_apps(go, env, target, output):

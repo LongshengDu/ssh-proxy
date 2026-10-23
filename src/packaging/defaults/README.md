@@ -59,7 +59,7 @@ Host my-proxy
 
 等待菜单顶部显示 **running**，即可使用代理。**Stop proxy** 同时停止 SSH 隧道和 HTTP 代理。退出时，**Exit: Stop proxy** 先停止代理再关闭托盘；停止失败会显示错误并保留托盘。**Exit: Keep proxy running** 只关闭托盘。代理未运行时 **Exit app** 直接退出，停止并退出选项不可用。
 
-菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置和日志以文本方式打开（Windows 无默认文本编辑器时使用记事本），目录使用文件管理器打开。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。
+菜单显示状态、SSH 用户/主机/端口及代理地址，提供启动/停止、脚本和文件入口。配置和日志以文本方式打开（Windows 无默认文本编辑器时使用记事本），目录使用文件管理器打开。macOS 打开配置和日志不需要辅助功能权限；SSH 设置需要控制 Terminal 时，请允许自动化提示，之前拒绝过可到系统设置 → 隐私与安全性 → 自动化中修改。**Open Current Log** 打开本次托盘日志；代理日志用 CLI 的 `logs` 查看。
 
 **Launch App at Login 只在登录时启动托盘，不自动连接代理。** Windows 可在任务管理器 → 启动应用，或设置 → 应用 → 启动查看（安装路径过长时可能显示为 Windows PowerShell）；macOS 可在系统设置 → 通用 → 登录项与扩展查看，可能列在后台项目中。菜单勾选表示已注册，不反映在系统设置中另外禁用的状态。
 
@@ -279,7 +279,7 @@ Each menu start first checks silently: with a trusted host and working nonintera
 
 Wait for **running** at the top of the menu before using the proxy. **Stop proxy** stops both SSH and HTTP forwarding. **Exit: Stop proxy** stops the proxy before closing the tray; a stop failure shows an error and keeps the app open. **Exit: Keep proxy running** closes only the tray. With no proxy running, **Exit app** closes immediately and the stop-and-exit option is disabled.
 
-The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs and logs open as text (Windows falls back to Notepad if no text editor is registered); the folder opens in the file manager. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs.
+The menu shows status, SSH user/host/port and proxy addresses, with proxy controls, scripts and file actions. Configs and logs open as text (Windows falls back to Notepad if no text editor is registered); the folder opens in the file manager. On macOS, opening configs/logs needs no Accessibility permission. Allow Automation when SSH setup needs to control Terminal; if previously denied, change it in System Settings → Privacy & Security → Automation. **Open Current Log** opens this tray run's log; use CLI `logs` for proxy logs.
 
 **Launch App at Login starts the tray only; it does not connect the proxy.** On Windows, view it in Task Manager → Startup apps or Settings → Apps → Startup (a very long installation path may make it appear as Windows PowerShell). On macOS, check System Settings → General → Login Items & Extensions, possibly among background items. The menu checkmark means the entry is registered; it does not reflect separate disablement in OS settings.
 
