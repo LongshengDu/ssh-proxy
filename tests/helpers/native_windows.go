@@ -230,8 +230,12 @@ func NativeOpened(t *testing.T, path string) {
 	for time.Now().Before(deadline) {
 		for hwnd, title := range windowTitles() {
 			if strings.Contains(title, name) {
+				if desktopWindows[hwnd] == title {
+					continue // An unchanged document cannot prove another open action.
+				}
 				// Default editors can reuse the user's workspace. Never close it.
 				if _, existed := desktopWindows[hwnd]; existed {
+					desktopWindows[hwnd] = title
 					return
 				}
 				// This document belongs to the test. Close it so a later Open
@@ -243,7 +247,7 @@ func NativeOpened(t *testing.T, path string) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("default opener did not display %s; associate %s files with a desktop editor exposing document names in its window title. Visible windows: %v", path, filepath.Ext(path), windowTitles())
+	t.Fatalf("default opener did not newly display %s; close any already-open test document and use a desktop editor exposing document names in its window title. Visible windows: %v", path, windowTitles())
 }
 func NativeTerminals(t *testing.T) map[string]bool {
 	result := map[string]bool{}

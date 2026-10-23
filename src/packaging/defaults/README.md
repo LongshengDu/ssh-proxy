@@ -171,7 +171,7 @@ unset ALL_PROXY all_proxy
 | 一直连接中 / `degraded` | 查看代理日志；确认服务器允许转发，至少一个健康检查目标可达 |
 | 客户端未走代理 | 确认客户端支持所设代理，完全退出后重新启动 |
 
-SSH 退出会触发重连和备用主机尝试；切换会断开现有连接，客户端需重连。代理只转发 TCP，不提供 VPN 或 UDP 代理。
+SSH 退出会触发重连和备用主机尝试；切换会断开现有连接，客户端需重连，并在恢复后重试中断的请求。代理只转发 TCP，不提供 VPN 或 UDP 代理。
 
 ### 6. 启动脚本与自定义
 
@@ -392,7 +392,7 @@ Logs still used by running processes are protected; retention may temporarily ex
 | Stuck connecting / `degraded` | Read proxy logs; check server forwarding permissions and reachability of at least one health target |
 | Client bypasses proxy | Confirm proxy support and fully restart the client with the new settings |
 
-SSH exits trigger reconnection and attempts at backup hosts. Switching closes existing connections; clients must reconnect. This is TCP proxying, with no VPN or UDP proxy support.
+SSH exits trigger reconnection and attempts at backup hosts. Switching closes existing connections; clients must reconnect and retry interrupted requests afterward. This is TCP proxying, with no VPN or UDP proxy support.
 
 ### 6. Launcher scripts and customization
 

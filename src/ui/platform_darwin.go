@@ -28,7 +28,7 @@ func RunTrustTerminal(ctx context.Context, backend, logPath string) error {
 	result := filepath.Join(dir, "exit-code")
 	command := quote(backend) + " trust --log " + quote(logPath)
 	// Explicit sh also works when the user's Terminal profile uses another shell.
-	command = "exec /bin/sh -c " + quote(command+"; code=$?; printf '%s' \"$code\" > "+quote(result)+"; exit \"$code\"")
+	command = "exec /bin/sh -c " + quote(command+"; code=$?; printf '%s' \"$code\" > "+quote(result+".tmp")+" && mv "+quote(result+".tmp")+" "+quote(result)+"; exit \"$code\"")
 	out, err := exec.CommandContext(ctx, "/usr/bin/osascript", "-e", `on run argv
 tell application "Terminal"
     set setupTab to do script (item 1 of argv)

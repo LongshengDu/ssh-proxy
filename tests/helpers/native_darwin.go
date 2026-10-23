@@ -52,6 +52,7 @@ func apple(t *testing.T, script string) string {
 }
 
 var desktopProcesses string
+var desktopTitles []string
 
 func NativeDesktop(t *testing.T) {
 	t.Helper()
@@ -59,6 +60,18 @@ func NativeDesktop(t *testing.T) {
 		t.Fatal("macOS Accessibility permission is required for native system tests; enable it for the launching terminal and rerun")
 	}
 	desktopProcesses = apple(t, `tell application "System Events" to get unix id of every application process`)
+	titles := apple(t, `tell application "System Events"
+set resultText to ""
+repeat with p in application processes
+    try
+        repeat with w in windows of p
+            set resultText to resultText & (unix id of p as text) & tab & (name of w as text) & linefeed
+        end repeat
+    end try
+end repeat
+return resultText
+end tell`)
+	desktopTitles = strings.Split(titles, "\n")
 }
 
 func NativeAcceptHost(t *testing.T, _ int, before map[string]bool, fingerprint string) {
@@ -171,25 +184,38 @@ func NativeDismiss(t *testing.T, pid int) {
 func NativeOpened(t *testing.T, path string) {
 	t.Helper()
 	name := filepath.Base(path)
+	var quoted []string
+	for _, title := range desktopTitles {
+		quoted = append(quoted, strconv.Quote(title))
+	}
 	WaitFor(t, func() bool {
 		out := apple(t, `tell application "System Events"
 set targetName to `+strconv.Quote(name)+`
 set existingProcesses to {`+desktopProcesses+`}
+set existingTitles to {`+strings.Join(quoted, ",")+`}
 repeat with p in application processes
     try
         repeat with w in windows of p
-            if (name of w as text) contains targetName then
+            set documentTitle to (unix id of p as text) & tab & (name of w as text)
+            if (name of w as text) contains targetName and documentTitle is not in existingTitles then
                   if (unix id of p) is not in existingProcesses then
                       click (first button of w whose subrole is "AXCloseButton")
+                      return "closed"
                   end if
-                  return "opened"
+                  return documentTitle
             end if
         end repeat
     end try
 end repeat
 return ""
 end tell`)
-		return out == "opened"
+		if out == "" {
+			return false
+		}
+		if out != "closed" {
+			desktopTitles = append(desktopTitles, out)
+		}
+		return true
 	})
 }
 func NativeTerminals(t *testing.T) map[string]bool {

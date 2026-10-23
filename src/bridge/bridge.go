@@ -20,6 +20,7 @@ import (
 type Bridge struct {
 	proxy       *goproxy.ProxyHttpServer
 	dial        func(context.Context, string, string) (net.Conn, error)
+	socks       string
 	mu          sync.Mutex
 	ready       bool
 	generation  uint64
@@ -60,7 +61,7 @@ func NewBridge(address string, timeout time.Duration) (*Bridge, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Bridge{dial: dial, connections: make(map[*trackedConn]struct{}), proxy: goproxy.NewProxyHttpServer()}
+	b := &Bridge{dial: dial, socks: address, connections: make(map[*trackedConn]struct{}), proxy: goproxy.NewProxyHttpServer()}
 	b.proxy.Logger = log.New(io.Discard, "", 0)
 	b.proxy.KeepAcceptEncoding = true
 	b.proxy.Tr = &http.Transport{Proxy: nil, DialContext: b.dialTracked,
@@ -73,6 +74,15 @@ func NewBridge(address string, timeout time.Duration) (*Bridge, error) {
 	}
 	b.proxy.OnRequest().DoFunc(func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 		removeHopHeaders(r.Header)
+		ctx.RoundTripper = goproxy.RoundTripperFunc(func(r *http.Request, _ *goproxy.ProxyCtx) (*http.Response, error) {
+			resp, err := b.proxy.Tr.RoundTrip(r)
+			if resp != nil && resp.StatusCode != http.StatusSwitchingProtocols {
+				// Wrap before goproxy records the original body, preserving Content-Length.
+				// Upgrade bodies must retain their ReadWriteCloser interface.
+				resp.Body = abortOnReadError{resp.Body}
+			}
+			return resp, err
+		})
 		return r, nil
 	})
 	b.proxy.OnResponse().DoFunc(func(r *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
@@ -83,6 +93,18 @@ func NewBridge(address string, timeout time.Duration) (*Bridge, error) {
 		return r
 	})
 	return b, nil
+}
+
+// goproxy returns normally on copy errors. Abort instead so net/http cannot
+// turn an interrupted upstream body into a successfully terminated response.
+type abortOnReadError struct{ io.ReadCloser }
+
+func (b abortOnReadError) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		panic(http.ErrAbortHandler)
+	}
+	return n, err
 }
 
 // Remove RFC Connection-nominated headers while preserving WebSocket upgrades.
@@ -106,9 +128,12 @@ func removeHopHeaders(h http.Header) {
 	}
 }
 func (b *Bridge) Probe(ctx context.Context, target string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	c, err := b.dial(ctx, "tcp", target)
+	// Probes have their own budget, independent of user connection setup.
+	dial, err := SOCKSDialer(b.socks, timeout)
+	if err != nil {
+		return err
+	}
+	c, err := dial(ctx, "tcp", target)
 	if err == nil {
 		c.Close()
 	}
@@ -217,6 +242,13 @@ type streamWriter struct {
 	http.ResponseWriter
 	bridge   *Bridge
 	hijacked net.Conn
+}
+
+func (w streamWriter) WriteHeader(code int) {
+	w.ResponseWriter.WriteHeader(code)
+	if code >= 200 && strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+		w.Flush()
+	}
 }
 
 func (w streamWriter) Write(p []byte) (int, error) {

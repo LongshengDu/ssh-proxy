@@ -8,10 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 
 	"ssh_proxy/src/config"
 	"ssh_proxy/src/control"
@@ -27,10 +28,6 @@ func TestLiveEndpoints(t *testing.T) {
 	if configPath == "" {
 		t.Skip("optional external endpoint check; pass --live-config")
 	}
-	template, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
 	base, err := config.LoadConfig(configPath)
 	if err != nil {
 		t.Fatal(err)
@@ -40,19 +37,22 @@ func TestLiveEndpoints(t *testing.T) {
 			dir := testutil.IsolatedBuild(t)
 			exe := testutil.CLIPath(dir)
 			liveConfig := filepath.Join(dir, "config.toml")
-			text := string(template)
-			socks, httpPort := strconv.Itoa(testutil.FreePort(t)), strconv.Itoa(testutil.FreePort(t))
-			for socks == httpPort {
-				httpPort = strconv.Itoa(testutil.FreePort(t))
+			cfg := *base
+			cfg.SSH.ConfigFile = filepath.Join(dir, "ssh_config")
+			cfg.Proxy.SocksPort, cfg.Proxy.HTTPPort = testutil.FreePort(t), testutil.FreePort(t)
+			for cfg.Proxy.SocksPort == cfg.Proxy.HTTPPort {
+				cfg.Proxy.HTTPPort = testutil.FreePort(t)
 			}
-			text = strings.Replace(text, "socks_port = "+strconv.Itoa(base.Proxy.SocksPort), "socks_port = "+socks, 1)
-			text = strings.Replace(text, "http_port = "+strconv.Itoa(base.Proxy.HTTPPort), "http_port = "+httpPort, 1)
-			if err = os.WriteFile(liveConfig, []byte(text), 0600); err != nil {
+			var text strings.Builder
+			if err = toml.NewEncoder(&text).Encode(cfg); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(liveConfig, []byte(text.String()), 0600); err != nil {
 				t.Fatal(err)
 			}
 			// Candidates are only declared here. Native Include resolves the actual
 			// private connection data; host trust uses OpenSSH's normal user files.
-			sshText := "Host unavailable-test\n HostName 127.0.0.1\n Port 9\n User test\nHost " + alias + "\n Include \"" + filepath.ToSlash(base.SSH.ConfigFile) + "\"\nHost *\n DynamicForward 127.0.0.1:" + socks + "\n"
+			sshText := "Host unavailable-test\n HostName 127.0.0.1\n Port 9\n User test\nHost " + alias + "\n Include \"" + filepath.ToSlash(base.SSH.ConfigFile) + "\"\n"
 			if err = os.WriteFile(filepath.Join(dir, "ssh_config"), []byte(sshText), 0600); err != nil {
 				t.Fatal(err)
 			}

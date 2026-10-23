@@ -157,6 +157,73 @@ func TestChunkedStreamAndTrailers(t *testing.T) {
 	}
 }
 
+func TestInterruptedHTTPBodyFails(t *testing.T) {
+	for _, framing := range []string{"chunked", "content-length"} {
+		t.Run(framing, func(t *testing.T) {
+			origin, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer origin.Close()
+			go func() {
+				c, err := origin.Accept()
+				if err != nil {
+					return
+				}
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(3 * time.Second))
+				if _, err = http.ReadRequest(bufio.NewReader(c)); err != nil {
+					return
+				}
+				body := "Content-Length: 20\r\n\r\nhello"
+				if framing == "chunked" {
+					body = "Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n"
+				}
+				io.WriteString(c, "HTTP/1.1 200 OK\r\n"+body)
+			}()
+			_, server, _ := testutil.BridgeFixture(t, origin.Addr().String())
+			proxyURL, _ := url.Parse(server.URL)
+			client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 3 * time.Second}
+			defer client.CloseIdleConnections()
+			resp, err := client.Get("http://interrupted.invalid/")
+			if err == nil {
+				_, err = io.ReadAll(resp.Body)
+				resp.Body.Close()
+			}
+			if err == nil {
+				t.Fatal("incomplete upstream response was reported as complete")
+			}
+			if e, ok := err.(net.Error); ok && e.Timeout() {
+				t.Fatal("broken response hung instead of closing", err)
+			}
+		})
+	}
+}
+
+func TestSSEHeadersBeforeFirstEvent(t *testing.T) {
+	release := make(chan struct{})
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release
+		io.WriteString(w, "data: first\n\n")
+	}))
+	defer func() { close(release); origin.Close() }()
+	_, server, _ := testutil.BridgeFixture(t, strings.TrimPrefix(origin.URL, "http://"))
+	proxyURL, _ := url.Parse(server.URL)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}, Timeout: 3 * time.Second}
+	defer client.CloseIdleConnections()
+	resp, err := client.Get("http://events.invalid/")
+	if err != nil {
+		t.Fatal("SSE headers must arrive before the first event", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("wrong SSE response: %v", resp)
+	}
+}
+
 func TestWebSocketOverHTTPProxy(t *testing.T) {
 	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
@@ -322,30 +389,34 @@ func TestConcurrentRequestsAndEnvironmentCannotBypassSOCKS(t *testing.T) {
 }
 
 func TestStalledSOCKSHandshakeTimesOut(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		c, err := ln.Accept()
-		if err == nil {
-			defer c.Close()
-			<-done
-		}
-	}()
-	b, err := bridge.NewBridge(ln.Addr().String(), 100*time.Millisecond)
-	if err != nil {
-		t.Fatal(err)
-	}
-	start := time.Now()
-	if err = b.Probe(context.Background(), "unresolved.invalid:443", time.Second); err == nil {
-		t.Fatal("stalled SOCKS accepted")
-	}
-	if time.Since(start) > 2*time.Second {
-		t.Fatal("SOCKS handshake ignored dial timeout")
+	for _, probeTimeout := range []time.Duration{50 * time.Millisecond, 300 * time.Millisecond} {
+		t.Run(probeTimeout.String(), func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer ln.Close()
+			done := make(chan struct{})
+			defer close(done)
+			go func() {
+				c, err := ln.Accept()
+				if err == nil {
+					defer c.Close()
+					<-done
+				}
+			}()
+			b, err := bridge.NewBridge(ln.Addr().String(), 100*time.Millisecond)
+			if err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			if err = b.Probe(context.Background(), "unresolved.invalid:443", probeTimeout); err == nil {
+				t.Fatal("stalled SOCKS accepted")
+			}
+			if elapsed := time.Since(start); elapsed < probeTimeout || elapsed > 2*time.Second {
+				t.Fatalf("probe used the wrong deadline: took %s, expected %s", elapsed, probeTimeout)
+			}
+		})
 	}
 }
 
