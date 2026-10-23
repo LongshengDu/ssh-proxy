@@ -3,7 +3,7 @@
 package ui
 
 import (
-	"ssh_proxy/src/control"
+	"ssh-proxy/src/control"
 	"strings"
 )
 

@@ -3,7 +3,7 @@ package tests
 import (
 	"testing"
 
-	"ssh_proxy/src/cli"
+	"ssh-proxy/src/cli"
 )
 
 func TestLinuxCLIWithoutSystemd(t *testing.T) {

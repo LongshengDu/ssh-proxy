@@ -12,5 +12,5 @@ if [[ "$(uname -s)" != Darwin ]]; then
 fi
 xattr -dr com.apple.quarantine "$folder"
 echo "Done / 完成: $folder"
-echo "Now open ssh_proxy_app.app, or use ./ssh_proxy_cli in Terminal."
-echo "现在可以打开 ssh_proxy_app.app, 或在终端使用 ./ssh_proxy_cli"
+echo "Now open ssh-proxy-app.app, or use ./ssh-proxy-cli in Terminal."
+echo "现在可以打开 ssh-proxy-app.app, 或在终端使用 ./ssh-proxy-cli"

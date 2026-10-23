@@ -14,10 +14,10 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // Opt-in: real SSH credentials and reachable corporate endpoints are required.

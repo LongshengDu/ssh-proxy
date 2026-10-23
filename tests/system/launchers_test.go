@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/tests/helpers"
 )
 
 // Exercise URL discovery and default fallback with a harmless desktop stub.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestSSHConfigPathWithoutValidation(t *testing.T) {
@@ -290,7 +290,7 @@ func TestDefaultPathsAndMissingConfig(t *testing.T) {
 	if defaults.Config != filepath.Join(filepath.Dir(exe), "config.toml") || defaults.Log != filepath.Join(filepath.Dir(exe), "logs", "logs_"+defaults.ID+".txt") {
 		t.Fatal(defaults)
 	}
-	otherExe := filepath.Join(filepath.Dir(path), "ssh_proxy_cli")
+	otherExe := filepath.Join(filepath.Dir(path), "ssh-proxy-cli")
 	alternate, err := config.PathsForExecutable(otherExe)
 	if err != nil {
 		t.Fatal(err)

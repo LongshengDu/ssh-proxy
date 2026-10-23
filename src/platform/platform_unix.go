@@ -18,7 +18,7 @@ func LockInstance(id string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(base, "ssh_proxy", "locks")
+	dir := filepath.Join(base, "ssh-proxy", "locks")
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}

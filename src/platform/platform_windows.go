@@ -27,7 +27,7 @@ func LockInstance(id string) (func(), error) {
 }
 
 func lockName(id string) *uint16 {
-	name, _ := windows.UTF16PtrFromString(`Global\ssh_proxy_` + id)
+	name, _ := windows.UTF16PtrFromString(`Global\ssh-proxy-` + id)
 	return name
 }
 

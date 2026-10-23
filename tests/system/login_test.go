@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // The guided login sets up a new server end to end: it creates the configured

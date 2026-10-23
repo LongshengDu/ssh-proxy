@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"os"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/src/platform"
 )
 
 // Run creates the app's one continuous log before checking its configuration
@@ -54,7 +54,7 @@ func Run(args []string) (runErr error) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, nil)))
 	logger.Printf("Tray started; pid=%d; backend=%s; config=%s", os.Getpid(), backend, p.Config)
 	if len(args) != 0 {
-		return fmt.Errorf("ssh_proxy_app takes no command-line arguments; use ssh_proxy_cli for terminal commands")
+		return fmt.Errorf("ssh-proxy-app takes no command-line arguments; use ssh-proxy-cli for terminal commands")
 	}
 	if _, err := os.Stat(backend); err != nil {
 		return fmt.Errorf("backend missing: %w", err)

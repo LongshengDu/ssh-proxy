@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/bridge"
+	"ssh-proxy/src/bridge"
 )
 
 // A local SOCKS fixture records the requested hostname and connects to a test

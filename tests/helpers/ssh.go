@@ -46,7 +46,7 @@ type SSHFixture struct {
 const FixturePassword = "fixture-password"
 
 // The public key in login's install command (config.AuthorizeKeyCommand).
-var installedKey = regexp.MustCompile(`'((?:ssh|ecdsa|sk)-[a-z0-9@.-]+ AAAA[A-Za-z0-9+/]+={0,2}) ssh_proxy'`)
+var installedKey = regexp.MustCompile(`'((?:ssh|ecdsa|sk)-[a-z0-9@.-]+ AAAA[A-Za-z0-9+/]+={0,2}) ssh-proxy'`)
 
 // Installed reports how many keys login's install command has added.
 func (f *SSHFixture) Installed() int {

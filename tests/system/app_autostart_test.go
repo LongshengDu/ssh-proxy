@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/tests/helpers"
 )
 
 // Start Proxy When App Launches (app.json) starts the proxy through the same flow as Start:

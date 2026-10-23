@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/ui"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/ui"
+	"ssh-proxy/tests/helpers"
 )
 
 type fakeBackend struct {

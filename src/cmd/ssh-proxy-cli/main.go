@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"ssh_proxy/src/cli"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/cli"
+	"ssh-proxy/src/platform"
 )
 
 func main() {

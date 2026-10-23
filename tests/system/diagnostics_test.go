@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // The last line native SSH prints reaches status, so users see why it failed.

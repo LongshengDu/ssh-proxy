@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
 )
 
 // Backend is what the tray needs from the proxy. The CLI owns validation,

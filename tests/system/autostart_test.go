@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestProxyAutostart(t *testing.T) {

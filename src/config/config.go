@@ -19,7 +19,7 @@ import (
 	"github.com/BurntSushi/toml"
 	sshconfig "github.com/trzsz/ssh_config"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 // Version is set by scripts/build.py from the repository's .version file.
@@ -141,7 +141,7 @@ func PathsForExecutable(exe string) (Paths, error) {
 			return Paths{}, err
 		}
 	}
-	runtimeDir := filepath.Join(base, "ssh_proxy", id)
+	runtimeDir := filepath.Join(base, "ssh-proxy", id)
 	if override := os.Getenv("SSH_PROXY_RUNTIME"); override != "" {
 		runtimeDir = override
 	}
@@ -459,7 +459,7 @@ func AuthorizeKeyCommand(publicKey string) (string, error) {
 		return "", fmt.Errorf("not an OpenSSH public key")
 	}
 	key := match[1] + " " + match[2]
-	return "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '" + key + "' ~/.ssh/authorized_keys || printf '\\n%s\\n' '" + key + " ssh_proxy' >> ~/.ssh/authorized_keys", nil
+	return "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; grep -qF '" + key + "' ~/.ssh/authorized_keys || printf '\\n%s\\n' '" + key + " ssh-proxy' >> ~/.ssh/authorized_keys", nil
 }
 
 // SSHSetupCommand logs in like SSHTrust and authorizes publicKey on the server.

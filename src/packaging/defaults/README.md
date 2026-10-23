@@ -25,8 +25,8 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 
 | 文件 | 用途 |
 | --- | --- |
-| `ssh_proxy_app.exe` / `ssh_proxy_app.app` | 托盘 / 菜单栏应用，日常使用入口 |
-| `ssh_proxy_cli.exe` / `ssh_proxy_cli` | 命令行和代理程序，应用依赖它，请保留 |
+| `ssh-proxy-app.exe` / `ssh-proxy-app.app` | 托盘 / 菜单栏应用，日常使用入口 |
+| `ssh-proxy-cli.exe` / `ssh-proxy-cli` | 命令行和代理程序，应用依赖它，请保留 |
 | `ssh_config` | 你的 SSH 服务器信息，含免密码登录步骤；首次启动时从 `support/` 创建 |
 | `config.toml` | 端口、超时、健康检查和日志设置；首次启动时从 `support/` 创建 |
 | `support/` | 默认配置模板（`*.in`）和版本信息，升级时会被替换；请修改上面两个文件，不要改这里 |
@@ -37,7 +37,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 
 ### 2. 打开应用并连接（Windows / macOS）
 
-打开 `ssh_proxy_app`：Windows 在任务栏通知区域（可能在隐藏图标中），macOS 在菜单栏。右键图标打开菜单。还没有填写 SSH 服务器时（例如首次打开），会自动打开 `ssh_config` 供你填写，不会弹出错误；文件开头说明了为什么打开它。SSH 配置有错误时，会显示原因并打开该文件。
+打开 `ssh-proxy-app`：Windows 在任务栏通知区域（可能在隐藏图标中），macOS 在菜单栏。右键图标打开菜单。还没有填写 SSH 服务器时（例如首次打开），会自动打开 `ssh_config` 供你填写，不会弹出错误；文件开头说明了为什么打开它。SSH 配置有错误时，会显示原因并打开该文件。
 
 编辑安装目录中的 `ssh_config`（首次打开应用或运行 `check` 时自动创建），取消示例前的 `#` 并填写自己的信息：
 
@@ -102,22 +102,22 @@ unset ALL_PROXY all_proxy
 
 ### 4. 命令行（Windows / macOS / Linux）
 
-在安装目录打开终端。Windows 命令前用 `.\ssh_proxy_cli.exe`，macOS/Linux 用 `./ssh_proxy_cli`。首次使用：
+在安装目录打开终端。Windows 命令前用 `.\ssh-proxy-cli.exe`，macOS/Linux 用 `./ssh-proxy-cli`。首次使用：
 
 ```powershell
 # Windows PowerShell
-.\ssh_proxy_cli.exe check
-.\ssh_proxy_cli.exe login
-.\ssh_proxy_cli.exe start
-.\ssh_proxy_cli.exe status
+.\ssh-proxy-cli.exe check
+.\ssh-proxy-cli.exe login
+.\ssh-proxy-cli.exe start
+.\ssh-proxy-cli.exe status
 ```
 
 ```bash
 # macOS / Linux
-./ssh_proxy_cli check     # valid 应为 true
-./ssh_proxy_cli login     # 设置免密码登录：核对指纹、输入一次服务器密码
-./ssh_proxy_cli start     # 后台启动；可关闭终端
-./ssh_proxy_cli status    # phase 为 running 即就绪
+./ssh-proxy-cli check     # valid 应为 true
+./ssh-proxy-cli login     # 设置免密码登录：核对指纹、输入一次服务器密码
+./ssh-proxy-cli start     # 后台启动；可关闭终端
+./ssh-proxy-cli status    # phase 为 running 即就绪
 ```
 
 | 命令 | 用途 |
@@ -137,12 +137,12 @@ unset ALL_PROXY all_proxy
 
 ### 5. 不用托盘，登录时自动启动
 
-Windows 将下方 `./ssh_proxy_cli` 换成 `.\ssh_proxy_cli.exe`。
+Windows 将下方 `./ssh-proxy-cli` 换成 `.\ssh-proxy-cli.exe`。
 
 ```bash
-./ssh_proxy_cli autostart enable    # 以后登录时自动启动代理
-./ssh_proxy_cli autostart status
-./ssh_proxy_cli autostart disable   # 取消，不影响当前运行的代理
+./ssh-proxy-cli autostart enable    # 以后登录时自动启动代理
+./ssh-proxy-cli autostart status
+./ssh-proxy-cli autostart disable   # 取消，不影响当前运行的代理
 ```
 
 - 无需管理员权限或 sudo；`enable` 不会立即启动代理，现在要用就运行 `start`。
@@ -211,8 +211,8 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 
 | File | Purpose |
 | --- | --- |
-| `ssh_proxy_app.exe` / `ssh_proxy_app.app` | Tray / menu-bar app, the everyday entry point |
-| `ssh_proxy_cli.exe` / `ssh_proxy_cli` | Command line and proxy runtime; the app needs it |
+| `ssh-proxy-app.exe` / `ssh-proxy-app.app` | Tray / menu-bar app, the everyday entry point |
+| `ssh-proxy-cli.exe` / `ssh-proxy-cli` | Command line and proxy runtime; the app needs it |
 | `ssh_config` | Your SSH servers, with passwordless-login steps; created from `support/` on first start |
 | `config.toml` | Ports, timeouts, health checks and logging; created from `support/` on first start |
 | `support/` | Default configuration templates (`*.in`) and build information, replaced on upgrade; edit the two files above, not these |
@@ -223,7 +223,7 @@ No installer, Go or Python is needed. On Linux, fill in `ssh_config` using the e
 
 ### 2. Open the app and connect (Windows / macOS)
 
-Open `ssh_proxy_app`: its icon is in the Windows notification area (maybe under hidden icons) or the macOS menu bar. Right-click it for the menu. While no SSH server is set up yet (as on first launch), `ssh_config` opens for you to fill in, with no error message; its first lines explain why it opened. If the SSH config has a mistake, the app shows the reason and opens the file.
+Open `ssh-proxy-app`: its icon is in the Windows notification area (maybe under hidden icons) or the macOS menu bar. Right-click it for the menu. While no SSH server is set up yet (as on first launch), `ssh_config` opens for you to fill in, with no error message; its first lines explain why it opened. If the SSH config has a mistake, the app shows the reason and opens the file.
 
 Edit `ssh_config` in the install folder (created the first time you open the app or run `check`), uncomment the example and enter your details:
 
@@ -288,22 +288,22 @@ unset ALL_PROXY all_proxy
 
 ### 4. Command line (Windows / macOS / Linux)
 
-Open a terminal in the install folder. Use `.\ssh_proxy_cli.exe` on Windows and `./ssh_proxy_cli` on macOS/Linux. First run:
+Open a terminal in the install folder. Use `.\ssh-proxy-cli.exe` on Windows and `./ssh-proxy-cli` on macOS/Linux. First run:
 
 ```powershell
 # Windows PowerShell
-.\ssh_proxy_cli.exe check
-.\ssh_proxy_cli.exe login
-.\ssh_proxy_cli.exe start
-.\ssh_proxy_cli.exe status
+.\ssh-proxy-cli.exe check
+.\ssh-proxy-cli.exe login
+.\ssh-proxy-cli.exe start
+.\ssh-proxy-cli.exe status
 ```
 
 ```bash
 # macOS / Linux
-./ssh_proxy_cli check     # valid should be true
-./ssh_proxy_cli login     # set up passwordless login: verify the fingerprint, enter the server password once
-./ssh_proxy_cli start     # starts in the background; you can close the terminal
-./ssh_proxy_cli status    # phase "running" means ready
+./ssh-proxy-cli check     # valid should be true
+./ssh-proxy-cli login     # set up passwordless login: verify the fingerprint, enter the server password once
+./ssh-proxy-cli start     # starts in the background; you can close the terminal
+./ssh-proxy-cli status    # phase "running" means ready
 ```
 
 | Command | Purpose |
@@ -323,12 +323,12 @@ Open a terminal in the install folder. Use `.\ssh_proxy_cli.exe` on Windows and 
 
 ### 5. Start at login without the tray
 
-On Windows, replace `./ssh_proxy_cli` below with `.\ssh_proxy_cli.exe`.
+On Windows, replace `./ssh-proxy-cli` below with `.\ssh-proxy-cli.exe`.
 
 ```bash
-./ssh_proxy_cli autostart enable    # start the proxy at future logins
-./ssh_proxy_cli autostart status
-./ssh_proxy_cli autostart disable   # stop doing that; the running proxy keeps running
+./ssh-proxy-cli autostart enable    # start the proxy at future logins
+./ssh-proxy-cli autostart status
+./ssh-proxy-cli autostart disable   # stop doing that; the running proxy keeps running
 ```
 
 - No administrator rights or sudo. `enable` doesn't start the proxy now; run `start` for that.

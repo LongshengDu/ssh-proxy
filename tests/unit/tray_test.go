@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/ui"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/ui"
 )
 
 // Each size a tray draws has its own render, so no OS rescales the icon:

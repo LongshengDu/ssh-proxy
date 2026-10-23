@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 func NativeLoginLaunch(t *testing.T, id, executable string) {

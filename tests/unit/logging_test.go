@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestRunLogRetention(t *testing.T) {

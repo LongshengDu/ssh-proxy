@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/tests/helpers"
 )
 
 // login uses an existing key, or creates one where OpenSSH looks without an
@@ -88,7 +88,7 @@ func TestAuthorizeKeyCommand(t *testing.T) {
 				lines = append(lines, line)
 			}
 		}
-		want := []string{key + " ssh_proxy"}
+		want := []string{key + " ssh-proxy"}
 		if existing != "" {
 			want = append([]string{existing}, want...)
 		}

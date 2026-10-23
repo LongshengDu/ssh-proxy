@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"testing"
 
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // Terminals, IDEs and agents end a command by killing its process group. A

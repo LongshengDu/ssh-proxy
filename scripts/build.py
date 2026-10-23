@@ -30,9 +30,9 @@ TARGETS = {f"{goos}-{arch}": (goos, arch) for goos in SYSTEMS for arch in ARCHES
 PUBLIC = tuple(sorted(path.relative_to(DEFAULTS).as_posix() for path in DEFAULTS.rglob("*") if path.is_file()))
 # support/ holds generated metadata beside the *.in config templates.
 COMMON = (*PUBLIC, ".version", "support/THIRD_PARTY_NOTICES.txt", "support/BUILDINFO.txt", "support/SHA256SUMS")
-MAC_APP = "ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app"
-MAC_PLIST = "ssh_proxy_app.app/Contents/Info.plist"
-MAC_ICON = "ssh_proxy_app.app/Contents/Resources/icon.icns"
+MAC_APP = "ssh-proxy-app.app/Contents/MacOS/ssh-proxy-app"
+MAC_PLIST = "ssh-proxy-app.app/Contents/Info.plist"
+MAC_ICON = "ssh-proxy-app.app/Contents/Resources/icon.icns"
 
 
 def run(args, env=None, capture=False):
@@ -175,11 +175,11 @@ def environment(target):
 
 
 def payload_names(target):
-    executables = ("ssh_proxy_cli",)
+    executables = ("ssh-proxy-cli",)
     if target.startswith("windows-"):
-        executables = ("ssh_proxy_cli.exe", "ssh_proxy_app.exe")
+        executables = ("ssh-proxy-cli.exe", "ssh-proxy-app.exe")
     elif target.startswith("darwin-"):
-        executables = ("ssh_proxy_cli", MAC_APP, MAC_PLIST, MAC_ICON)
+        executables = ("ssh-proxy-cli", MAC_APP, MAC_PLIST, MAC_ICON)
     # run_on_mac.sh removes macOS download quarantine; other OS folders don't need it.
     common = tuple(name for name in COMMON if name != "run_on_mac.sh" or target.startswith("darwin-"))
     return (*executables, *common)
@@ -197,16 +197,16 @@ def app_plist(path, name, executable, identifier):
 def compile_apps(go, env, target, output):
     output.mkdir(parents=True, exist_ok=True)
     windows = target.startswith("windows-")
-    jobs = [("ssh_proxy_cli", output / ("ssh_proxy_cli.exe" if windows else "ssh_proxy_cli"), False)]
+    jobs = [("ssh-proxy-cli", output / ("ssh-proxy-cli.exe" if windows else "ssh-proxy-cli"), False)]
     if not target.startswith("linux-"):
-        jobs.append(("ssh_proxy_app", output / ("ssh_proxy_app.exe" if windows else MAC_APP), True))
+        jobs.append(("ssh-proxy-app", output / ("ssh-proxy-app.exe" if windows else MAC_APP), True))
     if target.startswith("darwin-"):
-        app_plist(output / MAC_PLIST, "SSH Proxy", "ssh_proxy_app", "com.sshproxy.tray")
+        app_plist(output / MAC_PLIST, "SSH Proxy", "ssh-proxy-app", "com.sshproxy.tray")
         (output / MAC_ICON).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SRC / "ui" / "icon.icns", output / MAC_ICON)
     for command, path, gui in jobs:
         path.parent.mkdir(parents=True, exist_ok=True)
-        flags = f"-s -w -X ssh_proxy/src/config.Version={APP_VERSION}" + (" -H=windowsgui" if windows and gui else "")
+        flags = f"-s -w -X ssh-proxy/src/config.Version={APP_VERSION}" + (" -H=windowsgui" if windows and gui else "")
         run([go, "build", "-trimpath", "-buildvcs=false", "-ldflags", flags, "-o", path, "./src/cmd/" + command], env)
         if windows and gui:
             # Pure-Go resource tool runs on the build host, also for cross-builds.
@@ -265,7 +265,7 @@ def package(target, staging, out):
                 raise RuntimeError(f"Expected regular payload file: {path}")
             info = zipfile.ZipInfo(f"{target}/{name}")
             info.create_system = 3
-            executable = name.endswith((".exe", ".sh")) or "/MacOS/" in name or name == "ssh_proxy_cli"
+            executable = name.endswith((".exe", ".sh")) or "/MacOS/" in name or name == "ssh-proxy-cli"
             info.external_attr = (stat.S_IFREG | (0o755 if executable else 0o644)) << 16
             bundle.writestr(info, path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
         info = zipfile.ZipInfo(f"{target}/logs/")

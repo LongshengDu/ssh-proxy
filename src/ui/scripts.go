@@ -12,7 +12,7 @@ import (
 	"runtime"
 	"strings"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 type Script struct{ Name, Path string }

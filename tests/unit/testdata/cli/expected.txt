@@ -1,10 +1,10 @@
-=== ssh_proxy_cli 
+=== ssh-proxy-cli 
 exit 0
 --- stdout
 SSH SOCKS5 and HTTP proxy.
 
 Usage:
-  ssh_proxy_cli [command]
+  ssh-proxy-cli [command]
 
 Commands:
   start [--foreground] [--wait=SECONDS]
@@ -25,7 +25,7 @@ Commands:
       Validate configuration as JSON
 
 Autostart commands (current user):
-  Use "ssh_proxy_cli autostart --help" for login startup details.
+  Use "ssh-proxy-cli autostart --help" for login startup details.
 
   autostart enable
       Start the proxy at future logins
@@ -35,12 +35,12 @@ Autostart commands (current user):
       Show login registration and outdated entries
 
 Flags:
-  -h, --help      help for ssh_proxy_cli
-  -v, --version   version for ssh_proxy_cli
+  -h, --help      help for ssh-proxy-cli
+  -v, --version   version for ssh-proxy-cli
 
-Use "ssh_proxy_cli [command] --help" for command details.
+Use "ssh-proxy-cli [command] --help" for command details.
 --- stderr
-=== ssh_proxy_cli start --help
+=== ssh-proxy-cli start --help
 exit 0
 --- stdout
 Start the proxy in the background
@@ -50,7 +50,7 @@ Background mode requires SSH keys or ssh-agent; run login for setup. After
 has no effect with --foreground.
 
 Usage:
-  ssh_proxy_cli start [flags]
+  ssh-proxy-cli start [flags]
 
 Flags:
       --foreground     Run in this terminal; Ctrl+C stops the proxy
@@ -58,7 +58,7 @@ Flags:
       --wait SECONDS   Wait up to SECONDS (1..3600) for background
                        readiness (default 20)
 --- stderr
-=== ssh_proxy_cli restart -h
+=== ssh-proxy-cli restart -h
 exit 0
 --- stdout
 Restart with the current configuration
@@ -68,7 +68,7 @@ Background mode requires SSH keys or ssh-agent; run login for setup. After
 has no effect with --foreground.
 
 Usage:
-  ssh_proxy_cli restart [flags]
+  ssh-proxy-cli restart [flags]
 
 Flags:
       --foreground     Run in this terminal; Ctrl+C stops the proxy
@@ -76,32 +76,32 @@ Flags:
       --wait SECONDS   Wait up to SECONDS (1..3600) for background
                        readiness (default 20)
 --- stderr
-=== ssh_proxy_cli stop --help
+=== ssh-proxy-cli stop --help
 exit 0
 --- stdout
 Stop the proxy and its SSH tunnel
 
 Usage:
-  ssh_proxy_cli stop [flags]
+  ssh-proxy-cli stop [flags]
 
 Flags:
   -h, --help   help for stop
 --- stderr
-=== ssh_proxy_cli status --help
+=== ssh-proxy-cli status --help
 exit 0
 --- stdout
 Show endpoint and health as JSON. URL flags print only the selected proxy URL
 when running, otherwise nothing. An empty result exits successfully.
 
 Usage:
-  ssh_proxy_cli status [flags]
+  ssh-proxy-cli status [flags]
 
 Flags:
   -h, --help          help for status
       --proxy_http    Print only the running HTTP proxy URL (http://)
       --proxy_socks   Print only the running SOCKS5 proxy URL (socks5h://)
 --- stderr
-=== ssh_proxy_cli login --help
+=== ssh-proxy-cli login --help
 exit 0
 --- stdout
 Set up unattended SSH login, skipping steps that are already done. Without
@@ -115,7 +115,7 @@ server. Finally it checks that login works without prompts. Working logins exit
 your administrator. --check only checks and changes nothing.
 
 Usage:
-  ssh_proxy_cli login [ENDPOINT] [flags]
+  ssh-proxy-cli login [ENDPOINT] [flags]
 
 Flags:
       --check      Check unattended login only: no prompts or new host
@@ -123,77 +123,77 @@ Flags:
   -h, --help       help for login
       --log FILE   Append SSH diagnostics to FILE (used by the tray)
 --- stderr
-=== ssh_proxy_cli logs --help
+=== ssh-proxy-cli logs --help
 exit 0
 --- stdout
 Show or follow proxy logs
 
 Usage:
-  ssh_proxy_cli logs [flags]
+  ssh-proxy-cli logs [flags]
 
 Flags:
   -f, --follow    Follow new log lines
   -h, --help      help for logs
       --lines N   Show the last N (1..10000) lines (default 60)
 --- stderr
-=== ssh_proxy_cli test --help
+=== ssh-proxy-cli test --help
 exit 0
 --- stdout
 Test HTTP and SOCKS5 forwarding
 
 Usage:
-  ssh_proxy_cli test [flags]
+  ssh-proxy-cli test [flags]
 
 Flags:
   -h, --help      help for test
       --url URL   Fetch URL through both proxies (default
                   "https://example.com/")
 --- stderr
-=== ssh_proxy_cli check --help
+=== ssh-proxy-cli check --help
 exit 0
 --- stdout
 Validate configuration as JSON. Inspect the valid field to determine validity.
 
 Usage:
-  ssh_proxy_cli check [flags]
+  ssh-proxy-cli check [flags]
 
 Flags:
   -h, --help   help for check
 --- stderr
-=== ssh_proxy_cli start --wait invalid --help
+=== ssh-proxy-cli start --wait invalid --help
 exit 1
 --- stdout
 --- stderr
 Error: invalid argument "invalid" for "--wait" flag: strconv.ParseInt: parsing "invalid": invalid syntax
-=== ssh_proxy_cli login --log --help
+=== ssh-proxy-cli login --log --help
 exit 1
 --- stdout
 --- stderr
 Error: flag needs an argument: --log
-=== ssh_proxy_cli logs --bogus -h
+=== ssh-proxy-cli logs --bogus -h
 exit 1
 --- stdout
 --- stderr
 Error: unknown flag: --bogus
-=== ssh_proxy_cli bogus --help
+=== ssh-proxy-cli bogus --help
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "bogus" for "ssh_proxy_cli"
+Error: unknown command "bogus" for "ssh-proxy-cli"
 
 Did you mean this?
 	logs
 
-=== ssh_proxy_cli _run --help
+=== ssh-proxy-cli _run --help
 exit 0
 --- stdout
 Usage:
-  ssh_proxy_cli _run [flags]
+  ssh-proxy-cli _run [flags]
 
 Flags:
   -h, --help   help for _run
 --- stderr
-=== ssh_proxy_cli autostart
+=== ssh-proxy-cli autostart
 exit 0
 --- stdout
 Start the proxy at login for the current user, independently of the tray app.
@@ -205,8 +205,8 @@ at login. Status reports registration; changes made in OS startup settings may
 not be reflected. Disable before moving the installation folder.
 
 Usage:
-  ssh_proxy_cli autostart [flags]
-  ssh_proxy_cli autostart [command]
+  ssh-proxy-cli autostart [flags]
+  ssh-proxy-cli autostart [command]
 
 Available Commands:
   enable
@@ -219,251 +219,251 @@ Available Commands:
 Flags:
   -h, --help   help for autostart
 
-Use "ssh_proxy_cli autostart [command] --help" for command details.
+Use "ssh-proxy-cli autostart [command] --help" for command details.
 --- stderr
-=== ssh_proxy_cli autostart status --help
+=== ssh-proxy-cli autostart status --help
 exit 0
 --- stdout
 Show login registration and outdated entries
 
 Usage:
-  ssh_proxy_cli autostart status [flags]
+  ssh-proxy-cli autostart status [flags]
 
 Flags:
   -h, --help   help for status
 --- stderr
-=== ssh_proxy_cli autostart enable --help
+=== ssh-proxy-cli autostart enable --help
 exit 0
 --- stdout
 Start the proxy at future logins
 
 Usage:
-  ssh_proxy_cli autostart enable [flags]
+  ssh-proxy-cli autostart enable [flags]
 
 Flags:
   -h, --help   help for enable
 --- stderr
-=== ssh_proxy_cli autostart disable -h
+=== ssh-proxy-cli autostart disable -h
 exit 0
 --- stdout
 Remove login startup; leave the proxy running
 
 Usage:
-  ssh_proxy_cli autostart disable [flags]
+  ssh-proxy-cli autostart disable [flags]
 
 Flags:
   -h, --help   help for disable
 --- stderr
-=== ssh_proxy_cli -v
+=== ssh-proxy-cli -v
 exit 0
 --- stdout
-ssh_proxy_cli dev
+ssh-proxy-cli dev
 --- stderr
-=== ssh_proxy_cli bogus
+=== ssh-proxy-cli bogus
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "bogus" for "ssh_proxy_cli"
+Error: unknown command "bogus" for "ssh-proxy-cli"
 
 Did you mean this?
 	logs
 
-=== ssh_proxy_cli help
+=== ssh-proxy-cli help
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "help" for "ssh_proxy_cli"
-=== ssh_proxy_cli version
+Error: unknown command "help" for "ssh-proxy-cli"
+=== ssh-proxy-cli version
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "version" for "ssh_proxy_cli"
-=== ssh_proxy_cli help start
+Error: unknown command "version" for "ssh-proxy-cli"
+=== ssh-proxy-cli help start
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "help" for "ssh_proxy_cli"
-=== ssh_proxy_cli -v extra
+Error: unknown command "help" for "ssh-proxy-cli"
+=== ssh-proxy-cli -v extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli"
-=== ssh_proxy_cli --config
+Error: unknown command "extra" for "ssh-proxy-cli"
+=== ssh-proxy-cli --config
 exit 1
 --- stdout
 --- stderr
 Error: unknown flag: --config
-=== ssh_proxy_cli check -c other.toml
+=== ssh-proxy-cli check -c other.toml
 exit 1
 --- stdout
 --- stderr
 Error: unknown shorthand flag: 'c' in -c
-=== ssh_proxy_cli start --wait 0
+=== ssh-proxy-cli start --wait 0
 exit 1
 --- stdout
 --- stderr
 Error: --wait must be in 1..3600
-=== ssh_proxy_cli start --wait 3601
+=== ssh-proxy-cli start --wait 3601
 exit 1
 --- stdout
 --- stderr
 Error: --wait must be in 1..3600
-=== ssh_proxy_cli restart --wait x
+=== ssh-proxy-cli restart --wait x
 exit 1
 --- stdout
 --- stderr
 Error: invalid argument "x" for "--wait" flag: strconv.ParseInt: parsing "x": invalid syntax
-=== ssh_proxy_cli start extra
+=== ssh-proxy-cli start extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli start"
-=== ssh_proxy_cli start --bogus
+Error: unknown command "extra" for "ssh-proxy-cli start"
+=== ssh-proxy-cli start --bogus
 exit 1
 --- stdout
 --- stderr
 Error: unknown flag: --bogus
-=== ssh_proxy_cli --foreground --wait 0
+=== ssh-proxy-cli --foreground --wait 0
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "0" for "ssh_proxy_cli"
-=== ssh_proxy_cli stop extra
+Error: unknown command "0" for "ssh-proxy-cli"
+=== ssh-proxy-cli stop extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli stop"
-=== ssh_proxy_cli status --json
+Error: unknown command "extra" for "ssh-proxy-cli stop"
+=== ssh-proxy-cli status --json
 exit 1
 --- stdout
 --- stderr
 Error: unknown flag: --json
-=== ssh_proxy_cli check extra
+=== ssh-proxy-cli check extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli check"
-=== ssh_proxy_cli status --proxy_http --proxy_socks
+Error: unknown command "extra" for "ssh-proxy-cli check"
+=== ssh-proxy-cli status --proxy_http --proxy_socks
 exit 1
 --- stdout
 --- stderr
 Error: if any flags in the group [proxy_http proxy_socks] are set none of the others can be; [proxy_http proxy_socks] were all set
-=== ssh_proxy_cli logs --lines 0
+=== ssh-proxy-cli logs --lines 0
 exit 1
 --- stdout
 --- stderr
 Error: --lines must be in 1..10000
-=== ssh_proxy_cli logs --lines 10001
+=== ssh-proxy-cli logs --lines 10001
 exit 1
 --- stdout
 --- stderr
 Error: --lines must be in 1..10000
-=== ssh_proxy_cli logs extra
+=== ssh-proxy-cli logs extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli logs"
-=== ssh_proxy_cli test extra
+Error: unknown command "extra" for "ssh-proxy-cli logs"
+=== ssh-proxy-cli test extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli test"
-=== ssh_proxy_cli test --url
+Error: unknown command "extra" for "ssh-proxy-cli test"
+=== ssh-proxy-cli test --url
 exit 1
 --- stdout
 --- stderr
 Error: flag needs an argument: --url
-=== ssh_proxy_cli login first second
+=== ssh-proxy-cli login first second
 exit 1
 --- stdout
 --- stderr
 Error: accepts at most 1 arg(s), received 2
-=== ssh_proxy_cli login --log
+=== ssh-proxy-cli login --log
 exit 1
 --- stdout
 --- stderr
 Error: flag needs an argument: --log
-=== ssh_proxy_cli trust
+=== ssh-proxy-cli trust
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "trust" for "ssh_proxy_cli"
+Error: unknown command "trust" for "ssh-proxy-cli"
 
 Did you mean this?
 	test
 
-=== ssh_proxy_cli service start
+=== ssh-proxy-cli service start
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli service stop
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli service stop
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli service restart
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli service restart
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli service bogus
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli service bogus
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli autostart status extra
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli autostart status extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli autostart status"
-=== ssh_proxy_cli autostart bogus
+Error: unknown command "extra" for "ssh-proxy-cli autostart status"
+=== ssh-proxy-cli autostart bogus
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "bogus" for "ssh_proxy_cli autostart"
-=== ssh_proxy_cli service install --user other
+Error: unknown command "bogus" for "ssh-proxy-cli autostart"
+=== ssh-proxy-cli service install --user other
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli service install extra
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli service install extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "service" for "ssh_proxy_cli"
-=== ssh_proxy_cli _run extra
+Error: unknown command "service" for "ssh-proxy-cli"
+=== ssh-proxy-cli _run extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "extra" for "ssh_proxy_cli _run"
-=== ssh_proxy_cli _service extra
+Error: unknown command "extra" for "ssh-proxy-cli _run"
+=== ssh-proxy-cli _service extra
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "_service" for "ssh_proxy_cli"
-=== ssh_proxy_cli logs -lines 0
+Error: unknown command "_service" for "ssh-proxy-cli"
+=== ssh-proxy-cli logs -lines 0
 exit 1
 --- stdout
 --- stderr
 Error: unknown shorthand flag: 'l' in -lines
-=== ssh_proxy_cli start -foreground -wait 0
+=== ssh-proxy-cli start -foreground -wait 0
 exit 1
 --- stdout
 --- stderr
 Error: unknown shorthand flag: 'f' in -foreground
-=== ssh_proxy_cli start --wait=0
+=== ssh-proxy-cli start --wait=0
 exit 1
 --- stdout
 --- stderr
 Error: --wait must be in 1..3600
-=== ssh_proxy_cli logs -f --lines=0
+=== ssh-proxy-cli logs -f --lines=0
 exit 1
 --- stdout
 --- stderr
 Error: --lines must be in 1..10000
-=== ssh_proxy_cli -config other.toml status
+=== ssh-proxy-cli -config other.toml status
 exit 1
 --- stdout
 --- stderr
-Error: unknown command "other.toml" for "ssh_proxy_cli"
+Error: unknown command "other.toml" for "ssh-proxy-cli"

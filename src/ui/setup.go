@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"ssh_proxy/src/config"
+	"ssh-proxy/src/config"
 )
 
 // SetupPrompts remembers UI actions only; all proxy state comes from the CLI.

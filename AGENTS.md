@@ -12,7 +12,7 @@
 
 # Repository rules
 
-- All compiled application Go code belongs under `src/`; keep the one-way package imports described in README. Ship only `ssh_proxy_cli` and `ssh_proxy_app`; new packages must not add installed programs.
+- All compiled application Go code belongs under `src/`; keep the one-way package imports described in README. Ship only `ssh-proxy-cli` and `ssh-proxy-app`; new packages must not add installed programs.
 - Tests stay in the flat `tests/unit` and `tests/system` suites with `*_test.go` names; reusable helpers belong in `tests/helpers/`. Do not add tests of the build/test scripts themselves.
 - Keep all code, scripts and tests ready to run natively on Windows, macOS and Linux at all times, even when you can test only one OS: put OS-specific code in `_windows`/`_darwin`/`_linux` files or behind build tags, and give every test that covers one OS's behavior a counterpart for the others where that behavior exists.
 - Keep system tests fast: don't repeat a check that another test or the unit suite already covers, wait for conditions instead of fixed sleeps, keep `--wait` values and timeouts as short as the check allows, and mark independent tests `t.Parallel()` (they must not use `t.Setenv`).

@@ -5,7 +5,7 @@ package main
 import (
 	"os"
 	"runtime"
-	"ssh_proxy/src/ui"
+	"ssh-proxy/src/ui"
 )
 
 // AppKit requires the process's initial OS thread, including before main runs.

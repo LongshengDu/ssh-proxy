@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 func CleanupTestLogins() error { return nil }

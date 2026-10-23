@@ -19,8 +19,8 @@ import (
 
 	"github.com/coder/websocket"
 
-	"ssh_proxy/src/bridge"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/bridge"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestHTTPPreservesEncodingAndBody(t *testing.T) {

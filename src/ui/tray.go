@@ -20,10 +20,10 @@ import (
 
 	"github.com/gogpu/systray"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/src/platform"
 )
 
 //go:embed icons
@@ -276,7 +276,7 @@ func commandBackend(parent context.Context, backend string, args ...string) ([]b
 	out, err := cmd.CombinedOutput()
 	slog.Info("CLI command", "args", args, "output", strings.TrimSpace(string(out)))
 	if err != nil {
-		return nil, fmt.Errorf("ssh_proxy_cli %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("ssh-proxy-cli %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return out, nil
 }

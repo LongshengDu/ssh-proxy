@@ -8,8 +8,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/tests/helpers"
 )
 
 // templateInstall is an install folder with only the shipped support/*.in templates.

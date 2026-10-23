@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/src/ui"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/src/ui"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestTrayLoginLaunch(t *testing.T) {

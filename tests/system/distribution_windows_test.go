@@ -14,17 +14,17 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/src/ui"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/src/ui"
+	"ssh-proxy/tests/helpers"
 )
 
 // Windows-only integration; the menu itself is checked on every desktop OS by
 // TestTrayNativeWorkflow.
 func TestTrayWindowsIntegration(t *testing.T) {
 	dir := testutil.IsolatedBuild(t)
-	iconPath, _ := windows.UTF16PtrFromString(filepath.Join(dir, "ssh_proxy_app.exe"))
+	iconPath, _ := windows.UTF16PtrFromString(filepath.Join(dir, "ssh-proxy-app.exe"))
 	icons, _, _ := windows.NewLazySystemDLL("shell32.dll").NewProc("ExtractIconExW").Call(uintptr(unsafe.Pointer(iconPath)), ^uintptr(0), 0, 0, 0)
 	if icons != 1 {
 		t.Fatalf("expected one embedded application icon, got %d", icons)
@@ -41,7 +41,7 @@ func TestTrayWindowsIntegration(t *testing.T) {
 	}
 	// A configured server keeps first-launch setup from opening ssh_config.
 	testutil.WriteFile(t, filepath.Join(dir, "ssh_config"), "Host proxy-primary\n HostName example.invalid\n User tester\n")
-	tray := exec.Command(filepath.Join(dir, "ssh_proxy_app.exe"))
+	tray := exec.Command(filepath.Join(dir, "ssh-proxy-app.exe"))
 	platform.HideChild(tray)
 	if err := tray.Start(); err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestTrayWindowsIntegration(t *testing.T) {
 	command, _, err := key.GetStringValue("SSHProxy-" + p.ID)
 	key.Close()
 	// The default config needs no argument; Windows lists the app itself, not PowerShell.
-	if want := windows.ComposeCommandLine([]string{filepath.Join(dir, "ssh_proxy_app.exe")}); err != nil || command != want {
+	if want := windows.ComposeCommandLine([]string{filepath.Join(dir, "ssh-proxy-app.exe")}); err != nil || command != want {
 		t.Fatalf("invalid tray login command: %v: %s; want %s", err, command, want)
 	}
 	win.PostMessage(hwnd, win.WM_CLOSE, 0, 0)

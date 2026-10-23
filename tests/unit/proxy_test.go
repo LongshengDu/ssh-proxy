@@ -23,13 +23,13 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/bridge"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/src/supervisor"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/bridge"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/src/supervisor"
+	"ssh-proxy/tests/helpers"
 )
 
 // A state file left by a hard stop may name a live, unrelated PID. Nothing holds
@@ -347,7 +347,7 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 	}
 	unlock()
 	dir := filepath.Join(t.TempDir(), "portable [logs]")
-	p, err := config.PathsForExecutable(filepath.Join(dir, "ssh_proxy_cli"))
+	p, err := config.PathsForExecutable(filepath.Join(dir, "ssh-proxy-cli"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestInstanceLockAndContinuousRunLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	next.Close()
-	found, err := config.PathsForExecutable(filepath.Join(dir, "ssh_proxy_cli"))
+	found, err := config.PathsForExecutable(filepath.Join(dir, "ssh-proxy-cli"))
 	if err != nil || found.Log != next.Name() || found.Log == path {
 		t.Fatal("new process run needs a new discoverable file", found, err)
 	}

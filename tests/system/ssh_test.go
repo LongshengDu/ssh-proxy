@@ -22,8 +22,8 @@ import (
 	"github.com/coder/websocket"
 	socks "golang.org/x/net/proxy"
 
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestCLIHTTPSStreamingAndWebSocket(t *testing.T) {

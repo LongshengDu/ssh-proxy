@@ -4,7 +4,7 @@ package ui
 
 import (
 	"runtime"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 func appLogin(id, exe string) platform.LoginEntry {

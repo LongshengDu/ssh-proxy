@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/term"
 
-	"ssh_proxy/src/cli"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
+	"ssh-proxy/src/cli"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
 )
 
 // Child fixtures exercise the actual CLI/tray without a real SSH login.

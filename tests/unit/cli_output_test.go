@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/cli"
+	"ssh-proxy/src/cli"
 )
 
 // Expected CLI output: every help topic and the error text and exit code of
@@ -72,7 +72,7 @@ func TestCLIEquivalentOutput(t *testing.T) {
 	}
 }
 
-// runCLI mirrors src/cmd/ssh_proxy_cli/main.go with captured standard streams.
+// runCLI mirrors src/cmd/ssh-proxy-cli/main.go with captured standard streams.
 func runCLI(t *testing.T, args []string) (stdout, stderr string, code int) {
 	t.Helper()
 	dir := t.TempDir()
@@ -110,7 +110,7 @@ func TestCLIExpectedOutput(t *testing.T) {
 				t.Fatalf("%v: help must fit 80 columns using plain spaces: %q", args, line)
 			}
 		}
-		fmt.Fprintf(&got, "=== ssh_proxy_cli %s\nexit %d\n--- stdout\n%s--- stderr\n%s", strings.Join(args, " "), code, stdout, stderr)
+		fmt.Fprintf(&got, "=== ssh-proxy-cli %s\nexit %d\n--- stdout\n%s--- stderr\n%s", strings.Join(args, " "), code, stdout, stderr)
 	}
 	path := filepath.Join("testdata", "cli", "expected.txt")
 	if os.Getenv("SSH_PROXY_UPDATE_EXPECTED") == "1" {

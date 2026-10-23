@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/bridge"
-	"ssh_proxy/src/cli"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/bridge"
+	"ssh-proxy/src/cli"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestCLITestResponseBody(t *testing.T) {

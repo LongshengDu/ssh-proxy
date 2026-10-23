@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"strings"
 
-	"ssh_proxy/src/config"
+	"ssh-proxy/src/config"
 )
 
 // setupLogin guides one alias to unattended key login, skipping steps that are

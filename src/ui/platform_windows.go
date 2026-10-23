@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func defaultBackend(exe string) string { return filepath.Join(filepath.Dir(exe), "ssh_proxy_cli.exe") }
+func defaultBackend(exe string) string { return filepath.Join(filepath.Dir(exe), "ssh-proxy-cli.exe") }
 
 // trayIconSize is the small-icon size the notification area draws. The app's
 // manifest declares DPI awareness, so this follows the display scaling.

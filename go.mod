@@ -1,4 +1,4 @@
-module ssh_proxy
+module ssh-proxy
 
 go 1.27.0
 

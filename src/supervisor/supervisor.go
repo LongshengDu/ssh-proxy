@@ -19,11 +19,11 @@ import (
 	"syscall"
 	"time"
 
-	"ssh_proxy/src/bridge"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/bridge"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/src/platform"
 )
 
 type sshChild struct {
@@ -273,7 +273,7 @@ func RunContext(parent context.Context, p config.Paths, foreground bool) (runErr
 		os.Stdout.Close()
 		os.Stderr.Close()
 	}
-	logger.Printf("Starting ssh_proxy_cli %s; pid=%d; config=%s", config.Version, os.Getpid(), p.Config)
+	logger.Printf("Starting ssh-proxy-cli %s; pid=%d; config=%s", config.Version, os.Getpid(), p.Config)
 	c, err := config.LoadConfig(p.Config)
 	if err != nil {
 		return err

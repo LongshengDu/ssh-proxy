@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
 )
 
 type NativeItem struct {

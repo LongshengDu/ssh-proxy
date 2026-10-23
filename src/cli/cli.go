@@ -1,4 +1,4 @@
-// Package cli implements ssh_proxy_cli's commands, help and reports.
+// Package cli implements ssh-proxy-cli's commands, help and reports.
 package cli
 
 import (
@@ -19,12 +19,12 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"ssh_proxy/src/bridge"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/logs"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/src/supervisor"
+	"ssh-proxy/src/bridge"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/logs"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/src/supervisor"
 )
 
 func printJSON(value any) error {
@@ -93,7 +93,7 @@ func testProxy(c *config.Config, target string) error {
 
 // Only the root help shows this group; it lists each autostart command.
 const autostartTitle = `Autostart commands (current user):
-  Use "ssh_proxy_cli autostart --help" for login startup details.
+  Use "ssh-proxy-cli autostart --help" for login startup details.
 `
 
 // Run executes one CLI command.
@@ -130,13 +130,13 @@ func Run(args []string) error {
 			return do(p)
 		}
 	}
-	root := &cobra.Command{Use: "ssh_proxy_cli", Short: "SSH SOCKS5 and HTTP proxy.", Version: config.Version,
+	root := &cobra.Command{Use: "ssh-proxy-cli", Short: "SSH SOCKS5 and HTTP proxy.", Version: config.Version,
 		SilenceErrors: true, SilenceUsage: true, CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true}}
 	// List commands in the order added below.
 	cobra.EnableCommandSorting = false
 	cobra.MousetrapHelpText = ""                                           // Keep normal help when launched from Windows Explorer.
 	root.SetHelpCommand(&cobra.Command{Hidden: true, GroupID: "commands"}) // No "help" command; use -h/--help.
-	root.SetVersionTemplate("ssh_proxy_cli {{.Version}}\n")
+	root.SetVersionTemplate("ssh-proxy-cli {{.Version}}\n")
 	// Define boolean flags before Cobra finds the command (for example "-v extra").
 	root.InitDefaultHelpFlag()
 	root.InitDefaultVersionFlag()

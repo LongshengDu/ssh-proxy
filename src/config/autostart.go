@@ -4,12 +4,12 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 // AutostartEntry describes the CLI's login command, independent of the app.
 func (p Paths) AutostartEntry() platform.LoginEntry {
-	name, exe, args := "ssh-proxy-"+p.ID, "ssh_proxy_cli", []string{"start", "--foreground"}
+	name, exe, args := "ssh-proxy-"+p.ID, "ssh-proxy-cli", []string{"start", "--foreground"}
 	switch runtime.GOOS {
 	case "windows":
 		name, exe, args = "SSHProxyCLI-"+p.ID, exe+".exe", []string{"start", "--wait", "1"}

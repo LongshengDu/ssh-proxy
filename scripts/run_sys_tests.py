@@ -37,7 +37,7 @@ def parse_args(argv):
 def prepare_environment(args, target, directory):
     if target.startswith("linux") and args.scope == "app":
         raise RuntimeError("Linux supports CLI tests only; use --cli-only or omit the selection.")
-    cli = directory / ("ssh_proxy_cli.exe" if target.startswith("windows") else "ssh_proxy_cli")
+    cli = directory / ("ssh-proxy-cli.exe" if target.startswith("windows") else "ssh-proxy-cli")
     if not cli.is_file():
         raise RuntimeError(f"Missing {cli}. Run python scripts/build.py first.")
     env = b.environment(target)
@@ -55,7 +55,7 @@ def prepare_environment(args, target, directory):
 def stage_programs(directory, target, report, scope):
     staging = report / "programs"
     for name in b.payload_names(target):
-        if scope == "cli" and name.startswith("ssh_proxy_app"):
+        if scope == "cli" and name.startswith("ssh-proxy-app"):
             continue
         source = b.DEFAULTS / name if name in b.PUBLIC else directory / name
         destination = staging / name

@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // A logged login session must leave native SSH's input/output on real console

@@ -11,7 +11,7 @@ import (
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 // Clean only abandoned entries from this repository's test folder. Existing

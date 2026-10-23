@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
 )
 
 func SystemBuild(t *testing.T) string { t.Helper(); return os.Getenv("SSH_PROXY_SYS_DIR") }
 func CLIPath(dir string) string {
-	name := "ssh_proxy_cli"
+	name := "ssh-proxy-cli"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
@@ -28,9 +28,9 @@ func CLIPath(dir string) string {
 }
 func AppPath(dir string) string {
 	if runtime.GOOS == "darwin" {
-		return filepath.Join(dir, "ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app")
+		return filepath.Join(dir, "ssh-proxy-app.app/Contents/MacOS/ssh-proxy-app")
 	}
-	return filepath.Join(dir, "ssh_proxy_app.exe")
+	return filepath.Join(dir, "ssh-proxy-app.exe")
 }
 
 // IsolatedBuild copies the build to a unique folder. Its unique path gives it

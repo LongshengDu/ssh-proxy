@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
 )
 
 type StateFile struct {

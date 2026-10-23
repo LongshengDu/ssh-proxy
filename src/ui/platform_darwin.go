@@ -13,8 +13,8 @@ import (
 func trayIconSize() int { return 44 }
 
 func defaultBackend(exe string) string {
-	// Installed folder/ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app
-	return filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "..", "..", "ssh_proxy_cli"))
+	// Installed folder/ssh-proxy-app.app/Contents/MacOS/ssh-proxy-app
+	return filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "..", "..", "ssh-proxy-cli"))
 }
 func openPath(path string) error {
 	info, err := os.Stat(path)

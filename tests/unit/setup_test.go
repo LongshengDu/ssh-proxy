@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestMain(m *testing.M) {

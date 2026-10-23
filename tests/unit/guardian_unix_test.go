@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/cli"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/cli"
+	"ssh-proxy/src/platform"
 )
 
 func TestUnixGuardianHelper(t *testing.T) {

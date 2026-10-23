@@ -18,8 +18,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
 )
 
 // The byte number is cumulative across cuts, excluding marker lines. Followers

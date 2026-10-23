@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"testing"
 
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/supervisor"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/supervisor"
 )
 
 // SIGTERM (logout, systemctl --user stop) is a requested stop, not a crash.

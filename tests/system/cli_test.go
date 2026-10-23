@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 func TestCLICommandsAndConfiguration(t *testing.T) {
@@ -21,7 +21,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	dir := testutil.IsolatedBuild(t)
 	for _, command := range []string{"-v", "--version"} {
 		version := strings.TrimSpace(string(testutil.MustCLI(t, dir, command)))
-		if version != "ssh_proxy_cli "+strings.TrimSpace(testutil.ReadFile(filepath.Join(dir, ".version"))) {
+		if version != "ssh-proxy-cli "+strings.TrimSpace(testutil.ReadFile(filepath.Join(dir, ".version"))) {
 			t.Fatal(version)
 		}
 	}

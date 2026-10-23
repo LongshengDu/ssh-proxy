@@ -4,8 +4,8 @@
 
 SSH Proxy runs local HTTP/HTTPS and SOCKS5 proxies through native OpenSSH. It ships two programs as a portable ZIP:
 
-- **`ssh_proxy_cli`** (Windows, macOS, Linux) owns the proxy.
-- **`ssh_proxy_app`** (Windows, macOS) is a tray GUI built on the CLI. The CLI never depends on the app.
+- **`ssh-proxy-cli`** (Windows, macOS, Linux) owns the proxy.
+- **`ssh-proxy-app`** (Windows, macOS) is a tray GUI built on the CLI. The CLI never depends on the app.
 
 Prefer existing libraries, small adapters and sensible defaults over new abstractions or settings. Start with [build and release](#build-and-release), then follow the [development checks](#test-and-verify).
 
@@ -40,7 +40,7 @@ All builds use `CGO_ENABLED=0` and native tools (no WSL).
 
 | Path | Responsibility |
 | --- | --- |
-| `src/cmd/ssh_proxy_cli`, `src/cmd/ssh_proxy_app` | The two entry points |
+| `src/cmd/ssh-proxy-cli`, `src/cmd/ssh-proxy-app` | The two entry points |
 | `src/cli` | Cobra commands, flags, help and reports |
 | `src/config` | TOML, install paths and identity, SSH aliases, `ssh -G`, SSH arguments, `app.json` |
 | `src/bridge` | HTTP-to-SOCKS bridge, connection tracking, health probes |
@@ -71,7 +71,7 @@ Managed tunnels enforce batch authentication, strict host-key checking, no TTY o
 
 ### One supervisor per install
 
-The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh_proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates unit tests; each system test copies the build to its own folder, which gives it its own identity, so system tests can run in parallel.
+The installation identity is the first eight SHA-256 bytes of the cleaned absolute TOML path, case-folded on Windows. It scopes locks, login entries and runtime state in the user cache (`%LOCALAPPDATA%\ssh-proxy\<id>` on Windows). `SSH_PROXY_RUNTIME` isolates unit tests; each system test copies the build to its own folder, which gives it its own identity, so system tests can run in parallel.
 
 All entry points use the same supervisor. Background `start` launches detached `_run`; foreground starts run in the calling terminal. Only the instance-lock holder creates the run log and publishes state. Concurrent background starters join the winner through its control API; a losing `_run` exits with code 10 without creating a log. A duplicate foreground start fails without touching live state. `restart` validates configuration before stopping anything.
 
@@ -114,7 +114,7 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
 
 | Entry | Owner | Windows | macOS | Linux |
 | --- | --- | --- | --- | --- |
-| Proxy at login | CLI `autostart enable/disable/status` | HKCU Run `SSHProxyCLI-<id>`: `ssh_proxy_cli.exe start --wait 1` | LaunchAgent `com.sshproxy.cli.<id>`: `start --foreground` | systemd user unit `ssh-proxy-<id>.service`: `start --foreground`, `Restart=no` |
+| Proxy at login | CLI `autostart enable/disable/status` | HKCU Run `SSHProxyCLI-<id>`: `ssh-proxy-cli.exe start --wait 1` | LaunchAgent `com.sshproxy.cli.<id>`: `start --foreground` | systemd user unit `ssh-proxy-<id>.service`: `start --foreground`, `Restart=no` |
 | App at login | App menu "Launch App at Login" | HKCU Run `SSHProxy-<id>`: the app exe | LaunchAgent `com.sshproxy.login.<id>` | (no app) |
 
 - **Independent and safe together:** the two entries are independent, and starting twice is harmless because a second start joins the first.

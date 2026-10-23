@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/tests/helpers"
 )
 
 // Real child-process logging, using only local closed ports and no SSH credentials.
@@ -81,7 +81,7 @@ func TestProxyRunLogs(t *testing.T) {
 	files(2)
 	first := testutil.StatusCLI(t, dir).Log
 	initial, _ := os.ReadFile(first)
-	if !strings.Contains(string(initial), "Starting ssh_proxy_cli") || !strings.Contains(string(initial), "SOCKS port is unavailable") {
+	if !strings.Contains(string(initial), "Starting ssh-proxy-cli") || !strings.Contains(string(initial), "SOCKS port is unavailable") {
 		t.Fatal("bootstrap failure split from run log")
 	}
 	socks.Close()
@@ -108,7 +108,7 @@ func TestProxyRunLogs(t *testing.T) {
 		}
 	}
 	final, _ := os.ReadFile(status.Log)
-	if !strings.Contains(string(final), "Starting ssh_proxy_cli") || !strings.Contains(string(final), "Stopped; SSH child") {
+	if !strings.Contains(string(final), "Starting ssh-proxy-cli") || !strings.Contains(string(final), "Stopped; SSH child") {
 		t.Fatal("start/stop history was not kept in one file")
 	}
 	if out, err := call("logs", "--lines", "100"); err != nil || !strings.Contains(string(out), "Stopped; SSH child") {

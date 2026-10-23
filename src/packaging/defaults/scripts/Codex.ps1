@@ -15,7 +15,7 @@ if (-not $app) {
 }
 
 # Use the running proxy's URL when available; otherwise keep the default.
-$cli = Join-Path (Split-Path -Parent $PSScriptRoot) 'ssh_proxy_cli.exe'
+$cli = Join-Path (Split-Path -Parent $PSScriptRoot) 'ssh-proxy-cli.exe'
 try {
     $url = & $cli status --proxy_http 2>$null
     if ($LASTEXITCODE -eq 0 -and $url) { $SSH_PROXY_URL = $url }

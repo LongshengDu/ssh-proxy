@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"ssh_proxy/src/cli"
-	"ssh_proxy/src/config"
-	"ssh_proxy/src/control"
-	"ssh_proxy/src/platform"
-	"ssh_proxy/src/supervisor"
-	"ssh_proxy/tests/helpers"
+	"ssh-proxy/src/cli"
+	"ssh-proxy/src/config"
+	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
+	"ssh-proxy/src/supervisor"
+	"ssh-proxy/tests/helpers"
 )
 
 // Test subprocesses use the actual supervisor/guardian, with private Paths.
@@ -80,7 +80,7 @@ func TestFatalPanicReachesRunLog(t *testing.T) {
 func supervisorPaths(t *testing.T) config.Paths {
 	t.Helper()
 	t.Setenv("SSH_PROXY_RUNTIME", t.TempDir())
-	p, err := config.PathsForExecutable(filepath.Join(t.TempDir(), "ssh_proxy_cli"))
+	p, err := config.PathsForExecutable(filepath.Join(t.TempDir(), "ssh-proxy-cli"))
 	if err != nil {
 		t.Fatal(err)
 	}

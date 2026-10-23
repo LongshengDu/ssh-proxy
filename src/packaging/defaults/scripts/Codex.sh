@@ -26,7 +26,7 @@ if [[ -z "$app" || ! -x "$app" ]]; then
 fi
 
 # Use the running proxy's URL when available; otherwise keep the default.
-if url="$("$root/ssh_proxy_cli" status --proxy_http 2>/dev/null)" && [[ -n "$url" ]]; then
+if url="$("$root/ssh-proxy-cli" status --proxy_http 2>/dev/null)" && [[ -n "$url" ]]; then
     SSH_PROXY_URL="$url"
 fi
 export HTTP_PROXY="$SSH_PROXY_URL" HTTPS_PROXY="$SSH_PROXY_URL" NO_PROXY='localhost,127.0.0.1,::1'

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"ssh_proxy/src/platform"
+	"ssh-proxy/src/platform"
 )
 
 func TestLoginEntryFormats(t *testing.T) {
-	args := []string{`/home/test/100% $proxy & <folder>/ssh_proxy_cli`, "start", "--foreground"}
+	args := []string{`/home/test/100% $proxy & <folder>/ssh-proxy-cli`, "start", "--foreground"}
 	entry := platform.LoginEntry{Name: "com.sshproxy.cli.test", Command: args}
 	plist := entry.LaunchAgent()
 	decoder := xml.NewDecoder(strings.NewReader(plist))
@@ -42,7 +42,7 @@ func TestLoginEntryFormats(t *testing.T) {
 		t.Fatal("app must preserve its independent children")
 	}
 	unit := platform.SystemdUnit(args)
-	for _, want := range []string{`ExecStart="/home/test/100%% $$proxy & <folder>/ssh_proxy_cli" "start" "--foreground"`, "Restart=no", "WantedBy=default.target"} {
+	for _, want := range []string{`ExecStart="/home/test/100%% $$proxy & <folder>/ssh-proxy-cli" "start" "--foreground"`, "Restart=no", "WantedBy=default.target"} {
 		if !strings.Contains(unit, want) {
 			t.Fatal("missing", want, unit)
 		}
