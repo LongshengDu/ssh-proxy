@@ -76,13 +76,14 @@ type Paths struct{ Config, App, Runtime, State, Logs, Log, ID string }
 
 // ConfigCheck identifies the file to edit without making the tray parse errors.
 type ConfigCheck struct {
-	Valid     bool     `json:"valid"`
-	EditFile  string   `json:"edit_file,omitempty"`
-	Error     string   `json:"error,omitempty"`
-	Config    string   `json:"config"`
-	SSH       string   `json:"ssh_executable,omitempty"`
-	SSHConfig string   `json:"ssh_config,omitempty"`
-	Endpoints []string `json:"endpoints,omitempty"`
+	Valid      bool     `json:"valid"`
+	Incomplete bool     `json:"incomplete,omitempty"` // Setup unfinished (no SSH server yet), not an error.
+	EditFile   string   `json:"edit_file,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	Config     string   `json:"config"`
+	SSH        string   `json:"ssh_executable,omitempty"`
+	SSHConfig  string   `json:"ssh_config,omitempty"`
+	Endpoints  []string `json:"endpoints,omitempty"`
 }
 
 type configFileError struct {
@@ -93,6 +94,9 @@ type configFileError struct {
 func (e *configFileError) Error() string { return e.err.Error() }
 func (e *configFileError) Unwrap() error { return e.err }
 
+// ErrNoHosts means ssh_config declares no server yet: setup isn't finished.
+var ErrNoHosts = errors.New("no SSH server in ssh_config yet")
+
 func CheckConfig(path string) ConfigCheck {
 	c, err := LoadConfig(path)
 	result := ConfigCheck{Valid: err == nil, Config: path}
@@ -102,6 +106,8 @@ func CheckConfig(path string) ConfigCheck {
 		if errors.As(err, &file) {
 			result.EditFile = file.path
 		}
+		// No server yet, or no SSH file at all: the user hasn't finished setup.
+		result.Incomplete = errors.Is(err, ErrNoHosts)
 	} else {
 		result.Config, result.SSH, result.SSHConfig, result.Endpoints = c.Path, c.SSH.Executable, c.SSH.ConfigFile, c.Endpoints
 	}
@@ -264,7 +270,7 @@ func LoadConfig(path string) (config *Config, loadErr error) {
 	}
 	editFile = c.SSH.ConfigFile
 	if info, err := os.Stat(c.SSH.ConfigFile); err != nil || info.IsDir() {
-		return nil, fmt.Errorf("SSH config file not found: %s", c.SSH.ConfigFile)
+		return nil, fmt.Errorf("%w: SSH config file not found: %s", ErrNoHosts, c.SSH.ConfigFile)
 	}
 	c.Endpoints, err = SSHAliases(c.SSH.ConfigFile)
 	if err != nil {
@@ -342,7 +348,7 @@ func SSHAliases(path string) ([]string, error) {
 		}
 	}
 	if len(aliases) == 0 {
-		return nil, fmt.Errorf("no explicit Host aliases in %s; add your hosts to ssh_config in connection priority order", path)
+		return nil, fmt.Errorf("%w: add your hosts to %s in connection priority order", ErrNoHosts, path)
 	}
 	return aliases, nil
 }

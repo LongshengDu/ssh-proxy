@@ -1,5 +1,10 @@
-# 填写你的 SSH 服务器：删掉下面示例每行开头的 "# "，换成你自己的信息。
-# Your SSH server: remove the "# " at the start of each example line and enter your own details.
+# 为什么打开了这个文件？SSH Proxy 还没有可连接的 SSH 服务器。请在下面填写你的服务器，
+# 保存后在托盘点 Start proxy（或运行 ssh_proxy_cli start）。
+# Why did this file open? SSH Proxy has no SSH server to connect to yet. Add yours below,
+# save, then click Start proxy in the tray (or run ssh_proxy_cli start).
+#
+# 填写方法：删掉下面示例每行开头的 "# "，换成你自己的信息。
+# How: remove the "# " at the start of each example line and enter your own details.
 #
 # Host my-proxy
 #     HostName ssh.example.com
@@ -70,3 +75,7 @@
 #    in an administrator PowerShell:
 #       Set-Service ssh-agent -StartupType Automatic; Start-Service ssh-agent
 # 4. Check: ./ssh_proxy_cli login --check    once it succeeds, you can start the proxy.
+#
+# 本文件位于安装目录，首次启动时由 support/ssh_config.in 复制而来；请改这里，support/ 中的文件升级时会被替换。
+# This file lives in the install folder, copied from support/ssh_config.in on first start. Edit it here;
+# support/ is replaced on upgrade.

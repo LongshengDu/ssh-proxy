@@ -209,16 +209,24 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			}
 			app := testutil.StartApp(t, dir, args...)
 			pid := app.Process.Pid
-			message := testutil.ExpectDialog(t, pid, reason)
 			log := testutil.TrayLog(dir)
-			if !strings.Contains(message, log) || !strings.Contains(testutil.ReadFile(log), reason) {
-				t.Fatal("error was not recorded in the app run log", message)
-			}
 			if strings.HasSuffix(scenario, "SSH") {
+				// Unfinished SSH setup only opens the SSH file (created from the
+				// template if missing); no error dialog or log, but the reason is logged.
 				testutil.NativeOpened(t, servers)
+				testutil.ExpectNoDialog(t, pid)
+				testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), reason) })
+				if scenario == "missing SSH" && !strings.Contains(testutil.ReadFile(servers), "Why did this file open?") {
+					t.Fatal("a missing SSH file must start from the template")
+				}
+			} else {
+				message := testutil.ExpectDialog(t, pid, reason)
+				if !strings.Contains(message, log) || !strings.Contains(testutil.ReadFile(log), reason) {
+					t.Fatal("error was not recorded in the app run log", message)
+				}
+				testutil.NativeDismiss(t, pid)
+				testutil.NativeOpened(t, log)
 			}
-			testutil.NativeDismiss(t, pid)
-			testutil.NativeOpened(t, log)
 			startupFailure := scenario == "missing CLI" || len(args) != 0
 			if !startupFailure {
 				if scenario == "bad config" {

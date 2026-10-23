@@ -82,6 +82,10 @@ func TestConfigCheckIdentifiesEditableFile(t *testing.T) {
 			if result.Valid != (scenario == "valid") || result.EditFile != want || (!result.Valid && result.Error == "") {
 				t.Fatalf("wrong recovery target: %+v; want %s", result, filepath.Base(want))
 			}
+			// Only unfinished SSH setup is "incomplete"; real mistakes stay errors.
+			if result.Incomplete != (scenario == "empty SSH" || scenario == "missing SSH") {
+				t.Fatalf("wrong incomplete flag: %+v", result)
+			}
 		})
 	}
 }

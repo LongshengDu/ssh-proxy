@@ -120,6 +120,16 @@ func Run(args []string) error {
 			return do(p)
 		}
 	}
+	// Commands that read the configuration first create missing files from
+	// support/*.in and bring config.toml up to date; status, stop and logs don't.
+	setup := func(do func(config.Paths) error) func(config.Paths) error {
+		return func(p config.Paths) error {
+			if err := config.EnsureConfig(p.Config); err != nil {
+				return fmt.Errorf("prepare configuration: %w", err)
+			}
+			return do(p)
+		}
+	}
 	root := &cobra.Command{Use: "ssh_proxy_cli", Short: "SSH SOCKS5 and HTTP proxy.", Version: config.Version,
 		SilenceErrors: true, SilenceUsage: true, CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true}}
 	// List commands in the order added below.
@@ -165,12 +175,12 @@ Background mode requires SSH keys or ssh-agent; run login for setup. After
 has no effect with --foreground.`}
 		foreground := cmd.Flags().Bool("foreground", false, "Run in this terminal; Ctrl+C stops the proxy")
 		wait := cmd.Flags().Int("wait", 20, "Wait up to `SECONDS` (1..3600) for background readiness")
-		cmd.RunE = run(func(p config.Paths) error {
+		cmd.RunE = run(setup(func(p config.Paths) error {
 			if *wait < 1 || *wait > 3600 {
 				return fmt.Errorf("--wait must be in 1..3600")
 			}
 			return start(p, restart, *foreground, *wait)
-		})
+		}))
 		return cmd
 	}
 	statusCmd := &cobra.Command{Use: "status", Short: "Show status as JSON or print a proxy URL", GroupID: "commands", Args: cobra.NoArgs,
@@ -209,13 +219,13 @@ has no effect with --foreground.`}
 	})
 	testCmd := &cobra.Command{Use: "test", Short: "Test HTTP and SOCKS5 forwarding", GroupID: "commands", Args: cobra.NoArgs}
 	url := testCmd.Flags().String("url", "https://example.com/", "Fetch `URL` through both proxies")
-	testCmd.RunE = run(func(p config.Paths) error {
+	testCmd.RunE = run(setup(func(p config.Paths) error {
 		cfg, err := config.LoadConfig(p.Config)
 		if err != nil {
 			return err
 		}
 		return testProxy(cfg, *url)
-	})
+	}))
 	loginCmd := &cobra.Command{Use: "login [ENDPOINT]", Short: "Set up passwordless SSH login", GroupID: "commands",
 		Args: cobra.MaximumNArgs(1), Long: `Set up unattended SSH login, skipping steps that are already done. Without
 ENDPOINT, try SSH aliases in file order until one succeeds.
@@ -229,7 +239,7 @@ your administrator. --check only checks and changes nothing.`}
 	check := loginCmd.Flags().Bool("check", false, "Check unattended login only: no prompts or new host keys; the tray runs it before each start")
 	logPath := loginCmd.Flags().String("log", "", "Append SSH diagnostics to `FILE` (used by the tray)")
 	loginCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return run(func(p config.Paths) error { return login(p, strings.Join(args, ""), *check, *logPath) })(cmd, args)
+		return run(setup(func(p config.Paths) error { return login(p, strings.Join(args, ""), *check, *logPath) }))(cmd, args)
 	}
 	autostartCmd := &cobra.Command{Use: "autostart", Short: "Manage proxy startup at login", GroupID: "autostart",
 		Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() }, Long: `Start the proxy at login for the current user, independently of the tray app.
@@ -242,7 +252,7 @@ not be reflected. Disable before moving the installation folder.`}
 	for _, sub := range [][2]string{{"enable", "Start the proxy at future logins"}, {"disable", "Remove login startup; leave the proxy running"}, {"status", "Show login registration and outdated entries"}} {
 		action := sub[0]
 		autostartCmd.AddCommand(&cobra.Command{Use: action, Short: sub[1], Args: cobra.NoArgs,
-			RunE: run(func(p config.Paths) error { return autostart(p, action) })})
+			RunE: run(setup(func(p config.Paths) error { return autostart(p, action) }))})
 	}
 	root.AddCommand(startCommand("start", "Start the proxy in the background", false),
 		startCommand("restart", "Restart with the current configuration", true),
@@ -250,10 +260,10 @@ not be reflected. Disable before moving the installation folder.`}
 		statusCmd, loginCmd, logsCmd, testCmd,
 		&cobra.Command{Use: "check", Short: "Validate configuration as JSON", GroupID: "commands", Args: cobra.NoArgs,
 			Long: "Validate configuration as JSON. Inspect the valid field to determine validity.",
-			RunE: run(func(p config.Paths) error { return printJSON(config.CheckConfig(p.Config)) })},
+			RunE: run(setup(func(p config.Paths) error { return printJSON(config.CheckConfig(p.Config)) }))},
 		autostartCmd,
 		// Internal entry point: the background supervisor.
-		&cobra.Command{Use: "_run", Hidden: true, GroupID: "commands", Args: cobra.NoArgs, RunE: run(func(p config.Paths) error { return supervisor.Run(p, false) })})
+		&cobra.Command{Use: "_run", Hidden: true, GroupID: "commands", Args: cobra.NoArgs, RunE: run(setup(func(p config.Paths) error { return supervisor.Run(p, false) }))})
 	root.SetArgs(args)
 	return root.Execute()
 }

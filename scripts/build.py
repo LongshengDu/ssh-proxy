@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build portable folders, optionally with a matching release ZIP. Requires Python 3.10+; no pip deps."""
+"""Build a portable folder, and with --release also its ZIP. Requires Python 3.10+; no pip deps."""
 
 import argparse
 import hashlib
@@ -28,7 +28,8 @@ SYSTEMS = ("linux", "windows", "darwin")
 ARCHES = ("amd64", "arm64")
 TARGETS = {f"{goos}-{arch}": (goos, arch) for goos in SYSTEMS for arch in ARCHES}
 PUBLIC = tuple(sorted(path.relative_to(DEFAULTS).as_posix() for path in DEFAULTS.rglob("*") if path.is_file()))
-COMMON = (*PUBLIC, ".version", "THIRD_PARTY_NOTICES.txt", "BUILDINFO.txt")
+# support/ holds generated metadata beside the *.in config templates.
+COMMON = (*PUBLIC, ".version", "support/THIRD_PARTY_NOTICES.txt", "support/BUILDINFO.txt", "support/SHA256SUMS")
 MAC_APP = "ssh_proxy_app.app/Contents/MacOS/ssh_proxy_app"
 MAC_PLIST = "ssh_proxy_app.app/Contents/Info.plist"
 MAC_ICON = "ssh_proxy_app.app/Contents/Resources/icon.icns"
@@ -242,14 +243,23 @@ def notices(go, env, modules):
     return "\n".join(texts) + "\n"
 
 
+def check_release_folder(output, target):
+    """A release folder must hold exactly the payload and an empty logs/, so a
+    folder that was used (config.toml, ssh_config, app settings, logs) never ships."""
+    allowed = set(payload_names(target))
+    folders = {"logs"} | {parent.as_posix() for name in allowed for parent in PurePosixPath(name).parents if parent.as_posix() != "."}
+    extra = sorted(name for path in output.rglob("*")
+                   if (name := path.relative_to(output).as_posix()) not in (folders if path.is_dir() and not path.is_symlink() else allowed))
+    if extra:
+        raise RuntimeError(f"{output} holds files outside the release payload, so no ZIP was made. "
+                           f"Release into an empty --target-dir instead. Unexpected: {', '.join(extra)}")
+
+
 def package(target, staging, target_dir):
     """ZIP only the public payload, with one os-arch directory at its root."""
-    for name in PUBLIC:
-        if (staging / name).read_bytes() != (DEFAULTS / name).read_bytes().replace(b"\r\n", b"\n"):
-            raise RuntimeError(f"Refusing to package non-default {name}")
     archive = target_dir / f"{target}.zip"
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
-        for name in (*payload_names(target), "SHA256SUMS"):
+        for name in payload_names(target):
             path = staging / name
             if path.is_symlink() or not path.is_file():
                 raise RuntimeError(f"Expected regular payload file: {path}")
@@ -271,39 +281,39 @@ def build_target(go, env, target, target_dir, release=False):
         staging = Path(temporary) / target
         binaries = compile_apps(go, env, target, staging)
         for name in PUBLIC:
-            existing = not release and (output / name).exists()
-            source = output / name if existing else DEFAULTS / name
             (staging / name).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, staging / name)
-            if not existing:
-                (staging / name).write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
-            if name.endswith(".sh") and not existing:
+            (staging / name).write_bytes((DEFAULTS / name).read_bytes().replace(b"\r\n", b"\n"))
+            if name.endswith(".sh"):
                 (staging / name).chmod(0o755)
         (staging / "logs").mkdir()
+        (staging / "support").mkdir(exist_ok=True)
         (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8", newline="\n")
         build_info = {path: run([go, "version", "-m", path], env, capture=True) for path in binaries}
-        (staging / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8", newline="\n")
+        (staging / "support" / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8", newline="\n")
         metadata = "\n".join(text.replace(str(path), path.name) for path, text in build_info.items())
-        (staging / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8", newline="\n")
-        (staging / "SHA256SUMS").write_text("".join(f"{digest(staging / name)}  {name}\n" for name in payload_names(target)), encoding="utf-8", newline="\n")
-        # Defaults are installed only when absent; binaries/metadata always refresh.
-        # Releases replace all packaged files. Unrelated files/logs never enter the ZIP.
-        for name in (*payload_names(target), "SHA256SUMS"):
+        (staging / "support" / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8", newline="\n")
+        # Program binaries only, relative to the install folder: sha256sum -c support/SHA256SUMS.
+        sums = "".join(f"{digest(path)}  {path.relative_to(staging).as_posix()}\n" for path in binaries)
+        (staging / "support" / "SHA256SUMS").write_text(sums, encoding="utf-8", newline="\n")
+        # Every build replaces the whole payload. The user's config.toml and
+        # ssh_config (copied from support/*.in at first run), app settings, logs
+        # and own scripts are not in the payload, so they are never touched.
+        for name in payload_names(target):
             destination = output / name
-            if not release and name in PUBLIC and destination.exists():
-                continue
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(staging / name, destination)
         (output / "logs").mkdir(exist_ok=True)
         if release:
+            (target_dir / f"{target}.zip").unlink(missing_ok=True)  # Never leave an older ZIP behind a failed check.
+            check_release_folder(output, target)
             package(target, staging, target_dir)
     print(f"Build folder: {output}", flush=True)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--release", action="store_true", help="Create the folder and matching os-arch.zip (default directory: build/release/)")
-    parser.add_argument("--target-dir", type=Path, help="Output parent directory (default: build/, or build/release/ with --release)")
+    parser.add_argument("--release", action="store_true", help="Also create <target-dir>/<os>-<arch>.zip")
+    parser.add_argument("--target-dir", type=Path, help="Output parent directory (default: build/)")
     parser.add_argument("--os", choices=SYSTEMS, help="Target OS (default: current)")
     parser.add_argument("--arch", choices=ARCHES, help="Target architecture (default: current)")
     parser.add_argument("--go", help="Explicit Go executable (otherwise discover or download)")
@@ -311,7 +321,7 @@ def main(argv=None):
     host = host_target()
     host_os, host_arch = TARGETS[host]
     target = f"{args.os or host_os}-{args.arch or host_arch}"
-    target_dir = (args.target_dir or (BUILD / "release" if args.release else BUILD)).resolve()
+    target_dir = (args.target_dir or BUILD).resolve()
     host_env = environment(host)
     go = ensure_go(host, host_env, args.go)
     ensure_ssh(host, host_env)

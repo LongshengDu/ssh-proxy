@@ -49,13 +49,11 @@ func TestTrayStartsProxyAtLaunch(t *testing.T) {
 		}
 	}
 
-	// Missing hosts: report and open ssh_config once; never start SSH setup.
+	// No SSH server yet: only open ssh_config, without an error dialog or the log; never start SSH setup.
 	testutil.WriteFile(t, sshPath, "# Add your hosts\n")
 	app, log := launch()
-	testutil.ExpectDialog(t, app.Process.Pid, "add your hosts")
 	testutil.NativeOpened(t, sshPath)
-	testutil.NativeDismiss(t, app.Process.Pid)
-	testutil.NativeOpened(t, log)
+	testutil.ExpectNoDialog(t, app.Process.Pid)
 	time.Sleep(2300 * time.Millisecond)
 	if strings.Contains(testutil.ReadFile(log), "Starting the proxy at app launch") || testutil.StatusCLI(t, dir).Phase != "stopped" {
 		t.Fatal("invalid configuration must not start the proxy")

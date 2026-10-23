@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 	"sync"
 
 	"ssh_proxy/src/config"
@@ -73,8 +74,15 @@ func NewController(backend Backend, desktop Desktop, view View, logger *log.Logg
 
 func (c *Controller) report(err error) {
 	c.logger.Print(err)
+	if errors.Is(err, errSetupNeeded) {
+		return // The opened ssh_config explains what to add; no error dialog or log.
+	}
 	c.desktop.ShowError(err)
 }
+
+// errSetupNeeded marks an SSH configuration without a server yet, as on first
+// launch: unfinished setup, not an error.
+var errSetupNeeded = errors.New("SSH setup not finished")
 
 func (c *Controller) render() {
 	state := MenuState{Status: c.st, Startup: c.startup, StartupKnown: c.startupErr == nil,
@@ -112,9 +120,17 @@ func (c *Controller) checkConfig(ctx context.Context) error {
 		c.mu.Lock()
 		path := c.prompts.Config(result)
 		c.mu.Unlock()
+		if result.Incomplete {
+			// Every launch or Start opens it again; the file says why it opened.
+			err, path = fmt.Errorf("%w: %s", errSetupNeeded, result.Error), result.EditFile
+			// A missing SSH file starts from the template, so it explains itself too.
+			_ = config.CopyIfMissing(filepath.Join(filepath.Dir(c.paths.Config), "support", "ssh_config.in"), path)
+		}
 		if path != "" && path != c.paths.Config {
 			c.logger.Printf("Opening configuration for setup: %s", path)
-			err = errors.Join(err, c.desktop.OpenEditable(path))
+			if openErr := c.desktop.OpenEditable(path); openErr != nil {
+				err = errors.Join(errors.New(result.Error), openErr) // Couldn't show the file: report it.
+			}
 		}
 	}
 	return err

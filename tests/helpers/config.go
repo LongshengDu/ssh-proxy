@@ -16,7 +16,7 @@ func Root() string {
 
 func ConfigTemplate(t *testing.T) []byte {
 	t.Helper()
-	template, err := os.ReadFile(filepath.Join(Root(), "src/packaging/defaults/config.toml"))
+	template, err := os.ReadFile(filepath.Join(Root(), "src/packaging/defaults/support/config.toml.in"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,7 @@ All builds use `CGO_ENABLED=0` and native tools (no WSL).
 | `src/platform` | Locks, detaching, child containment, Unix SSH guardian, login registration |
 | `src/logs` | Run logs, retention and size limits |
 | `src/ui` | Tray controller, menu, setup terminal, dialogs, app login item, scripts |
-| `src/packaging` | Public defaults (`config.toml`, `ssh_config`, user guide, launchers) and executable resources |
+| `src/packaging` | Public defaults: `support/config.toml.in` and `support/ssh_config.in`, user guide, launchers, `run_on_mac.sh`; executable resources |
 | `scripts` | `build.py`, `run_unit_tests.py`, `run_sys_tests.py`, `visible.py` |
 | `tests/unit`, `tests/system`, `tests/helpers` | Flat test suites and shared fixtures |
 
@@ -59,7 +59,9 @@ Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `b
 
 ### Configuration and SSH
 
-`config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Unknown TOML keys and invalid values are rejected. `LoadConfig` supplies connection-policy and logging defaults; readiness, retry and health settings are required. See the [public defaults](src/packaging/defaults/config.toml).
+`config.toml` lives beside the CLI, regardless of the working directory; there is no config-path flag. Relative paths resolve from that folder, logs go to `logs/`, and native SSH runs from the SSH config's folder. Unknown TOML keys and invalid values are rejected. `LoadConfig` supplies connection-policy and logging defaults; readiness, retry and health settings are required. See the [template](src/packaging/defaults/support/config.toml.in).
+
+Packages ship only the templates `support/config.toml.in` and `support/ssh_config.in`, never the user's files, so unzipping a new version over an installation keeps the user's settings. Before any command that reads the configuration (`check`, `start`/`restart`, `login`, `test`, `autostart`, `_run`; the tray's launch `check` included), `config.EnsureConfig` runs silently (`src/config/templates.go`): it copies every `support/NAME.in` to `NAME` when `NAME` is missing, and merges an existing `config.toml` with the template, keeping the user's values, adding new settings and dropping ones the template no longer has. It rewrites the file only when its settings differ, and comments are then lost. Invalid TOML is left for validation to report. `status`, `stop` and `logs` never touch files. Without `support/*.in` files (tests) nothing happens.
 
 Endpoints are the concrete `Host` aliases declared in the selected SSH config, in first-appearance order without duplicates. Wildcards, exclusions and `Match` add no targets. `Include` can supply settings, but its aliases are not enumerated as targets. Native `ssh -G` resolves effective settings, including `ProxyJump` and authentication; do not reimplement it.
 
@@ -103,7 +105,7 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
 - **JSON output:** `status` and `check` print JSON; there's no `--json` flag.
   - `status` includes `autostart`, read without starting a process.
   - `status --proxy_http` or `--proxy_socks` (mutually exclusive) prints only the `http://` or `socks5h://` URL while `running`. Otherwise it prints nothing and exits 0.
-  - `check` exits 0 even when `valid` is false.
+  - `check` exits 0 even when `valid` is false. `incomplete: true` marks unfinished setup rather than a mistake: `ssh_config` has no server yet, or is missing (`config.ErrNoHosts`).
 - **Errors** go to stderr with a nonzero exit. Help and version return before any config or OS access.
 - **Flags and help** live in `src/cli/cli.go`. Root help lists each command's own flags; `autostart --help` has the login-startup details.
 - **Rejected commands** (keep the tests): plain `help` and `version`, `--json`, tray-management commands, and every `service …` command.
@@ -128,7 +130,7 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
 
 The app takes no arguments and locates the adjacent CLI, including from its macOS bundle. Its controller polls about every two seconds, serializes actions, and changes native menu items only when their values change. The status rows show SSH host:port, SOCKS5 and HTTP addresses.
 
-Start runs `check`, opening an invalid SSH config once per run, then silent `login --check`. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
+Start runs `check`, then silent `login --check`. An `incomplete` result (no SSH server yet, as on first launch) only opens `ssh_config` at launch and on every Start, starting a missing file from `support/ssh_config.in`. It shows no error dialog or log; the template's first lines explain why it opened. Other invalid configs show the error dialog and open the failing file once per run. A failed check re-reads status before opening setup, so CLI autostart can proceed without a competing terminal. Setup uses a native Windows console or macOS Terminal via AppleScript; macOS may require Automation permission. After setup, the silent check runs again because password-only login cannot run unattended. Failed setup waits for another Start action; an already-started supervisor keeps retrying connections independently.
 
 **Start Proxy When App Launches** reuses that flow. Its `start_proxy_on_launch` setting lives in `app.json` beside the TOML, defaults to false when absent, and is rewritten as a whole file. CLI autostart ignores it. Stop-and-exit waits for successful CLI stop; failure keeps the app open. Keep-proxy-running exits only the tray.
 
@@ -162,15 +164,15 @@ Targets:
 ```sh
 python scripts/build.py                                   # build/<os>-<arch>/
 python scripts/build.py --target-dir build/scratch        # while build/<os>-<arch> is running
-python scripts/build.py --release                         # build/release/<os>-<arch>/ + .zip
+python scripts/build.py --release --target-dir build/release   # clean folder: build/release/<os>-<arch>/ + .zip
 python scripts/build.py --release --os linux --arch arm64 --target-dir ./packages
 ```
 
-- **Dev builds** keep an existing `config.toml`, `ssh_config`, `scripts/` and `README.md`. They add missing defaults and replace binaries and metadata.
-- **Releases** replace all packaged files in the target folder with public defaults and produce a matching ZIP. The ZIP includes only the declared payload; unrelated files and private settings from an existing target folder are excluded. Use a dedicated release directory, never an installation containing private settings.
+- **Every build** writes the whole payload into `<target-dir>/<os>-<arch>/` from the public defaults: programs, guide, launchers, `.version` and `support/`. Files outside the payload are never touched: the user's `config.toml` and `ssh_config` (created from `support/*.in` at first run), app settings, logs and own scripts. A dev build therefore keeps your configs, just like unzipping a release over an installation.
+- **`--release`** also creates `<target-dir>/<os>-<arch>.zip`, but first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--target-dir`, for example `build/release`.
 - **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
 - **Versioning:** [.version](.version) is the only version source; change it only on request.
-- **Packaging** generates `BUILDINFO.txt`, `SHA256SUMS` and `THIRD_PARTY_NOTICES.txt` (only for modules linked into that target). Text files use LF.
+- **Packaging** generates `support/BUILDINFO.txt`, `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Text files use LF.
 - **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing.
 - **macOS:** the `.app` stays beside the CLI and configs, and its plist declares macOS 13.
 - **Signing:** packages are unsigned and not notarized.

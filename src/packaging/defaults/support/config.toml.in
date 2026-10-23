@@ -1,3 +1,4 @@
+# Edit the config.toml in the install folder (copied from support/config.toml.in on first start); support/ is replaced on upgrade.
 # Host declarations in ssh_config define connection order. OpenSSH manages host trust.
 
 [proxy]

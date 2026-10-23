@@ -53,11 +53,10 @@ func TestTrayNativeWorkflow(t *testing.T) {
 	testutil.WriteFile(t, script, scriptText)
 	app := testutil.StartApp(t, dir)
 	pid := app.Process.Pid
-	testutil.ExpectDialog(t, pid, "add your hosts")
-	testutil.NativeOpened(t, servers) // Prove the default file opener displayed the failing config.
-	testutil.NativeDismiss(t, pid)
+	// First launch without a server: the shipped ssh_config opens by itself, with no error dialog or log.
+	testutil.NativeOpened(t, servers)
+	testutil.ExpectNoDialog(t, pid)
 	log := testutil.TrayLog(dir)
-	testutil.NativeOpened(t, log)
 	testutil.WriteFile(t, servers, sshText)
 	testutil.WaitFor(t, func() bool { return strings.Contains(testutil.ReadFile(log), "Proxy status: stopped") })
 	testutil.ExpectMenu(t, pid, "Start proxy", false, false)

@@ -1,0 +1,111 @@
+package tests
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/BurntSushi/toml"
+
+	"ssh_proxy/src/config"
+	"ssh_proxy/tests/helpers"
+)
+
+// templateInstall is an install folder with only the shipped support/*.in templates.
+func templateInstall(t *testing.T) (dir, configPath string) {
+	t.Helper()
+	dir = t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "support"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"config.toml.in", "ssh_config.in"} {
+		data, err := os.ReadFile(filepath.Join(testutil.Root(), "src", "packaging", "defaults", "support", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeText(t, filepath.Join(dir, "support", name), string(data))
+	}
+	return dir, filepath.Join(dir, "config.toml")
+}
+
+// A fresh install gets every support/NAME.in as NAME, and existing files are never replaced.
+func TestEnsureConfigCopiesMissingFiles(t *testing.T) {
+	dir, configPath := templateInstall(t)
+	if err := config.EnsureConfig(configPath); err != nil {
+		t.Fatal(err)
+	}
+	writeText(t, filepath.Join(dir, "support", "extra.in"), "extra file")
+	if err := config.EnsureConfig(configPath); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"config.toml", "ssh_config", "extra"} {
+		want, _ := os.ReadFile(filepath.Join(dir, "support", name+".in"))
+		if got, err := os.ReadFile(filepath.Join(dir, name)); err != nil || string(got) != string(want) {
+			t.Fatalf("%s not copied from its template: %v", name, err)
+		}
+	}
+	writeText(t, filepath.Join(dir, "ssh_config"), "Host mine\n HostName mine.invalid\n")
+	if err := config.EnsureConfig(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := readText(filepath.Join(dir, "ssh_config")); !strings.Contains(got, "Host mine") {
+		t.Fatal("existing ssh_config was replaced", got)
+	}
+}
+
+// After an update, config.toml keeps the user's values, gains new settings and
+// drops ones the template no longer has; an up-to-date file is left as written.
+func TestEnsureConfigUpgradesSettings(t *testing.T) {
+	dir, configPath := templateInstall(t)
+	old := "# my comment\n[proxy]\nbind = \"127.0.0.1\"\nhttp_port = 9999\nobsolete = true\n\n[retired]\nvalue = 1\n"
+	writeText(t, configPath, old)
+	if err := config.EnsureConfig(configPath); err != nil {
+		t.Fatal(err)
+	}
+	var got, template map[string]any
+	if _, err := toml.DecodeFile(configPath, &got); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := toml.DecodeFile(filepath.Join(dir, "support", "config.toml.in"), &template); err != nil {
+		t.Fatal(err)
+	}
+	proxy, _ := got["proxy"].(map[string]any)
+	if proxy["http_port"] != int64(9999) || proxy["obsolete"] != nil || got["retired"] != nil {
+		t.Fatalf("user value lost or old setting kept: %v", got)
+	}
+	for table, settings := range template {
+		values, _ := got[table].(map[string]any)
+		for key := range settings.(map[string]any) {
+			if _, ok := values[key]; !ok {
+				t.Fatalf("new setting %s.%s not added", table, key)
+			}
+		}
+	}
+	if _, err := config.LoadConfig(configPath); err != nil && strings.Contains(err.Error(), "unknown config setting") {
+		t.Fatal("upgraded config still has unknown settings", err)
+	}
+	// Up to date: not rewritten, so comments stay.
+	current := strings.Replace(string(testutil.ConfigTemplate(t)), "http_port = 8181", "http_port = 9999", 1)
+	writeText(t, configPath, "# keep me\n"+current)
+	if err := config.EnsureConfig(configPath); err != nil {
+		t.Fatal(err)
+	}
+	if readText(configPath) != "# keep me\n"+current {
+		t.Fatal("an up-to-date config was rewritten")
+	}
+	// Invalid TOML is left for validation to report.
+	writeText(t, configPath, "proxy = [")
+	if err := config.EnsureConfig(configPath); err != nil || readText(configPath) != "proxy = [" {
+		t.Fatal("invalid TOML must be left untouched", err)
+	}
+}
+
+func writeText(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readText(path string) string { data, _ := os.ReadFile(path); return string(data) }

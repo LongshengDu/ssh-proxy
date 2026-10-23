@@ -104,7 +104,8 @@ func (v *fakeView) item(id int) ui.Item {
 
 var (
 	validConfig    = config.ConfigCheck{Valid: true}
-	missingHosts   = config.ConfigCheck{Valid: false, EditFile: "ssh_config", Error: "add your hosts"}
+	badSSHConfig   = config.ConfigCheck{Valid: false, EditFile: "ssh_config", Error: "unsupported option"}
+	noSSHServer    = config.ConfigCheck{Valid: false, Incomplete: true, EditFile: "ssh_config", Error: "no SSH server in ssh_config yet"}
 	errLoginFailed = errors.New("Permission denied (publickey)")
 )
 
@@ -244,7 +245,7 @@ func TestTrayControllerClosingDuringLoginDoesNotOpenTerminal(t *testing.T) {
 
 func TestTrayControllerInvalidConfigBlocksStartAndOpensOnce(t *testing.T) {
 	ctx := context.Background()
-	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: missingHosts}
+	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig}
 	c, desktop, view := newController(backend)
 	c.Refresh(ctx)
 	for range 2 {
@@ -278,7 +279,7 @@ func TestTrayControllerLaunchAutoStart(t *testing.T) {
 		{"valid", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true}, []string{"check", "check", "login", "start"}, 0},
 		{"already running", fakeBackend{status: control.Status{Phase: control.PhaseRunning, PID: 7}, check: validConfig, autoStart: true}, []string{"check"}, 0},
 		{"unresponsive", fakeBackend{status: control.Status{Phase: control.PhaseUnresponsive, PID: 7}, check: validConfig, autoStart: true}, []string{"check"}, 0},
-		{"invalid config", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: missingHosts, autoStart: true}, []string{"check"}, 1},
+		{"invalid config", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig, autoStart: true}, []string{"check"}, 1},
 		{"needs setup", fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: validConfig, autoStart: true, logins: []error{errLoginFailed, nil}},
 			[]string{"check", "check", "login", "trust", "login", "start"}, 0},
 	} {
@@ -382,7 +383,7 @@ func TestTrayControllerStopAndExit(t *testing.T) {
 
 func TestTrayControllerOpensFailingConfigOnce(t *testing.T) {
 	ctx := context.Background()
-	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: missingHosts}
+	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: badSSHConfig}
 	c, desktop, _ := newController(backend)
 	for range 3 {
 		if c.CheckConfig(ctx) {
@@ -396,5 +397,25 @@ func TestTrayControllerOpensFailingConfigOnce(t *testing.T) {
 	c.CheckConfig(ctx)
 	if len(desktop.edited) != 1 {
 		t.Fatal("invalid config.toml opens the log, not an editor", desktop.edited)
+	}
+}
+
+// Unfinished setup, as on first launch, opens ssh_config at launch and on every
+// Start, without an error dialog or log: the file says why it opened.
+func TestTrayControllerUnfinishedSetupOpensSSHConfigQuietly(t *testing.T) {
+	ctx := context.Background()
+	backend := &fakeBackend{status: control.Status{Phase: control.PhaseStopped}, check: noSSHServer, autoStart: true}
+	c, desktop, _ := newController(backend)
+	if job := c.Launch(ctx); job != nil {
+		t.Fatal("unfinished setup must not start the proxy")
+	}
+	for range 2 {
+		run(ctx, c, ui.ToggleProxy)
+	}
+	if !slices.Equal(desktop.edited, []string{"ssh_config", "ssh_config", "ssh_config"}) || len(desktop.messages) != 0 {
+		t.Fatal("ssh_config must open each time without error dialogs", desktop.edited, desktop.messages)
+	}
+	if slices.Contains(backend.calls, "login") || slices.Contains(backend.calls, "start") {
+		t.Fatal("unfinished setup must stop before SSH login", backend.calls)
 	}
 }

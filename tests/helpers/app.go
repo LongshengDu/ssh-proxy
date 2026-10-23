@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"ssh_proxy/src/platform"
 )
@@ -74,6 +75,17 @@ func ExpectMenu(t *testing.T, pid int, label string, disabled, checked bool) {
 		return false
 	})
 }
+
+// ExpectNoDialog fails if the app shows an error dialog within two seconds.
+func ExpectNoDialog(t *testing.T, pid int) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if message := NativeError(t, pid); message != "" {
+			t.Fatal("unexpected error dialog:", message)
+		}
+	}
+}
+
 func ExpectDialog(t *testing.T, pid int, reason string) string {
 	t.Helper()
 	var message string

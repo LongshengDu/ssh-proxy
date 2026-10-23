@@ -6,9 +6,10 @@
 
 ### 使用前必读
 
-- **升级或移动目录：** 先取消已启用的 **Launch App at Login** 和 CLI `autostart`（运行 `autostart disable`），再停止代理并退出托盘。备份整个目录；升级时保留配置、日志和自定义脚本，不要被 ZIP 中的默认文件覆盖。完成后重新启用需要的登录启动。
+- **升级：** 停止代理并退出托盘，把新版 ZIP 解压到原目录、覆盖已有文件即可。你的 `config.toml`、`ssh_config` 和日志不会被覆盖；新版本新增的设置会在下次启动时自动加入 `config.toml`（文件中的注释可能会被移除）。
+- **移动目录：** 先取消 **Launch App at Login** 并运行 `autostart disable`，再停止代理并退出托盘；移动后重新启用需要的登录启动。
 - **完整解压到可写的固定目录：** 应用、命令行、配置和 `scripts/` 保持在一起；macOS 不要单独移动 `.app`，首次使用前先运行 `run_on_mac.sh`（见第 1 节）。
-- **先准备 SSH：** 需要 OpenSSH 8.7 或更新版本，服务器需允许 TCP 转发。代理在后台运行，必须能免密码自动登录，`login`（或托盘的 **Start proxy**）会自动设置。首次连接向管理员核对服务器指纹。说明见 [ssh_config](ssh_config)。
+- **先准备 SSH：** 需要 OpenSSH 8.7 或更新版本，服务器需允许 TCP 转发。代理在后台运行，必须能免密码自动登录，`login`（或托盘的 **Start proxy**）会自动设置。首次连接向管理员核对服务器指纹。说明见 [ssh_config](support/ssh_config.in)。
 - **显示 running 后再使用：** HTTP/HTTPS 代理为 `http://127.0.0.1:8181`，SOCKS5 为 `socks5h://127.0.0.1:1081`。程序不会修改系统代理，需在应用中自行填写。用脚本启动 Codex/Claude 前，先完全退出已运行的桌面应用。
 - **退出时选择是否保留代理：** **Exit app: Stop proxy** 停止代理并退出；**Exit app: Keep proxy running** 只退出托盘，代理继续运行。
 - **出错时看日志：** 应用会显示原因；日志在安装目录的 `logs/`。
@@ -26,8 +27,9 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 | --- | --- |
 | `ssh_proxy_app.exe` / `ssh_proxy_app.app` | 托盘 / 菜单栏应用，日常使用入口 |
 | `ssh_proxy_cli.exe` / `ssh_proxy_cli` | 命令行和代理程序，应用依赖它，请保留 |
-| [ssh_config](ssh_config) | 你的 SSH 服务器信息，含免密码登录步骤 |
-| [config.toml](config.toml) | 端口、超时、健康检查和日志设置 |
+| `ssh_config` | 你的 SSH 服务器信息，含免密码登录步骤；首次启动时从 `support/` 创建 |
+| `config.toml` | 端口、超时、健康检查和日志设置；首次启动时从 `support/` 创建 |
+| `support/` | 默认配置模板（`*.in`）和版本信息，升级时会被替换；请修改上面两个文件，不要改这里 |
 | `run_on_mac.sh` | 仅 macOS：首次使用前解除下载限制 |
 | `scripts/`、`logs/` | Codex/Claude 启动脚本、运行日志 |
 
@@ -35,9 +37,9 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 
 ### 2. 打开应用并连接（Windows / macOS）
 
-打开 `ssh_proxy_app`：Windows 在任务栏通知区域（可能在隐藏图标中），macOS 在菜单栏。右键图标打开菜单。首次打开时，若 SSH 配置缺失或无效会自动打开该文件。
+打开 `ssh_proxy_app`：Windows 在任务栏通知区域（可能在隐藏图标中），macOS 在菜单栏。右键图标打开菜单。还没有填写 SSH 服务器时（例如首次打开），会自动打开 `ssh_config` 供你填写，不会弹出错误；文件开头说明了为什么打开它。SSH 配置有错误时，会显示原因并打开该文件。
 
-编辑 `ssh_config`，取消示例前的 `#` 并填写自己的信息：
+编辑安装目录中的 `ssh_config`（首次打开应用或运行 `check` 时自动创建），取消示例前的 `#` 并填写自己的信息：
 
 ```sshconfig
 Host my-proxy
@@ -190,9 +192,10 @@ Windows 将下方 `./ssh_proxy_cli` 换成 `.\ssh_proxy_cli.exe`。
 
 ### Read before use
 
-- **Upgrade or move:** first turn off **Launch App at Login** and CLI autostart (`autostart disable`) if enabled, then stop the proxy and quit the tray. Back up the whole folder. Keep your settings, logs and custom scripts when upgrading; do not overwrite them with ZIP defaults. Re-enable your login startup options afterwards.
+- **Upgrade:** stop the proxy and quit the tray, then unzip the new version into the same folder and replace the existing files. Your `config.toml`, `ssh_config` and logs are not overwritten; settings added by the new version are added to `config.toml` the next time it starts (comments in that file may be removed).
+- **Move the folder:** first turn off **Launch App at Login** and run `autostart disable`, then stop the proxy and quit the tray. Turn login startup back on after moving.
 - **Extract the whole ZIP into a writable, permanent folder:** keep the app, command line, configuration and `scripts/` together; don't move the macOS `.app` on its own. On macOS, run `run_on_mac.sh` before first use (see section 1).
-- **Prepare SSH first:** OpenSSH 8.7 or later is required, and the server must allow TCP forwarding. The proxy runs in the background, so it must log in without a password; `login` (or **Start proxy** in the tray) sets that up for you. Verify the server fingerprint with your administrator on first connection. See [ssh_config](ssh_config).
+- **Prepare SSH first:** OpenSSH 8.7 or later is required, and the server must allow TCP forwarding. The proxy runs in the background, so it must log in without a password; `login` (or **Start proxy** in the tray) sets that up for you. Verify the server fingerprint with your administrator on first connection. See [ssh_config](support/ssh_config.in).
 - **Use the proxy once it shows running:** HTTP/HTTPS is `http://127.0.0.1:8181` and SOCKS5 is `socks5h://127.0.0.1:1081`. System proxy settings aren't changed; set the address in each app. Fully quit Codex/Claude before starting them with the launchers.
 - **Choose what happens when you exit:** **Exit app: Stop proxy** stops the proxy and quits; **Exit app: Keep proxy running** closes only the tray and leaves the proxy running.
 - **When something fails, read the log:** the app shows the reason; logs are in `logs/` in the install folder.
@@ -210,8 +213,9 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 | --- | --- |
 | `ssh_proxy_app.exe` / `ssh_proxy_app.app` | Tray / menu-bar app, the everyday entry point |
 | `ssh_proxy_cli.exe` / `ssh_proxy_cli` | Command line and proxy runtime; the app needs it |
-| [ssh_config](ssh_config) | Your SSH servers, with passwordless-login steps |
-| [config.toml](config.toml) | Ports, timeouts, health checks and logging |
+| `ssh_config` | Your SSH servers, with passwordless-login steps; created from `support/` on first start |
+| `config.toml` | Ports, timeouts, health checks and logging; created from `support/` on first start |
+| `support/` | Default configuration templates (`*.in`) and build information, replaced on upgrade; edit the two files above, not these |
 | `run_on_mac.sh` | macOS only: removes the download block before first use |
 | `scripts/`, `logs/` | Codex/Claude launchers, run logs |
 
@@ -219,9 +223,9 @@ No installer, Go or Python is needed. On Linux, fill in `ssh_config` using the e
 
 ### 2. Open the app and connect (Windows / macOS)
 
-Open `ssh_proxy_app`: its icon is in the Windows notification area (maybe under hidden icons) or the macOS menu bar. Right-click it for the menu. If the SSH config is missing or invalid, it opens automatically on first launch.
+Open `ssh_proxy_app`: its icon is in the Windows notification area (maybe under hidden icons) or the macOS menu bar. Right-click it for the menu. While no SSH server is set up yet (as on first launch), `ssh_config` opens for you to fill in, with no error message; its first lines explain why it opened. If the SSH config has a mistake, the app shows the reason and opens the file.
 
-Edit `ssh_config`, uncomment the example and enter your details:
+Edit `ssh_config` in the install folder (created the first time you open the app or run `check`), uncomment the example and enter your details:
 
 ```sshconfig
 Host my-proxy
