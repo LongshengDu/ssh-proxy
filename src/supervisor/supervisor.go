@@ -383,6 +383,7 @@ func RecordStartFailure(p config.Paths, failure error) error {
 // StartBackground starts a detached _run. Only the winning child creates a run
 // log; losing starters join its control API rather than reporting a false error.
 func StartBackground(p config.Paths, wait time.Duration) error {
+	began := time.Now()
 	if _, err := control.Call(p, "GET", "/status"); err == nil {
 		return nil
 	}
@@ -417,6 +418,9 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 	for {
 		select {
 		case exitErr := <-exited:
+			if exitErr == nil {
+				return nil // Only a requested stop ends a supervisor cleanly; nothing failed.
+			}
 			var child *exec.ExitError
 			if errors.As(exitErr, &child) && child.ExitCode() == platform.AlreadyRunningExitCode {
 				exited = nil // Another supervisor won. Wait for its API below.
@@ -438,6 +442,11 @@ func StartBackground(p config.Paths, wait time.Duration) error {
 		if st, err := control.Call(p, "GET", "/status"); err == nil {
 			if st.Phase == control.PhaseRunning || time.Now().After(deadline) {
 				return nil
+			}
+		} else if exited == nil {
+			// The supervisor that won the race failed after this start began.
+			if state, err := control.ReadState(p); err == nil && state.Exit != nil && state.Exit.Time.After(began) {
+				return fmt.Errorf("%s\nLog: %s", state.Exit.Error, state.Log)
 			}
 		}
 		if time.Now().After(apiDeadline) {

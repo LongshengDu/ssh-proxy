@@ -181,6 +181,62 @@ func TestBackgroundStartJoinsForeground(t *testing.T) {
 	}
 }
 
+// A stop while start still waits for readiness is a requested stop: start
+// reports the stopped proxy and records no failed start.
+func TestStopDuringStartIsNotAFailure(t *testing.T) {
+	p := supervisorPaths(t)
+	done := make(chan error, 1)
+	go func() { done <- supervisor.StartBackground(p, time.Minute) }()
+	waitSupervisor(t, p) // Its SSH endpoint refuses connections, so start keeps waiting.
+	if err := supervisor.StopBackground(p); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal("a requested stop was reported as a failed start:", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("start kept waiting after its supervisor stopped")
+	}
+	if st := control.QueryStatus(p); st.Phase != control.PhaseStopped || st.UncleanExit || st.LastError != "" {
+		t.Fatal("a requested stop left a failure record", st)
+	}
+}
+
+// A start whose own _run lost the race reports the winner's startup failure as
+// soon as it is recorded, not after waiting for a control API that never comes.
+func TestLosingStartReportsWinnersFailure(t *testing.T) {
+	p := supervisorPaths(t)
+	unlock, err := platform.LockInstance(p.ID) // The winner, still loading its configuration.
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	done := make(chan error, 1)
+	go func() { done <- supervisor.StartBackground(p, time.Minute) }()
+	// The bootstrap file exists once start is under way; the winner fails after that.
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		if found, _ := filepath.Glob(filepath.Join(p.Runtime, "bootstrap-*.txt")); len(found) != 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("start did not launch its supervisor")
+		}
+	}
+	if err := control.WriteExit(p, errors.New("SOCKS port is unavailable: fixture"), true); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "SOCKS port is unavailable: fixture") {
+			t.Fatal("the winner's failure was not reported:", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("start kept waiting for a supervisor that had failed")
+	}
+}
+
 func TestSupervisorFailureDiagnostics(t *testing.T) {
 	for _, mode := range []string{"config", "port", "parent", "panic", "server"} {
 		t.Run(mode, func(t *testing.T) {
