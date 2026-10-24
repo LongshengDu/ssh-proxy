@@ -33,7 +33,7 @@ var cliOutputCases = [][]string{
 	{"start", "--wait", "0"}, {"start", "--wait", "3601"}, {"restart", "--wait", "x"},
 	{"start", "extra"}, {"start", "--bogus"}, {"--foreground", "--wait", "0"},
 	{"stop", "extra"}, {"status", "--json"}, {"check", "extra"},
-	{"status", "--proxy_http", "--proxy_socks"},
+	{"status", "--proxy-http", "--proxy-socks"},
 	{"logs", "--lines", "0"}, {"logs", "--lines", "10001"}, {"logs", "extra"},
 	{"test", "extra"}, {"test", "--url"},
 	{"login", "first", "second"}, {"login", "--log"}, {"trust"},

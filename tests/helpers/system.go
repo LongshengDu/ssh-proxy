@@ -106,6 +106,24 @@ func WaitFor(t *testing.T, ready func() bool) {
 	}
 	t.Fatal("timed out waiting for native program; see test logs and desktop permission requirements")
 }
+
+// WaitExit waits for a program the test asked to exit. A lost request, such as
+// a native click that another window swallowed, fails within WaitFor's limit
+// instead of hanging the run.
+func WaitExit(t *testing.T, cmd *exec.Cmd) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(20 * time.Second):
+		cmd.Process.Kill()
+		<-done
+		t.Fatalf("%s did not exit within 20 s", filepath.Base(cmd.Path))
+		return nil
+	}
+}
 func ReadFile(path string) string { data, _ := os.ReadFile(path); return string(data) }
 func WriteFile(t *testing.T, path, text string) {
 	t.Helper()

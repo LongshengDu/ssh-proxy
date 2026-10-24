@@ -33,7 +33,7 @@ func TestCLIHTTPSStreamingAndWebSocket(t *testing.T) {
 	t.Cleanup(func() { testutil.CallCLI(dir, "stop") })
 	testutil.MustCLI(t, dir, "start", "--wait", "15")
 	st := testutil.StatusCLI(t, dir)
-	for _, tc := range []struct{ flag, url string }{{"--proxy_http", "http://" + st.HTTP}, {"--proxy_socks", "socks5h://" + st.SOCKS}} {
+	for _, tc := range []struct{ flag, url string }{{"--proxy-http", "http://" + st.HTTP}, {"--proxy-socks", "socks5h://" + st.SOCKS}} {
 		if out, err := testutil.CallCLI(dir, "status", tc.flag); err != nil || string(out) != tc.url+"\n" {
 			t.Fatalf("status %s: %v %q; want %s", tc.flag, err, out, tc.url)
 		}
@@ -198,7 +198,7 @@ func TestCLIProbeFailoverForegroundAndCrashCleanup(t *testing.T) {
 	f.Blocked.Store(true)
 	testutil.WaitFor(t, func() bool { st := testutil.StatusCLI(t, dir); return st.Phase == "running" && st.Endpoint == "backup" })
 	testutil.MustCLI(t, dir, "stop")
-	if err := foreground.Wait(); err != nil {
+	if err := testutil.WaitExit(t, foreground); err != nil {
 		t.Fatal("foreground shutdown", err)
 	}
 	if !strings.Contains(report.String(), "Proxy: stopped") || !strings.Contains(report.String(), initial.Log) {

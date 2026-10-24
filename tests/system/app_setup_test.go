@@ -40,7 +40,7 @@ func TestTrayLoginLaunch(t *testing.T) {
 	testutil.NativeClick(t, app.Process.Pid, "Launch App at Login")
 	testutil.WaitFor(t, func() bool { enabled, err := ui.StartupEnabled(p.ID); return err == nil && enabled })
 	testutil.NativeClick(t, app.Process.Pid, "Exit app")
-	if err := app.Wait(); err != nil {
+	if err := testutil.WaitExit(t, app); err != nil {
 		t.Fatal(err)
 	}
 	oldLog := testutil.TrayLog(dir)
@@ -170,7 +170,7 @@ func TestTrayInteractiveTerminal(t *testing.T) {
 				testutil.NativeTerminalsClosed(t, before)
 			}
 			testutil.NativeClick(t, pid, "Exit app")
-			if err := app.Wait(); err != nil {
+			if err := testutil.WaitExit(t, app); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -227,7 +227,7 @@ func TestTrayRecoveryErrors(t *testing.T) {
 			if !startupFailure {
 				testutil.NativeClick(t, pid, "Exit app")
 			}
-			err := app.Wait()
+			err := testutil.WaitExit(t, app)
 			if (err != nil) != startupFailure {
 				t.Fatal("wrong exit result", err)
 			}
@@ -253,7 +253,7 @@ func TestTraySingleInstance(t *testing.T) {
 	second := testutil.StartApp(t, dir)
 	testutil.ExpectDialog(t, second.Process.Pid, "already running")
 	testutil.NativeDismiss(t, second.Process.Pid)
-	if err := second.Wait(); err == nil {
+	if err := testutil.WaitExit(t, second); err == nil {
 		t.Fatal("second instance succeeded")
 	}
 	if !platform.ProcessAlive(first.Process.Pid) {
@@ -263,7 +263,7 @@ func TestTraySingleInstance(t *testing.T) {
 		t.Fatal("duplicate instance replaced or deleted the active log")
 	}
 	testutil.NativeClick(t, first.Process.Pid, "Exit app")
-	if err := first.Wait(); err != nil {
+	if err := testutil.WaitExit(t, first); err != nil {
 		t.Fatal(err)
 	}
 }

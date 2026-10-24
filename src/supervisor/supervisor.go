@@ -260,10 +260,8 @@ func RunContext(parent context.Context, p config.Paths, foreground bool) (runErr
 				logger.Printf("Cannot record exit: %v", err)
 			}
 			runErr = fmt.Errorf("%w\nLog: %s", runErr, p.Log)
-		} else {
-			if err := os.Remove(p.State); err != nil && !os.IsNotExist(err) {
-				logger.Printf("Cannot remove state: %v", err)
-			}
+		} else if err := platform.RemoveFile(p.State); err != nil {
+			logger.Printf("Cannot remove state: %v", err)
 		}
 	}()
 	// Tell the launcher which log belongs to this child, then release its
@@ -502,8 +500,5 @@ func removeStaleState(p config.Paths) error {
 	if s, err := control.ReadState(p); err != nil || s.Exit != nil {
 		return nil
 	}
-	if err := os.Remove(p.State); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
+	return platform.RemoveFile(p.State)
 }

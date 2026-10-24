@@ -62,7 +62,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	if testutil.StatusCLI(t, dir).Phase != "stopped" {
 		t.Fatal("fresh proxy active")
 	}
-	for _, flag := range []string{"--proxy_http", "--proxy_socks"} {
+	for _, flag := range []string{"--proxy-http", "--proxy-socks"} {
 		if out, err := testutil.CallCLI(dir, "status", flag); err != nil || len(out) != 0 {
 			t.Fatalf("stopped status %s: %v %q", flag, err, out)
 		}

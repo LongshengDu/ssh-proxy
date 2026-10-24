@@ -277,6 +277,35 @@ func TestConfigValidationAndRelativePaths(t *testing.T) {
 	}
 }
 
+// Windows refuses to replace or remove a file while another process reads it,
+// as status polls do. Publishing or clearing state waits for the read instead.
+func TestStateChangesWaitForReaders(t *testing.T) {
+	dir := t.TempDir()
+	p := config.Paths{Config: filepath.Join(dir, "config.toml"), State: filepath.Join(dir, "state.json")}
+	read := func() {
+		t.Helper()
+		reader, err := os.Open(p.State)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.AfterFunc(100*time.Millisecond, func() { reader.Close() })
+	}
+	if err := control.WriteState(p, control.StateFile{PID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	read()
+	if err := control.WriteState(p, control.StateFile{PID: 2}); err != nil {
+		t.Fatal("state not replaced during a read:", err)
+	}
+	read()
+	if err := platform.RemoveFile(p.State); err != nil {
+		t.Fatal("state not removed during a read:", err)
+	}
+	if _, err := os.Stat(p.State); !os.IsNotExist(err) {
+		t.Fatal("state still present:", err)
+	}
+}
+
 func TestControlAuthenticationAndStop(t *testing.T) {
 	stopped := make(chan struct{}, 1)
 	handler := control.ControlHandler("test-secret", func() control.Status { return control.Status{Phase: "running", PID: 123, Config: "test"} }, func() { stopped <- struct{}{} })

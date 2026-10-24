@@ -1,9 +1,9 @@
 # Development workflow
 
 - Every agent, on Windows, macOS and Linux, runs builds and tests through `python scripts/visible.py --name NAME -- COMMAND [ARGS...]` so the user can watch them. It opens a new terminal window titled NAME (PowerShell on Windows, Terminal on macOS, the desktop's terminal emulator on Linux) that closes automatically when the command finishes, waits, and returns the command's exit code; on failure it also prints the last output lines. Output and completion status stay in `output.txt` and `completion.json` under `build/test-results/NAME-<stamp>/` for the agent to inspect. For runs longer than your tool timeout, add `--no-wait` and read `completion.json` when it appears. Without a desktop it runs in the current terminal.
-- Use `python scripts/run_unit_tests.py` for unit tests and `python scripts/build.py` to refresh the native development build. Do not produce releases routinely.
+- Use `python scripts/run-unit-tests.py` for unit tests and `python scripts/build.py` to refresh the native development build. Do not produce releases routinely.
 - Script-only or documentation-only changes do not require application builds or Go unit/system test suites. Keep validation scoped to the changed files.
-- Select system tests by the affected component: `python scripts/run_sys_tests.py --cli-only` for CLI/backend changes, `--app-only` for tray changes. Shared changes and test-runner changes need both scopes. With no selection, the runner tests all platform-supported components.
+- Select system tests by the affected component: `python scripts/run-sys-tests.py --cli-only` for CLI/backend changes, `--app-only` for tray changes. Shared changes and test-runner changes need both scopes. With no selection, the runner tests all platform-supported components.
 - Never auto run system tests. Only run system tests when asked to.
 - When system tests fails, only fix the failed one and run the failed one after fix.
 - Use native tools only: no WSL, no cgo, and no macOS application builds during Windows development unless explicitly requested.
@@ -19,4 +19,4 @@
 - Keep real hosts, usernames, keys and logs out of public defaults.
 - Update both language sections of `src/packaging/defaults/README.md` for user-visible changes. Do not add chat history, changing verification dates or a second version value to the READMEs.
 - Keep CLI flag descriptions/defaults in `src/cli/cli.go` synchronized with behavior and keep the `status`/`check` JSON contracts. After an intended help or error-text change, regenerate `tests/unit/testdata/cli/expected.txt` with `SSH_PROXY_UPDATE_EXPECTED=1` and review its diff.
-- The icon's design lives in `scripts/render_icons.py`; after changing it, rerun the script (packages from `requirements.txt`, see README) to rewrite `src/ui/icon.svg`, `src/ui/icons/` and `src/ui/icon.icns`.
+- The icon's design lives in `scripts/render-icons.py`; after changing it, rerun the script (packages from `requirements.txt`, see README) to rewrite `src/ui/icon.svg`, `src/ui/icons/` and `src/ui/icon.icns`.

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -306,12 +307,12 @@ func CheckOpenSSH(executable string) error {
 // conditional rules do not declare connection candidates. No SSH values are
 // interpreted here. The library owns syntax/quoting, and OpenSSH owns resolution.
 func SSHAliases(path string) ([]string, error) {
-	file, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	cfg, err := sshconfig.Decode(file)
+	// Some Windows editors save a UTF-8 BOM, which Windows OpenSSH ignores.
+	cfg, err := sshconfig.DecodeBytes(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")))
 	if err != nil {
 		return nil, fmt.Errorf("read SSH aliases in %s: %w", path, err)
 	}
@@ -378,8 +379,14 @@ func (c *Config) inspectSSH(alias string) (sshSettings, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.SSH.Executable, append(c.sshBaseArgs(false), "-G", alias)...)
 	cmd.Dir = filepath.Dir(c.SSH.ConfigFile)
+	// A Match exec helper inherits ssh's stderr. One that outlives ssh, or the
+	// timeout's kill, must not hold this call open until it exits.
+	cmd.WaitDelay = time.Second
 	platform.HideChild(cmd)
 	output, err := cmd.CombinedOutput()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		err = nil // ssh exited 0 after printing its settings; only a helper kept the pipe.
+	}
 	if err != nil {
 		return sshSettings{}, fmt.Errorf("resolve SSH alias %s with -G -F: %w: %s", alias, err, strings.TrimSpace(string(output)))
 	}

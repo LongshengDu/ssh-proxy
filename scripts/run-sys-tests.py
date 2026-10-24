@@ -117,7 +117,7 @@ def list_tests(go, env, scope, name=None):
 
 
 def run_tests(go, env, report, required):
-    command = [go, "test", "-json", "-count=1", "-timeout", "30m", "-run", "^(" + "|".join(required) + ")$", "./tests/system"]
+    command = [go, "test", "-json", "-count=1", "-timeout", "10m", "-run", "^(" + "|".join(required) + ")$", "./tests/system"]
     results = {}
     with (report / "events.jsonl").open("w", encoding="utf-8") as events, (report / "output.txt").open("w", encoding="utf-8") as output:
         with subprocess.Popen(command, cwd=b.ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

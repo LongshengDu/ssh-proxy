@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -66,6 +67,16 @@ func RunProcess() bool {
 			return true
 		}
 		if slices.Contains(os.Args, "-G") {
+			if record := os.Getenv("SSH_PROXY_TEST_LINGER"); record != "" {
+				// Like a Match exec helper that outlives ssh, keeping its stderr open.
+				exe, _ := os.Executable()
+				helper := exec.Command(exe)
+				helper.Env = append(os.Environ(), "SSH_PROXY_TEST_PROCESS=linger")
+				helper.Stderr = os.Stderr
+				if helper.Start() != nil || os.WriteFile(record, []byte(strconv.Itoa(helper.Process.Pid)), 0600) != nil {
+					os.Exit(2)
+				}
+			}
 			fmt.Println("hostname fixture.invalid\nuser tester\nport 22")
 			return true
 		}
@@ -91,6 +102,9 @@ func RunProcess() bool {
 		time.Sleep(100 * time.Millisecond) // Allow the supervisor to attach containment.
 		fmt.Fprintln(os.Stderr, os.Getenv("SSH_PROXY_TEST_DIAGNOSTIC"))
 		os.Exit(255)
+	case "linger":
+		time.Sleep(30 * time.Second)
+		return true
 	case "cli":
 		if len(os.Args) < 2 {
 			os.Exit(1)

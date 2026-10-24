@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"ssh-proxy/src/platform"
 )
 
 // EnsureConfig prepares the user's files beside config.toml from the shipped
@@ -85,12 +86,7 @@ func upgradeConfig(path, template string) error {
 	_, err = temp.Write(text.Bytes())
 	err = errors.Join(err, temp.Close())
 	if err == nil {
-		// Windows refuses to replace a file another process has open for a moment.
-		err = os.Rename(temp.Name(), path)
-		for delay := 20 * time.Millisecond; err != nil && delay <= 640*time.Millisecond; delay *= 2 {
-			time.Sleep(delay)
-			err = os.Rename(temp.Name(), path)
-		}
+		err = platform.ReplaceFile(temp.Name(), path)
 	}
 	if err != nil {
 		os.Remove(temp.Name())

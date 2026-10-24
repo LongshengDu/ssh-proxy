@@ -32,7 +32,7 @@ var icons embed.FS
 
 // TrayIcon returns the icon rendered for size pixels, so the OS draws it
 // without rescaling. Lacking that size, it returns the smallest larger render,
-// or the largest one. scripts/render_icons.py renders the set from icon.svg.
+// or the largest one. scripts/render-icons.py renders the set from icon.svg.
 func TrayIcon(size int) []byte {
 	entries, _ := icons.ReadDir("icons")
 	best := 0

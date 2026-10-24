@@ -47,14 +47,14 @@ func TestTrayDesktopLaunchers(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 					defer cancel()
 					script := filepath.Join(dir, "scripts", name+".sh")
-					app := "app='" + strings.ReplaceAll(executable, "'", "'\"'\"'") + "'\n"
+					app := "candidates=('" + strings.ReplaceAll(executable, "'", "'\"'\"'") + "')\n"
 					if runtime.GOOS == "windows" {
 						script = filepath.Join(dir, "scripts", name+".ps1")
-						app = "$app = '" + strings.ReplaceAll(executable, "'", "''") + "'\n"
+						app = "$candidates = @('" + strings.ReplaceAll(executable, "'", "''") + "')\n"
 					}
 					// Stub discovery in the isolated copy so this forwarding test never opens a real desktop app.
 					contents := testutil.ReadFile(script)
-					start, end := strings.Index(contents, "# Locate the"), strings.Index(contents, "# Use the running proxy's URL")
+					start, end := strings.Index(contents, "# Locate the"), strings.Index(contents, "# Launch through the shared helper")
 					if start < 0 || end <= start {
 						t.Fatal("launcher discovery block not found")
 					}

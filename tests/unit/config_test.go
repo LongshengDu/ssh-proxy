@@ -5,9 +5,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"ssh-proxy/src/config"
 	"ssh-proxy/tests/helpers"
@@ -158,6 +160,50 @@ func TestSSHAliasDiscovery(t *testing.T) {
 		if _, err := config.LoadConfig(path); err == nil {
 			t.Fatalf("expected no valid candidate: %q", content)
 		}
+	}
+	// Like Windows OpenSSH, ignore a UTF-8 BOM before the first Host line.
+	if err := os.WriteFile(sshPath, []byte("\xef\xbb\xbfHost first\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if aliases, err := config.SSHAliases(sshPath); err != nil || !reflect.DeepEqual(aliases, []string{"first"}) {
+		t.Fatalf("aliases: %v, %v; want [first]", aliases, err)
+	}
+}
+
+// A Match exec helper that outlives ssh -G keeps its stderr open; loading the
+// configuration must not wait for the helper.
+func TestSSHInspectionIgnoresLingeringHelper(t *testing.T) {
+	path, _ := testutil.Config(t, "Host target\n")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.ReplaceAll(string(testutil.ConfigTemplate(t)), `executable = "ssh"`, "executable = "+strconv.Quote(exe))
+	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
+		t.Fatal(err)
+	}
+	record := filepath.Join(t.TempDir(), "helper.pid")
+	t.Setenv("SSH_PROXY_TEST_PROCESS", "ssh")
+	t.Setenv("SSH_PROXY_TEST_LINGER", record)
+	t.Cleanup(func() {
+		data, _ := os.ReadFile(record)
+		if pid, _ := strconv.Atoi(string(data)); pid > 0 {
+			if process, err := os.FindProcess(pid); err == nil {
+				process.Kill()
+				if runtime.GOOS == "windows" {
+					process.Wait() // Release its working directory before the folder is removed.
+				}
+			}
+		}
+	})
+	began := time.Now()
+	cfg, err := config.LoadConfig(path)
+	// The helper runs 30 s; the limit leaves room for fixture starts under a busy suite.
+	if elapsed := time.Since(began); err != nil || !reflect.DeepEqual(cfg.Endpoints, []string{"target"}) || elapsed > 20*time.Second {
+		t.Fatalf("loading took %s: %v", elapsed, err)
+	}
+	if _, err := os.Stat(record); err != nil {
+		t.Fatal("the fixture started no lingering helper:", err)
 	}
 }
 

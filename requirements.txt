@@ -1,6 +1,6 @@
 # Build and test runners otherwise use only the Python standard library.
 # macOS app system tests: Apple's supported Accessibility permission request API.
 pyobjc-framework-ApplicationServices>=11,<13; sys_platform == "darwin"
-# scripts/render_icons.py: draws the icon and renders its PNG and ICNS files.
+# scripts/render-icons.py: draws the icon and renders its PNG and ICNS files.
 resvg-py==0.5.0
 pillow==12.0.0

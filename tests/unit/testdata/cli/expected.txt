@@ -13,7 +13,7 @@ Commands:
       Restart with the current configuration
   stop
       Stop the proxy and its SSH tunnel
-  status [--proxy_http] [--proxy_socks]
+  status [--proxy-http] [--proxy-socks]
       Show status as JSON or print a proxy URL
   login [ENDPOINT] [--check] [--log=FILE]
       Set up passwordless SSH login
@@ -98,8 +98,8 @@ Usage:
 
 Flags:
   -h, --help          help for status
-      --proxy_http    Print only the running HTTP proxy URL (http://)
-      --proxy_socks   Print only the running SOCKS5 proxy URL (socks5h://)
+      --proxy-http    Print only the running HTTP proxy URL (http://)
+      --proxy-socks   Print only the running SOCKS5 proxy URL (socks5h://)
 --- stderr
 === ssh-proxy-cli login --help
 exit 0
@@ -343,11 +343,11 @@ exit 1
 --- stdout
 --- stderr
 Error: unknown command "extra" for "ssh-proxy-cli check"
-=== ssh-proxy-cli status --proxy_http --proxy_socks
+=== ssh-proxy-cli status --proxy-http --proxy-socks
 exit 1
 --- stdout
 --- stderr
-Error: if any flags in the group [proxy_http proxy_socks] are set none of the others can be; [proxy_http proxy_socks] were all set
+Error: if any flags in the group [proxy-http proxy-socks] are set none of the others can be; [proxy-http proxy-socks] were all set
 === ssh-proxy-cli logs --lines 0
 exit 1
 --- stdout

@@ -88,7 +88,7 @@ func TestStatusProxyURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, flag := range []string{"--proxy_http", "--proxy_socks"} {
+	for _, flag := range []string{"--proxy-http", "--proxy-socks"} {
 		if out, stderr, code := runCLI(t, []string{"status", flag}); code != 0 || out != "" || stderr != "" {
 			t.Fatalf("missing instance: exit=%d stdout=%q stderr=%q", code, out, stderr)
 		}
@@ -108,8 +108,8 @@ func TestStatusProxyURLs(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, tc := range []struct{ flag, url string }{
-				{"--proxy_http", "http://127.0.0.1:18181\n"},
-				{"--proxy_socks", "socks5h://[::1]:11081\n"},
+				{"--proxy-http", "http://127.0.0.1:18181\n"},
+				{"--proxy-socks", "socks5h://[::1]:11081\n"},
 			} {
 				want := ""
 				if phase == control.PhaseRunning {

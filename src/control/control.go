@@ -84,7 +84,7 @@ func WriteState(p config.Paths, s StateFile) error {
 	if err = os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, p.State)
+	return platform.ReplaceFile(tmp, p.State)
 }
 
 // WriteExit requires the installation's instance lock, just like WriteState.

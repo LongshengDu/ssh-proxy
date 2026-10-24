@@ -188,9 +188,9 @@ has no effect with --foreground.`}
 	}
 	statusCmd := &cobra.Command{Use: "status", Short: "Show status as JSON or print a proxy URL", GroupID: "commands", Args: cobra.NoArgs,
 		Long: "Show endpoint and health as JSON. URL flags print only the selected proxy URL\nwhen running, otherwise nothing. An empty result exits successfully."}
-	proxyHTTP := statusCmd.Flags().Bool("proxy_http", false, "Print only the running HTTP proxy URL (http://)")
-	proxySOCKS := statusCmd.Flags().Bool("proxy_socks", false, "Print only the running SOCKS5 proxy URL (socks5h://)")
-	statusCmd.MarkFlagsMutuallyExclusive("proxy_http", "proxy_socks")
+	proxyHTTP := statusCmd.Flags().Bool("proxy-http", false, "Print only the running HTTP proxy URL (http://)")
+	proxySOCKS := statusCmd.Flags().Bool("proxy-socks", false, "Print only the running SOCKS5 proxy URL (socks5h://)")
+	statusCmd.MarkFlagsMutuallyExclusive("proxy-http", "proxy-socks")
 	statusCmd.RunE = run(func(p config.Paths) error {
 		st := control.QueryStatus(p)
 		if !*proxyHTTP && !*proxySOCKS {

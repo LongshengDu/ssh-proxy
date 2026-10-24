@@ -1,7 +1,7 @@
 #!/bin/bash
 # 首次在 macOS 使用前运行一次（每次下载新版本后也要运行）。
 # Run once before first use on macOS, and again after each new download:
-#     bash run_on_mac.sh
+#     bash run-on-mac.sh
 # SSH Proxy 未签名，macOS 会阻止从网络下载的程序；此脚本解除本目录的下载限制。
 # SSH Proxy is unsigned, so macOS blocks it when downloaded; this removes the download block from this folder.
 set -euo pipefail

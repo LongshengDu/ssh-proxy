@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	if os.Getenv("SSH_PROXY_SYS_DIR") == "" {
-		println("Run python scripts/run_sys_tests.py against a native development build.")
+		println("Run python scripts/run-sys-tests.py against a native development build.")
 		os.Exit(1)
 	}
 	// Each isolated build's unique path gives it its own runtime folder; an

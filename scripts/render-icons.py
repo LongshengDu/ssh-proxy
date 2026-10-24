@@ -15,7 +15,7 @@ Writes:
 - src/ui/icon.icns: the macOS app icon.
 
 Run after changing the design (packages from requirements.txt):
-    python scripts/render_icons.py
+    python scripts/render-icons.py
 """
 
 import io
@@ -66,7 +66,7 @@ def svg(size, snap):
     half = number(center)
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">
   <title>SSH Proxy</title>
-  <desc>A white paper windmill on a green-to-blue disc. Drawn by scripts/render_icons.py.</desc>
+  <desc>A white paper windmill on a green-to-blue disc. Drawn by scripts/render-icons.py.</desc>
   <defs>
     <linearGradient id="disc" x1="0" y1="0" x2="{size}" y2="{size}" gradientUnits="userSpaceOnUse">
       <stop offset="0.15" stop-color="{GREEN}"/>

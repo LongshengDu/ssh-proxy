@@ -6,7 +6,7 @@ Windows, Terminal on macOS, the desktop's terminal emulator on Linux) that close
 the caller waits for its exit code. Without a desktop, or on macOS without permission to control Terminal, it runs
 in the current terminal instead. The command keeps the caller's PATH. On failure the caller also gets the last
 output lines. With --no-wait the caller returns at once and reads completion.json later.
-Example: python scripts/visible.py --name unit -- python scripts/run_unit_tests.py
+Example: python scripts/visible.py --name unit -- python scripts/run-unit-tests.py
 """
 
 import argparse

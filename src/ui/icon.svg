@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
   <title>SSH Proxy</title>
-  <desc>A white paper windmill on a green-to-blue disc. Drawn by scripts/render_icons.py.</desc>
+  <desc>A white paper windmill on a green-to-blue disc. Drawn by scripts/render-icons.py.</desc>
   <defs>
     <linearGradient id="disc" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
       <stop offset="0.15" stop-color="#3F8F00"/>

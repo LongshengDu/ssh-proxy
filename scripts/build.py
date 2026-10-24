@@ -186,13 +186,15 @@ def payload_names(target):
         executables = ("ssh-proxy-cli.exe", "ssh-proxy-app.exe")
     elif target.startswith("darwin-"):
         executables = ("ssh-proxy-cli", MAC_APP, MAC_PLIST, MAC_ICON)
-    # Ship only what runs on the target: run_on_mac.sh and the .sh launchers on
-    # macOS, the .ps1 launchers on Windows; Linux has neither.
+    # Windows and macOS ship the whole scripts/ folder, and macOS run-on-mac.sh;
+    # macOS and Linux ship run-via-proxy.sh.
     def ships(name):
-        if name == "run_on_mac.sh" or name.startswith("scripts/") and name.endswith(".sh"):
+        if name == "run-on-mac.sh":
             return target.startswith("darwin-")
-        if name.startswith("scripts/") and name.endswith(".ps1"):
-            return target.startswith("windows-")
+        if name == "run-via-proxy.sh":
+            return not target.startswith("windows-")
+        if name.startswith("scripts/"):
+            return not target.startswith("linux-")
         return True
     return (*executables, *filter(ships, COMMON))
 
@@ -219,7 +221,8 @@ def compile_apps(go, env, target, output):
     for command, path, gui in jobs:
         path.parent.mkdir(parents=True, exist_ok=True)
         flags = f"-s -w -X ssh-proxy/src/config.Version={APP_VERSION}" + (" -H=windowsgui" if windows and gui else "")
-        run([go, "build", "-trimpath", "-buildvcs=false", "-ldflags", flags, "-o", path, "./src/cmd/" + command], env)
+        # Go stamps the commit (vcs.revision, vcs.modified) that BUILDINFO.txt shows.
+        run([go, "build", "-trimpath", "-ldflags", flags, "-o", path, "./src/cmd/" + command], env)
         if windows and gui:
             # Pure-Go resource tool runs on the build host, also for cross-builds.
             # Patch only the staged unsigned executable; no generated objects in src/.

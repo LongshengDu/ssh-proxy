@@ -44,6 +44,15 @@ func TestPlatformScriptsAndReadiness(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "directory.ps1"), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// Helpers in subfolders, such as utils/, are not menu items.
+	if err := os.Mkdir(filepath.Join(dir, "utils"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"launch-app.ps1", "launch-app.sh"} {
+		if err := os.WriteFile(filepath.Join(dir, "utils", name), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, goos := range []string{"windows", "darwin"} {
 		scripts, err := ui.DiscoverScripts(dir, goos)
 		want := 1
