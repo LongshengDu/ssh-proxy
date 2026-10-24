@@ -4,7 +4,6 @@ package testutil
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,7 +91,7 @@ func StartRegisteredProxy(t *testing.T, entry platform.LoginEntry) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := Command(t, args[0], args[1:]...)
 	// The launcher exits, including closing its console. Its supervisor must survive.
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))

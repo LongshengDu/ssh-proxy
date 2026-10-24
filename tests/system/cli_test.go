@@ -6,13 +6,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"ssh-proxy/src/config"
-	"ssh-proxy/src/platform"
 	"ssh-proxy/tests/helpers"
 )
 
@@ -37,8 +35,7 @@ func TestCLICommandsAndConfiguration(t *testing.T) {
 	// Help and rejected commands are pinned by the unit snapshot; here the real
 	// binary must answer them without reading or creating any configuration.
 	var stderr bytes.Buffer
-	help := exec.Command(testutil.CLIPath(dir), "--help")
-	platform.HideChild(help)
+	help := testutil.Command(t, testutil.CLIPath(dir), "--help")
 	help.Stderr = &stderr
 	if out, err := help.Output(); err != nil || stderr.Len() != 0 || !strings.Contains(string(out), "Usage:") {
 		t.Fatalf("help must succeed on stdout: %v: %s %s", err, out, &stderr)

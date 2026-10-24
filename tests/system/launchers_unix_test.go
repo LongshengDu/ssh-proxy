@@ -5,7 +5,6 @@ package tests
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -32,7 +31,7 @@ func TestRunViaProxy(t *testing.T) {
 		t.Helper()
 		os.Remove(record)
 		var got launch
-		out, err := exec.Command("/bin/bash", append([]string{filepath.Join(dir, "run-via-proxy.sh")}, args...)...).CombinedOutput()
+		out, err := testutil.Command(t, "/bin/bash", append([]string{filepath.Join(dir, "run-via-proxy.sh")}, args...)...).CombinedOutput()
 		if err == nil {
 			if err := json.Unmarshal([]byte(testutil.ReadFile(record)), &got); err != nil {
 				t.Fatalf("program did not run: %v %s", err, out)

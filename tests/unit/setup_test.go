@@ -3,14 +3,12 @@ package tests
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
 	"ssh-proxy/src/config"
-	"ssh-proxy/src/platform"
 	"ssh-proxy/tests/helpers"
 )
 
@@ -109,8 +107,7 @@ func TestTrustUsesNativeSSHAndOrderedFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := func(args ...string) error {
-		cmd := exec.Command(cli, args...)
-		platform.HideChild(cmd)
+		cmd := testutil.Command(t, cli, args...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("%w: %s", err, out)

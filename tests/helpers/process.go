@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"golang.org/x/term"
@@ -16,7 +18,20 @@ import (
 	"ssh-proxy/src/cli"
 	"ssh-proxy/src/config"
 	"ssh-proxy/src/control"
+	"ssh-proxy/src/platform"
 )
+
+// Command is exec.Command bounded like CallCLI: the program is killed after
+// 45 s and its output pipes close a second later, so a stuck program fails the
+// test instead of hanging the run.
+func Command(t *testing.T, name string, args ...string) *exec.Cmd {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	t.Cleanup(cancel)
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = time.Second
+	platform.HideChild(cmd)
+	return cmd
+}
 
 // Child fixtures exercise the actual CLI/tray without a real SSH login.
 func RunProcess() bool {

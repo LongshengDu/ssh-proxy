@@ -140,8 +140,7 @@ func TestCLITunnelLifecycleAndHealth(t *testing.T) {
 	// A live tunnel with failed probes degrades and recovers without replacement.
 	f.Blocked.Store(true)
 	testutil.WaitFor(t, func() bool { return testutil.StatusCLI(t, dir).Phase == "degraded" })
-	check := exec.Command(testutil.CLIPath(dir), "test", "--url", f.Origin.URL)
-	platform.HideChild(check)
+	check := testutil.Command(t, testutil.CLIPath(dir), "test", "--url", f.Origin.URL)
 	// HTTP can reuse an upstream connection; SOCKS must open a new SSH channel.
 	if out, err := check.Output(); err == nil || !strings.Contains(string(out), "FAIL SOCKS5:") {
 		t.Fatalf("failed health checks must report text and exit nonzero: %s %v", out, err)
