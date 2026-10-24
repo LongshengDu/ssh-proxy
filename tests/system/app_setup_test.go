@@ -75,105 +75,86 @@ func TestTrayLoginLaunch(t *testing.T) {
 }
 
 // Every Start first checks unattended login silently. Only a failed check
-// opens the interactive setup terminal, and a successful setup is checked again.
+// opens the interactive setup terminal; a failed setup is reported and starts
+// nothing. The tray controller's unit tests decide the other outcomes (offline,
+// password-only), and working logins and setup followed by start run with real
+// SSH in TestTrayNativeWorkflow and TestTrayStartsProxyAtLaunch.
 func TestTrayInteractiveTerminal(t *testing.T) {
 	testutil.NativeDesktop(t)
-	// Working logins and setup followed by start run with real SSH in
-	// TestTrayNativeWorkflow and TestTrayStartsProxyAtLaunch.
-	for _, tc := range []struct{ name, trustExit, check, dialog string }{
-		{"offline", "0", "offline", ""},
-		{"setup-failed", "7", "", "code 7"},
-		{"password-only", "0", "never", "unattended login still fails"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dir := testutil.IsolatedBuild(t)
-			helper, err := os.Executable()
-			if err != nil {
-				t.Fatal(err)
+	dir := testutil.IsolatedBuild(t)
+	helper, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := testutil.CLIPath(dir)
+	if err := os.WriteFile(backend, data, 0755); err != nil {
+		t.Fatal(err)
+	}
+	record, gate := filepath.Join(dir, "commands.jsonl"), filepath.Join(dir, "release-trust")
+	data, _ = json.Marshal(map[string]string{"SSH_PROXY_TEST_PROCESS": "cli", "SSH_PROXY_TEST_RECORD": record, "SSH_PROXY_TEST_GATE": gate})
+	testutil.WriteFile(t, filepath.Join(dir, "fixture.json"), string(data))
+	t.Cleanup(func() { os.WriteFile(gate, nil, 0600) })
+	type command struct {
+		Args                     []string
+		Terminal, OutputTerminal bool
+		PID                      int
+	}
+	commands := func() (setup *command, started bool) {
+		for _, line := range strings.Split(testutil.ReadFile(record), "\n") {
+			var entry command
+			if json.Unmarshal([]byte(line), &entry) != nil || len(entry.Args) == 0 {
+				continue
 			}
-			data, err := os.ReadFile(helper)
-			if err != nil {
-				t.Fatal(err)
-			}
-			backend := testutil.CLIPath(dir)
-			if err := os.WriteFile(backend, data, 0755); err != nil {
-				t.Fatal(err)
-			}
-			record, gate := filepath.Join(dir, "commands.jsonl"), filepath.Join(dir, "release-trust")
-			settings := map[string]string{"SSH_PROXY_TEST_PROCESS": "cli", "SSH_PROXY_TEST_RECORD": record, "SSH_PROXY_TEST_GATE": gate,
-				"SSH_PROXY_TEST_TRUST_EXIT": tc.trustExit, "SSH_PROXY_TEST_CHECK": tc.check}
-			data, _ = json.Marshal(settings)
-			testutil.WriteFile(t, filepath.Join(dir, "fixture.json"), string(data))
-			t.Cleanup(func() { os.WriteFile(gate, nil, 0600) })
-			type command struct {
-				Args                     []string
-				Terminal, OutputTerminal bool
-				PID                      int
-			}
-			commands := func() (silent int, setup *command, started bool) {
-				for _, line := range strings.Split(testutil.ReadFile(record), "\n") {
-					var entry command
-					if json.Unmarshal([]byte(line), &entry) != nil || len(entry.Args) == 0 {
-						continue
-					}
-					switch {
-					case entry.Args[0] == "start":
-						started = true
-					case slices.Contains(entry.Args, "--check"):
-						silent++
-						if entry.Terminal {
-							t.Fatalf("silent login check had a terminal: %+v", entry)
-						}
-					case entry.Args[0] == "login" && setup == nil:
-						setup = &entry
-					}
+			switch {
+			case entry.Args[0] == "start":
+				started = true
+			case slices.Contains(entry.Args, "--check"):
+				if entry.Terminal {
+					t.Fatalf("silent login check had a terminal: %+v", entry)
 				}
-				return
+			case entry.Args[0] == "login" && setup == nil:
+				setup = &entry
 			}
-			before := testutil.NativeTerminals(t)
-			app := testutil.StartApp(t, dir)
-			pid := app.Process.Pid
-			testutil.WaitFor(t, func() bool {
-				return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
-			})
-			testutil.NativeClick(t, pid, "Start proxy")
-			if tc.check == "offline" {
-				// An unreachable server is not a login problem: start, and let the proxy retry.
-				testutil.WaitFor(t, func() bool { _, _, started := commands(); return started })
-				if silent, setup, _ := commands(); silent != 1 || setup != nil {
-					t.Fatalf("an offline check must start without a terminal: %d checks, setup %+v", silent, setup)
-				}
-				testutil.NativeTerminalsClosed(t, before)
-			} else {
-				var entry *command
-				testutil.WaitFor(t, func() bool { _, entry, _ = commands(); return entry != nil })
-				if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 3 || entry.Args[0] != "login" || entry.Args[1] != "--log" || entry.Args[2] != testutil.TrayLog(dir) {
-					t.Fatalf("login lost terminal handles or literal paths: %+v", entry)
-				}
-				if !platform.ProcessAlive(entry.PID) {
-					t.Fatal("setup exited before input was supplied")
-				}
-				testutil.ExpectMenu(t, pid, "Start proxy", true, false) // Busy while setup waits.
-				testutil.WriteFile(t, gate, "")
-				testutil.ExpectDialog(t, pid, tc.dialog)
-				if _, _, started := commands(); started {
-					t.Fatal("failed setup started the proxy")
-				}
-				testutil.NativeDismiss(t, pid)
-				testutil.NativeOpened(t, testutil.TrayLog(dir))
-				testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
-				if tc.trustExit != "0" && runtime.GOOS == "darwin" {
-					// A failed setup keeps its window open for the user to read. On
-					// Windows the real CLI waits for Enter; this stand-in does not.
-					testutil.NativeCloseOpenedTerminal(t, before)
-				}
-				testutil.NativeTerminalsClosed(t, before)
-			}
-			testutil.NativeClick(t, pid, "Exit app")
-			if err := testutil.WaitExit(t, app); err != nil {
-				t.Fatal(err)
-			}
-		})
+		}
+		return
+	}
+	before := testutil.NativeTerminals(t)
+	app := testutil.StartApp(t, dir)
+	pid := app.Process.Pid
+	testutil.WaitFor(t, func() bool {
+		return strings.Contains(testutil.ReadFile(testutil.TrayLog(dir)), "Proxy status: stopped")
+	})
+	testutil.NativeClick(t, pid, "Start proxy")
+	var entry *command
+	testutil.WaitFor(t, func() bool { entry, _ = commands(); return entry != nil })
+	if !entry.Terminal || !entry.OutputTerminal || len(entry.Args) != 3 || entry.Args[0] != "login" || entry.Args[1] != "--log" || entry.Args[2] != testutil.TrayLog(dir) {
+		t.Fatalf("login lost terminal handles or literal paths: %+v", entry)
+	}
+	if !platform.ProcessAlive(entry.PID) {
+		t.Fatal("setup exited before input was supplied")
+	}
+	testutil.ExpectMenu(t, pid, "Start proxy", true, false) // Busy while setup waits.
+	testutil.WriteFile(t, gate, "")
+	testutil.ExpectDialog(t, pid, "code 7")
+	if _, started := commands(); started {
+		t.Fatal("failed setup started the proxy")
+	}
+	testutil.NativeDismiss(t, pid)
+	testutil.NativeOpened(t, testutil.TrayLog(dir))
+	testutil.WaitFor(t, func() bool { return !platform.ProcessAlive(entry.PID) })
+	if runtime.GOOS == "darwin" {
+		// A failed setup keeps its window open for the user to read. On
+		// Windows the real CLI waits for Enter; this stand-in does not.
+		testutil.NativeCloseOpenedTerminal(t, before)
+	}
+	testutil.NativeTerminalsClosed(t, before)
+	testutil.NativeClick(t, pid, "Exit app")
+	if err := testutil.WaitExit(t, app); err != nil {
+		t.Fatal(err)
 	}
 }
 

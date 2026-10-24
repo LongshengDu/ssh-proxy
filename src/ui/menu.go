@@ -80,7 +80,7 @@ func Menu(s MenuState, scripts ...Script) []Item {
 		{Separator: true},
 	}
 	for i, script := range scripts {
-		items = append(items, Item{ID: ScriptBase + i, Label: "Run: " + script.Name, Disabled: busy || st.Phase != control.PhaseRunning})
+		items = append(items, Item{ID: ScriptBase + i, Label: "Run: " + script.Name, Disabled: busy || !st.Phase.Serving()})
 	}
 	if len(scripts) != 0 {
 		items = append(items, Item{Separator: true})

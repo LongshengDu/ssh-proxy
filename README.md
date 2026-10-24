@@ -9,6 +9,8 @@ SSH Proxy runs local HTTP/HTTPS and SOCKS5 proxies through native OpenSSH. It sh
 - **`ssh-proxy-cli`** (Windows, macOS, Linux) owns the proxy.
 - **`ssh-proxy-app`** (Windows, macOS) is a tray GUI built on the CLI. The CLI never depends on the app.
 
+![The SSH Proxy tray menu on Windows, connected](src/packaging/defaults/support/win-tray.png)
+
 Prefer existing libraries, small adapters and sensible defaults over new abstractions or settings. Start with [build and release](#build-and-release), then follow the [development checks](#test-and-verify).
 
 ## Architecture
@@ -51,8 +53,8 @@ All builds use `CGO_ENABLED=0` and native tools (no WSL).
 | `src/platform` | Locks, detaching, child containment, Unix SSH guardian, login registration |
 | `src/logs` | Run logs, retention and size limits |
 | `src/ui` | Tray controller, menu, setup terminal, dialogs, app login item, scripts |
-| `src/packaging` | Public defaults: `support/config.toml.in` and `support/ssh_config.in`, user guide, launchers, `run-on-mac.sh`; executable resources |
-| `scripts` | `build.py`, `run-unit-tests.py`, `run-sys-tests.py`, `visible.py`, `render-icons.py` |
+| `src/packaging` | Public defaults: config templates, user guide, screenshot, launchers, and  executable resources |
+| `scripts` | Build and test scripts |
 | `tests/unit`, `tests/system`, `tests/helpers` | Flat test suites and shared fixtures |
 
 Keep dependencies one-way: `platform` is the foundation; `config`, `logs` and `bridge` support `control` and `supervisor`; `cli` coordinates them. Lower-level packages never import the CLI or UI. The tray uses `config`, `control`, `platform` and `logs`, invokes the CLI for validation, login setup and start/stop, and queries the authenticated control API in-process. Internal `_run` (supervisor) and `_ssh` (Unix guardian) modes reuse the CLI executable.
@@ -106,7 +108,7 @@ Preserve CONNECT buffered bytes and half-close, streaming flushes and trailers, 
 
 - **JSON output:** `status` and `check` print JSON; there's no `--json` flag.
   - `status` includes `autostart`, read without starting a process.
-  - `status --proxy-http` or `--proxy-socks` (mutually exclusive) prints only the `http://` or `socks5h://` URL while `running`. Otherwise it prints nothing and exits 0.
+  - `status --proxy-http` or `--proxy-socks` (mutually exclusive) prints only the `http://` or `socks5h://` URL while `running` or `degraded`. Otherwise it prints nothing and exits 0.
   - `check` exits 0 even when `valid` is false. `incomplete: true` marks unfinished setup rather than a mistake: `ssh_config` has no server yet, or is missing (`config.ErrNoHosts`).
 - **Errors** go to stderr with a nonzero exit. Help and version return before any config or OS access.
 - **Flags and help** live in `src/cli/cli.go`. Root help lists each command's own flags; `autostart --help` has the login-startup details.
@@ -174,7 +176,7 @@ python scripts/build.py --release --os linux --arch arm64 --out ./packages
 - **`--release`** also creates `<out>/ssh-proxy-<os>-<arch>.zip`, whose root folder has the same name, and its `.sha256` (`sha256sum -c`). Names carry no version, so unzipping a new release over an installation keeps its folder. The release first checks that the build folder holds exactly the payload and an empty `logs/`. Any other file or folder, such as a `config.toml`, `ssh_config`, app settings or logs from a folder that was used, fails the build with a list of the files, and no ZIP is made (an older ZIP is removed). Release into a clean `--out`, for example `build/release`.
 - **Private files and output:** `build/` and `.build-tools/` are git-ignored. Keep real configs and logs there, outside public defaults.
 - **Versioning:** [.version](.version) is the only version source; change it only on request.
-- **Packaging** copies [LICENSE](LICENSE) to `support/LICENSE.txt` and generates `support/BUILDINFO.txt` (`go version -m` output, including the commit Go stamps as `vcs.revision` and `vcs.modified=true` for uncommitted changes), `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Text files use LF.
+- **Packaging** copies [LICENSE](LICENSE) to `support/LICENSE.txt` and generates `support/BUILDINFO.txt` (`go version -m` output, including the commit Go stamps as `vcs.revision` and `vcs.modified=true` for uncommitted changes), `support/THIRD_PARTY_NOTICES.txt` (only for modules linked into that target) and `support/SHA256SUMS`, which covers only the program binaries, with paths relative to the install folder (`sha256sum -c support/SHA256SUMS`). Packaged text files must use LF, as git checks them out; the build stops if an editor saved one with CRLF.
 - **Windows resources:** `go-winres` (pinned in `go.mod`) embeds them before hashing: the app icon at each size, and a manifest that makes the app per-monitor DPI-aware so its tray icon and dialogs stay sharp at any display scaling.
 - **macOS:** the `.app` stays beside the CLI and configs, and its plist declares macOS 13.
 - **Signing:** packages are unsigned and not notarized.

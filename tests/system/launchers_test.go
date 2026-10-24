@@ -40,7 +40,13 @@ func TestTrayDesktopLaunchers(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			for _, name := range []string{"Codex", "Claude"} {
+			// Both launchers call one shared helper: each checks its call while
+			// running; the helper's fallbacks need only one.
+			names := []string{"Codex", "Claude"}
+			if scenario != "running" {
+				names = names[:1]
+			}
+			for _, name := range names {
 				t.Run(name, func(t *testing.T) {
 					record := filepath.Join(dir, name+"-launch.json")
 					t.Setenv("SSH_PROXY_TEST_RECORD", record)

@@ -336,10 +336,16 @@ func TestTrayControllerTogglesSettings(t *testing.T) {
 	if !view.item(ui.ScriptBase).Disabled || run(ctx, c, ui.ScriptBase) {
 		t.Fatal("script ran before the proxy was ready")
 	}
-	backend.status.Phase = control.PhaseRunning
-	c.Refresh(ctx)
-	if view.item(ui.ScriptBase).Disabled || !run(ctx, c, ui.ScriptBase) || !slices.Equal(desktop.scripts, []string{"Codex"}) {
-		t.Fatal("script unavailable while running", desktop.scripts)
+	// A degraded proxy still serves; only its health probes fail.
+	for _, phase := range []control.Phase{control.PhaseDegraded, control.PhaseRunning} {
+		backend.status.Phase = phase
+		c.Refresh(ctx)
+		if view.item(ui.ScriptBase).Disabled || !run(ctx, c, ui.ScriptBase) {
+			t.Fatal("script unavailable while", phase)
+		}
+	}
+	if !slices.Equal(desktop.scripts, []string{"Codex", "Codex"}) {
+		t.Fatal("scripts did not run", desktop.scripts)
 	}
 	if !run(ctx, c, ui.ToggleStartup) || !desktop.startup || !view.item(ui.ToggleStartup).Checked {
 		t.Fatal("login startup toggle not applied", view.items)

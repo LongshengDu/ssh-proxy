@@ -128,11 +128,7 @@ func RunProcess() bool {
 		case "check":
 			json.NewEncoder(os.Stdout).Encode(config.ConfigCheck{Valid: true})
 		case "status":
-			st := control.Status{Phase: "stopped"}
-			if data, _ := os.ReadFile(os.Getenv("SSH_PROXY_TEST_RECORD")); strings.Contains(string(data), `"start"`) {
-				st.PID, st.Phase = 123, "running"
-			}
-			json.NewEncoder(os.Stdout).Encode(st)
+			json.NewEncoder(os.Stdout).Encode(control.Status{Phase: "stopped"})
 		case "login", "start":
 			file, err := os.OpenFile(os.Getenv("SSH_PROXY_TEST_RECORD"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 			if err != nil {
@@ -144,19 +140,9 @@ func RunProcess() bool {
 				PID                      int
 			}{os.Args[1:], term.IsTerminal(int(os.Stdin.Fd())), term.IsTerminal(int(os.Stdout.Fd())), os.Getpid()})
 			file.Close()
-			// The silent check passes after an interactive setup exited 0, unless
-			// SSH_PROXY_TEST_CHECK is "never" (password-only login) or "offline"
-			// (the server cannot be reached, which setup cannot fix).
-			trusted := os.Getenv("SSH_PROXY_TEST_RECORD") + ".trusted"
+			// The silent check fails as for a key the server doesn't accept yet,
+			// so the tray opens setup, which waits for the test's gate and fails.
 			if os.Args[1] == "login" && slices.Contains(os.Args, "--check") {
-				_, err := os.Stat(trusted)
-				switch mode := os.Getenv("SSH_PROXY_TEST_CHECK"); {
-				case mode == "offline":
-					fmt.Fprintln(os.Stderr, "ssh: Could not resolve hostname fixture.invalid: Name or service not known")
-					os.Exit(255)
-				case mode != "never" && err == nil:
-					os.Exit(0)
-				}
 				fmt.Fprintln(os.Stderr, "fixture: Permission denied (publickey)")
 				os.Exit(255)
 			}
@@ -170,11 +156,7 @@ func RunProcess() bool {
 						time.Sleep(50 * time.Millisecond)
 					}
 				}
-				code, _ := strconv.Atoi(os.Getenv("SSH_PROXY_TEST_TRUST_EXIT"))
-				if code == 0 {
-					os.WriteFile(trusted, nil, 0600)
-				}
-				os.Exit(code)
+				os.Exit(7)
 			}
 		}
 		return true

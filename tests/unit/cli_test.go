@@ -112,7 +112,7 @@ func TestStatusProxyURLs(t *testing.T) {
 				{"--proxy-socks", "socks5h://[::1]:11081\n"},
 			} {
 				want := ""
-				if phase == control.PhaseRunning {
+				if phase == control.PhaseRunning || phase == control.PhaseDegraded { // Degraded still serves.
 					want = tc.url
 				}
 				out, stderr, code := runCLI(t, []string{"status", tc.flag})

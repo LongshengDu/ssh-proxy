@@ -302,6 +302,15 @@ def package(target, staging, out):
     print(f"Release ZIP: {archive}", flush=True)
 
 
+def check_line_endings():
+    """Packaged text ships as git checks it out, with LF. An editor can still save
+    CRLF, which breaks the shell scripts on macOS and Linux, so stop instead."""
+    texts = [DEFAULTS / name for name in PUBLIC if not name.endswith(".png")] + [ROOT / "LICENSE"]
+    crlf = [path.relative_to(ROOT).as_posix() for path in texts if b"\r\n" in path.read_bytes()]
+    if crlf:
+        raise RuntimeError(f"CRLF line endings in {', '.join(crlf)}; save them with LF (VS Code: click CRLF in the status bar) and rebuild")
+
+
 def build_target(go, env, target, out, release=False):
     output = out / install_folder(target)
     with tempfile.TemporaryDirectory(prefix="package-", dir=BUILD / ".tmp") as temporary:
@@ -309,14 +318,14 @@ def build_target(go, env, target, out, release=False):
         binaries = compile_apps(go, env, target, staging)
         for name in PUBLIC:
             (staging / name).parent.mkdir(parents=True, exist_ok=True)
-            (staging / name).write_bytes((DEFAULTS / name).read_bytes().replace(b"\r\n", b"\n"))
+            shutil.copyfile(DEFAULTS / name, staging / name)
             if name.endswith(".sh"):
                 (staging / name).chmod(0o755)
         (staging / "logs").mkdir()
         (staging / "support").mkdir(exist_ok=True)
         (staging / ".version").write_text(APP_VERSION + "\n", encoding="utf-8", newline="\n")
         build_info = {path: run([go, "version", "-m", path], env, capture=True) for path in binaries}
-        (staging / "support" / "LICENSE.txt").write_bytes((ROOT / "LICENSE").read_bytes().replace(b"\r\n", b"\n"))
+        shutil.copyfile(ROOT / "LICENSE", staging / "support" / "LICENSE.txt")
         (staging / "support" / "THIRD_PARTY_NOTICES.txt").write_text(notices(go, env, linked_modules(build_info.values())), encoding="utf-8", newline="\n")
         metadata = "\n".join(text.replace(str(path), path.name) for path, text in build_info.items())
         (staging / "support" / "BUILDINFO.txt").write_text(metadata + "\n", encoding="utf-8", newline="\n")
@@ -348,6 +357,7 @@ def main(argv=None):
     parser.add_argument("--arch", choices=ARCHES, help="Target architecture (default: current)")
     parser.add_argument("--go", help="Explicit Go executable (otherwise discover or download)")
     args = parser.parse_args(argv)
+    check_line_endings()
     host = host_target()
     host_os, host_arch = TARGETS[host]
     target = f"{args.os or host_os}-{args.arch or host_arch}"

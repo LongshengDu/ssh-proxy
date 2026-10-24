@@ -49,6 +49,10 @@ const (
 	PhaseUnresponsive Phase = "unresponsive"
 )
 
+// Serving reports whether the proxy forwards connections. A degraded proxy
+// still does; only its health probes fail.
+func (p Phase) Serving() bool { return p == PhaseRunning || p == PhaseDegraded }
+
 type Status struct {
 	Autostart   bool      `json:"autostart"`
 	UncleanExit bool      `json:"-"` // Internal tray classification; last_error is the public diagnostic.

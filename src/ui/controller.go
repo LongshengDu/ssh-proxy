@@ -187,7 +187,7 @@ func (c *Controller) Handle(ctx context.Context, id int) func() error {
 		}
 		return nil
 	}
-	if c.action != 0 || (id >= ScriptBase && c.st.Phase != control.PhaseRunning) {
+	if c.action != 0 || (id >= ScriptBase && !c.st.Phase.Serving()) {
 		return nil
 	}
 	var job func() error

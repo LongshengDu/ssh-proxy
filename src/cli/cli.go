@@ -196,7 +196,7 @@ has no effect with --foreground.`}
 		if !*proxyHTTP && !*proxySOCKS {
 			return printJSON(st)
 		}
-		if st.Phase != control.PhaseRunning {
+		if !st.Phase.Serving() {
 			return nil
 		}
 		address, scheme := st.HTTP, "http"

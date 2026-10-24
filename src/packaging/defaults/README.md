@@ -6,7 +6,7 @@
 
 ### 使用前必读
 
-- **升级：** 停止代理并退出托盘，把新版 ZIP 解压到原目录、覆盖已有文件即可。你的 `config.toml`、`ssh_config` 和日志不会被覆盖；新版本新增的设置会在下次启动时自动加入 `config.toml`（文件中的注释可能会被移除）。
+- **升级：** 停止代理并退出托盘，把新版 ZIP 解压到安装目录的**上一级目录**并覆盖已有文件：ZIP 内的顶层文件夹与安装目录同名，所以不要改安装目录的名字。Windows：右键 ZIP →“全部解压缩”，目标选上一级目录，提示时选择替换。Linux：`unzip -o ZIP文件 -d 上一级目录`。macOS 的访达不能合并文件夹，它的“替换”会删除你的设置，请在“终端”运行 `ditto -xk ZIP文件 上一级目录`，再运行一次 `run-on-mac.sh`。你的 `config.toml`、`ssh_config`、日志和自己的脚本都会保留；新版本新增的设置会在下次启动时自动加入 `config.toml`（文件中的注释可能会被移除）。
 - **移动目录：** 托盘应用先取消已启用的 **Launch App at Login**，然后停止代理并退出托盘；CLI 用户如果已启用自启动，需要先运行 `autostart disable`，再停止代理。移动后按需重新启动并恢复自启动。
 - **完整解压到可写的固定目录：** 应用、命令行、配置和 `scripts/` 保持在一起；macOS 不要单独移动 `.app`，首次使用前先运行 `run-on-mac.sh`（见第 1 节）。
 - **先准备 SSH：** 需要 OpenSSH 8.7 或更新版本，服务器需允许 TCP 转发。代理在后台运行，必须能免密码自动登录，`login`（或托盘的 **Start proxy**）会自动设置。首次连接向管理员核对服务器指纹。说明见 [ssh_config](support/ssh_config.in)。
@@ -30,7 +30,7 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 | `ssh-proxy-cli.exe` / `ssh-proxy-cli` | 命令行和代理程序，应用依赖它，请保留 |
 | `ssh_config` | 你的 SSH 服务器信息，含免密码登录步骤；首次启动时从 `support/` 创建 |
 | `config.toml` | 端口、超时、健康检查和日志设置；首次启动时从 `support/` 创建 |
-| `support/` | 默认配置模板（`*.in`）、版本信息和许可证（Apache 2.0），升级时会被替换；请修改上面两个文件，不要改这里 |
+| `support/` | 默认配置模板（`*.in`）、本指南的截图、版本信息和许可证（Apache 2.0），升级时会被替换；请修改上面两个文件，不要改这里 |
 | `run-on-mac.sh` | 仅 macOS：首次使用前解除下载限制 |
 | `run-via-proxy.sh` | 仅 macOS / Linux：通过代理运行命令行程序（见第 3 节） |
 | `scripts/`、`logs/` | Codex/Claude 启动脚本（Windows/macOS）、运行日志 |
@@ -40,6 +40,8 @@ SSH Proxy 通过你的 SSH 服务器，在本机提供 HTTP/HTTPS 代理和 SOCK
 ### 2. 打开应用并连接（Windows / macOS）
 
 打开 `ssh-proxy-app`：Windows 在任务栏通知区域（可能在隐藏图标中），macOS 在菜单栏。右键图标打开菜单。还没有填写 SSH 服务器时（例如首次打开），会自动打开 `ssh_config` 供你填写，不会弹出错误；文件开头说明了为什么打开它。SSH 配置有错误时，会显示原因并打开该文件。
+
+![Windows 上已连接的 SSH Proxy 托盘菜单](support/win-tray.png)
 
 编辑安装目录中的 `ssh_config`（首次打开应用或运行 `check` 时自动创建），取消示例前的 `#` 并填写自己的信息：
 
@@ -194,7 +196,7 @@ Windows 将下方 `./ssh-proxy-cli` 换成 `.\ssh-proxy-cli.exe`。
 
 ### Read before use
 
-- **Upgrade:** stop the proxy and quit the tray, then unzip the new version into the same folder and replace the existing files. Your `config.toml`, `ssh_config` and logs are not overwritten; settings added by the new version are added to `config.toml` the next time it starts (comments in that file may be removed).
+- **Upgrade:** stop the proxy and quit the tray, then extract the new ZIP into the folder that **contains** your install folder and replace the existing files. The ZIP's top folder has the install folder's name, so don't rename the install folder. Windows: right-click the ZIP → Extract All, choose that parent folder, and replace the files when asked. Linux: `unzip -o ZIP -d PARENT`. macOS: Finder can't merge folders, and its Replace deletes your settings, so run `ditto -xk ZIP PARENT` in Terminal, then run `run-on-mac.sh` again. Your `config.toml`, `ssh_config`, logs and own scripts are kept; settings added by the new version are added to `config.toml` the next time it starts (comments in that file may be removed).
 - **Move the folder:** in the tray app, turn off **Launch App at Login** if enabled, then stop the proxy and quit the tray. CLI users with autostart enabled should run `autostart disable` before stopping the proxy. After moving, restart and re-enable login startup as needed.
 - **Extract the whole ZIP into a writable, permanent folder:** keep the app, command line, configuration and `scripts/` together; don't move the macOS `.app` on its own. On macOS, run `run-on-mac.sh` before first use (see section 1).
 - **Prepare SSH first:** OpenSSH 8.7 or later is required, and the server must allow TCP forwarding. The proxy runs in the background, so it must log in without a password; `login` (or **Start proxy** in the tray) sets that up for you. Verify the server fingerprint with your administrator on first connection. See [ssh_config](support/ssh_config.in).
@@ -218,7 +220,7 @@ SSH Proxy provides local HTTP/HTTPS and SOCKS5 proxies through your SSH server. 
 | `ssh-proxy-cli.exe` / `ssh-proxy-cli` | Command line and proxy runtime; the app needs it |
 | `ssh_config` | Your SSH servers, with passwordless-login steps; created from `support/` on first start |
 | `config.toml` | Ports, timeouts, health checks and logging; created from `support/` on first start |
-| `support/` | Default configuration templates (`*.in`), build information and the license (Apache 2.0), replaced on upgrade; edit the two files above, not these |
+| `support/` | Default configuration templates (`*.in`), this guide's screenshot, build information and the license (Apache 2.0), replaced on upgrade; edit the two files above, not these |
 | `run-on-mac.sh` | macOS only: removes the download block before first use |
 | `run-via-proxy.sh` | macOS / Linux only: runs a command-line program through the proxy (section 3) |
 | `scripts/`, `logs/` | Codex/Claude launchers (Windows/macOS), run logs |
@@ -228,6 +230,8 @@ No installer, Go or Python is needed. On Linux, fill in `ssh_config` using the e
 ### 2. Open the app and connect (Windows / macOS)
 
 Open `ssh-proxy-app`: its icon is in the Windows notification area (maybe under hidden icons) or the macOS menu bar. Right-click it for the menu. While no SSH server is set up yet (as on first launch), `ssh_config` opens for you to fill in, with no error message; its first lines explain why it opened. If the SSH config has a mistake, the app shows the reason and opens the file.
+
+![The SSH Proxy tray menu on Windows, connected](support/win-tray.png)
 
 Edit `ssh_config` in the install folder (created the first time you open the app or run `check`), uncomment the example and enter your details:
 
